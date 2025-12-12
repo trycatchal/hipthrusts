@@ -1,7 +1,7 @@
 import {
-  NextFunction as ExpressNextFunction,
-  Request as ExpressRequest,
-  Response as ExpressResponse,
+  NextFunction,
+  Request,
+  Response,
 } from 'express';
 import {
   assertHipthrustable,
@@ -33,9 +33,9 @@ export function hipExpressHandlerFactory<
   assertHipthrustable(handlingStrategy);
   const fullHipthrustable = withDefaultImplementations(handlingStrategy);
   return async (
-    req: ExpressRequest,
-    res: ExpressResponse,
-    next: ExpressNextFunction
+    req: Request,
+    res: Response,
+    next: NextFunction
   ) => {
     try {
       const { response, status } = await executeHipthrustable(
