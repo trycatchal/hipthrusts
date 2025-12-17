@@ -2,82 +2,16 @@ import Boom from '@hapi/boom';
 import { z } from 'zod';
 import {
   AttachData,
-  DoWork,
   SanitizeBody,
   SanitizeParams,
   SanitizeQueryParams,
   SanitizeResponse,
 } from './lifecycle-functions';
 
-// tslint:disable-next-line:no-var-requires
-const mask = require('json-mask');
-
-interface ModelWithFindById<TInstance = any> {
-  findById(id: string): { exec(): Promise<TInstance> };
-}
-
-interface ModelWithFindOne<TInstance = any> {
-  findOne(options: any): { exec(): Promise<TInstance> };
-}
-
 export function htZodFactory() {
-  function findByIdRequired(Model: ModelWithFindById) {
-    // tslint:disable-next-line:only-arrow-functions
-    return async function(id: string) {
-      // prevent accidental searching for all from previous stages
-      // (e.g. if someone forgot to make id param required in schema so
-      // validation passes when it shouldn't)
-      if (!id || !id.toString()) {
-        throw Boom.badRequest('Missing dependent resource ID');
-      }
-      const result = await Model.findById(id).exec();
-      if (!result) {
-        throw Boom.notFound('Resource not found');
-      }
-      return result;
-    };
-  }
-
-  function findOneByRequired(Model: ModelWithFindOne, fieldName: string) {
-    // tslint:disable-next-line:only-arrow-functions
-    return async function(fieldValue: any) {
-      if (!fieldValue || !fieldValue.toString()) {
-        throw Boom.badRequest('Missing dependent resource value');
-      }
-      const result = await Model.findOne({
-        [fieldName]: {
-          $eq: fieldValue,
-        },
-      }).exec();
-      if (!result) {
-        throw Boom.notFound('Resource not found');
-      }
-      return result;
-    };
-  }
-
   function stripIdTransform(obj: any) {
     const { _id, ...rest } = obj;
     return rest;
-  }
-
-  function deepWipeDefault(obj: any): any {
-    if (Array.isArray(obj)) {
-      return obj.map(elm => deepWipeDefault(elm));
-    } else if (typeof obj === 'object' && obj !== null) {
-      return Object.keys(obj).reduce((acc, key) => {
-        return {
-          ...acc,
-          ...(key === 'default' ? {} : { [key]: deepWipeDefault(obj[key]) }),
-        };
-      }, {});
-    } else {
-      return obj;
-    }
-  }
-
-  function dtoSchemaObj(schemaConfigObject: any, maskConfig: string) {
-    return deepWipeDefault(mask(schemaConfigObject, maskConfig));
   }
 
   function SanitizeParamsWithZod<
@@ -126,37 +60,6 @@ export function htZodFactory() {
     });
   }
 
-  function SaveOnDocumentFrom(propertyKeyOfDocument: string) {
-    return DoWork(async (context: any) => {
-      if (context[propertyKeyOfDocument]) {
-        try {
-          return await context[propertyKeyOfDocument].save();
-        } catch (err) {
-          throw Boom.badData(
-            'Unable to save. Please check if data sent was valid.'
-          );
-        }
-      } else {
-        throw Boom.badRequest('Resource not found');
-      }
-    });
-  }
-
-  function UpdateDocumentFromTo(
-    propertyKeyOfDocument: string,
-    propertyKeyWithNewData: string = 'body'
-  ) {
-    return DoWork(async (context: any) => {
-      if (context[propertyKeyOfDocument]) {
-        return await context[propertyKeyOfDocument].set(
-          context[propertyKeyWithNewData]
-        );
-      } else {
-        throw Boom.badRequest('Resource not found');
-      }
-    });
-  }
-
   function SanitizeResponseWithZod<
     TSafeResponse extends z.infer<TSchema>,
     TSchema extends z.ZodType<any, any, any>
@@ -193,13 +96,8 @@ export function htZodFactory() {
     SanitizeBodyWithZod,
     SanitizeParamsWithZod,
     SanitizeQueryParamsWithZod,
-    PojoToValidated,
     SanitizeResponseWithZod,
-    UpdateDocumentFromTo,
-    SaveOnDocumentFrom,
-    dtoSchemaObj,
-    findByIdRequired,
-    findOneByRequired,
+    PojoToValidated,
     stripIdTransform,
   };
 }
