@@ -2481,5 +2481,6 @@ export function HTPipeSanitizeResponse<
 export * from './core';
 export * from './express';
 export * from './mongoose';
+export * from './zod';
 export * from './user';
 export * from './lifecycle-functions';
