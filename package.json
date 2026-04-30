@@ -28,7 +28,7 @@
     "coverage": "nyc report --reporter=text-lcov | coveralls",
     "tsc": "tsc",
     "tslint-check": "tslint-config-prettier-check ./tslint.json",
-    "prepare": "npm run clean && npm run build",
+    "prepublishOnly": "npm run clean && npm run build",
     "prettier": "if test -z $CI; then prettier --write \"./{src,test}/**/*.{ts,js}\"; fi"
   },
   "license": "MIT",
