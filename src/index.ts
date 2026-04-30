@@ -25,6 +25,8 @@ import {
 } from './lifecycle-functions';
 import {
   AllStageKeys,
+  HasAllNotRequireds,
+  HasAllRequireds,
   HasAttachData,
   HasDoWork,
   HasFinalAuthorize,
@@ -1391,6 +1393,25 @@ export function HTPipe(...objs: any[]) {
   }
 
   return objs.reduce((prev: any, curr: any) => HTPipe(prev, curr), {});
+}
+
+/**
+ * A pipeable object is any object that has one or more lifecycle stage functions.
+ * This type represents the union of all possible stage configurations.
+ */
+type Pipeable = OptionallyHasInitPreContext<any, any> &
+  OptionallyHasSanitizeParams<any, any> &
+  OptionallyHasSanitizeQueryParams<any, any> &
+  OptionallyHasSanitizeBody<any, any> &
+  MightHavePreAuthorize<any, any> &
+  OptionallyHasAttachData<any, any> &
+  MightHaveFinalAuthorize<any, any> &
+  OptionallyHasDoWork<any, any> &
+  MightHaveRespond<any, any> &
+  MightHaveSanitizeResponse<any, any>;
+
+export function composePipes(...pipes: Pipeable[]): HasAllNotRequireds & HasAllRequireds {
+  return pipes.reduce((prev, curr) => HTPipe(prev, curr), {} as Pipeable) as HasAllNotRequireds & HasAllRequireds;
 }
 
 // left has attachData AND right has attachData AND left's return keys that exist in right's parameters are assignable to right's correspondingly
