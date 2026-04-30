@@ -36,7 +36,8 @@
     "@hapi/boom": "^9.1.4",
     "express": "^5.1.0",
     "json-mask": "^0.3.8",
-    "mongoose": "^5.9.4"
+    "mongoose": "^5.9.4",
+    "zod": "^4.2.1"
   },
   "devDependencies": {
     "@hapi/boom": "^9.1.4",
@@ -64,7 +65,8 @@
     "tslint": "5.20.0",
     "tslint-config-prettier": "^1.18.0",
     "tslint-eslint-rules": "*5.4.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "zod": "^4.2.1"
   },
   "prettier": {
     "trailingComma": "es5",
