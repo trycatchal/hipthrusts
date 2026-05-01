@@ -5,12 +5,6 @@
     "type": "git",
     "url": "https://github.com/captaincaius/hipthrusts.git"
   },
-  "workspaces": {
-    "nohoist": [
-      "@types*",
-      "@types*/**"
-    ]
-  },
   "description": "Build stronger, leaner backends with HipThrusTS",
   "main": "./lib/index.js",
   "types": "./lib/index.d.ts",
