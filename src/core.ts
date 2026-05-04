@@ -1,4 +1,3 @@
-import Boom from '@hapi/boom';
 import {
   AttachDataReqsSatisfiedOptional,
   DoWorkReqsSatisfiedOptional,
@@ -32,6 +31,23 @@ import {
   RespondReqsSatisfied,
   SanitizeResponseReqsSatisfied,
 } from './types';
+
+export class HipError extends Error {
+  public readonly statusCode: number;
+  public readonly output: { statusCode: number; payload: { message: string } };
+
+  constructor(statusCode: number, message: string) {
+    super(message);
+    this.name = 'HipError';
+    this.statusCode = statusCode;
+    // output shape for backwards compatibility with adapters that read .output
+    this.output = { statusCode, payload: { message } };
+  }
+
+  static isHipError(err: unknown): err is HipError {
+    return err instanceof HipError;
+  }
+}
 
 export function withDefaultImplementations<
   TStrategy extends HasAllNotRequireds &
@@ -165,8 +181,8 @@ function transformThrowSync<TOrigFn extends (param: any) => any>(
   try {
     return origFn(origParam);
   } catch (exception) {
-    if (exception instanceof HipRedirectException || Boom.isBoom(exception)) {
-      // Don't transform redirect exceptions or intentionally constructed boom errors
+    if (exception instanceof HipRedirectException || HipError.isHipError(exception)) {
+      // Don't transform redirect exceptions or intentionally constructed HipErrors
       throw exception;
     } else {
       // All other uncaught exceptions transform to whatever is requested
@@ -183,8 +199,8 @@ function transformThrowPossiblyAsync<
   origParam: Parameters<TOrigFn>[0]
 ): Promise<PromiseResolveOrSync<ReturnType<TOrigFn>>> {
   return Promise.resolve(origFn(origParam)).catch(exception => {
-    if (exception instanceof HipRedirectException || Boom.isBoom(exception)) {
-      // Don't transform redirect exceptions or intentionally constructed boom errors
+    if (exception instanceof HipRedirectException || HipError.isHipError(exception)) {
+      // Don't transform redirect exceptions or intentionally constructed HipErrors
       throw exception;
     } else {
       // All other uncaught exceptions transform to whatever is requested
@@ -212,7 +228,7 @@ export async function executeHipthrustable<
   unsafeQueryParams: TUnsafeQueryParams,
   unsafeBody: TUnsafeBody
 ) {
-  const badDataThrow = Boom.badData('User input sanitization failure');
+  const badDataThrow = new HipError(422, 'User input sanitization failure');
   const safeInitPreContext = transformThrowSync(
     badDataThrow,
     requestHandler.initPreContext,
@@ -241,7 +257,8 @@ export async function executeHipthrustable<
     body: safeBody,
   };
 
-  const forbiddenPreAuthThrow = Boom.forbidden(
+  const forbiddenPreAuthThrow = new HipError(
+    403,
     'General pre-authorization lacking for this resource'
   );
 
@@ -265,7 +282,7 @@ export async function executeHipthrustable<
     ...preAuthorizeContextOut,
   };
 
-  const notFoundThrow = Boom.notFound('Resource not found');
+  const notFoundThrow = new HipError(404, 'Resource not found');
   const attachedDataContextOnly =
     (await transformThrowPossiblyAsync(
       notFoundThrow,
@@ -274,7 +291,8 @@ export async function executeHipthrustable<
     )) || {};
   const attachedDataContext = { ...preAuthContext, ...attachedDataContextOnly };
 
-  const forbiddenFinalAuthThrow = Boom.forbidden(
+  const forbiddenFinalAuthThrow = new HipError(
+    403,
     'General authorization lacking for this resource'
   );
 
@@ -313,12 +331,12 @@ export async function executeHipthrustable<
     const responseAndStatus = { response: safeResponse, status: status || 200 };
     return responseAndStatus;
   } catch (exception) {
-    if (exception instanceof HipRedirectException || Boom.isBoom(exception)) {
-      // Don't transform redirect exceptions or intentionally constructed boom errors
+    if (exception instanceof HipRedirectException || HipError.isHipError(exception)) {
+      // Don't transform redirect exceptions or intentionally constructed HipErrors
       throw exception;
     } else {
       // All other uncaught exceptions transform to generic 500s here
-      throw Boom.badImplementation('Uncaught exception');
+      throw new HipError(500, 'Uncaught exception');
     }
   }
 }

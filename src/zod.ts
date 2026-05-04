@@ -1,5 +1,5 @@
-import Boom from '@hapi/boom';
 import { z } from 'zod';
+import { HipError } from './core';
 import {
   AttachData,
   SanitizeBody,
@@ -22,7 +22,7 @@ export function htZodFactory() {
     return SanitizeParams((unsafeParams: TUnsafeParam) => {
       const parseResult = schema.safeParse(unsafeParams);
       if (!parseResult.success) {
-        throw Boom.badRequest('Params not valid', parseResult.error);
+        throw new HipError(400, 'Params not valid');
       }
       return stripIdTransform(parseResult.data) as TSafeParam;
     });
@@ -36,7 +36,7 @@ export function htZodFactory() {
     return SanitizeQueryParams((unsafeQueryParams: TUnsafeQueryParam) => {
       const parseResult = schema.safeParse(unsafeQueryParams);
       if (!parseResult.success) {
-        throw Boom.badRequest('Query params not valid', parseResult.error);
+        throw new HipError(400, 'Query params not valid');
       }
       return stripIdTransform(parseResult.data) as TSafeQueryParam;
     });
@@ -54,7 +54,7 @@ export function htZodFactory() {
     return SanitizeBody((unsafeBody: TUnsafeBody) => {
       const parseResult = effectiveSchema.safeParse(unsafeBody);
       if (!parseResult.success) {
-        throw Boom.badRequest('Body not valid', parseResult.error);
+        throw new HipError(400, 'Body not valid');
       }
       return stripIdTransform(parseResult.data) as TSafeBody;
     });
@@ -70,7 +70,7 @@ export function htZodFactory() {
         // In production, you might want to log this error but return a safe default
         // or throw an internal server error since response validation failing
         // indicates a bug in your code, not invalid user input
-        throw Boom.internal('Response validation failed', parseResult.error);
+        throw new HipError(500, 'Response validation failed');
       }
       return parseResult.data as TSafeResponse;
     });
@@ -84,7 +84,7 @@ export function htZodFactory() {
     return AttachData((context: TContextIn) => {
       const parseResult = schema.safeParse(context[pojoKey]);
       if (!parseResult.success) {
-        throw Boom.badRequest('Data validation failed', parseResult.error);
+        throw new HipError(400, 'Data validation failed');
       }
       return {
         [newValidatedKey]: parseResult.data,

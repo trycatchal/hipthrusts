@@ -27,16 +27,13 @@
   },
   "license": "MIT",
   "peerDependencies": {
-    "@hapi/boom": "^9.1.4",
     "express": "^5.1.0",
     "json-mask": "^0.3.8",
     "mongoose": "^5.9.4",
     "zod": "^4.2.1"
   },
   "devDependencies": {
-    "@hapi/boom": "^9.1.4",
     "@istanbuljs/nyc-config-typescript": "^0.1.3",
-    "@types/boom": "^7.3.5",
     "@types/chai": "^4.2.3",
     "@types/chai-as-promised": "^7.1.2",
     "@types/express": "^5.0.6",

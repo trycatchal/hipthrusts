@@ -1,4 +1,4 @@
-import Boom from '@hapi/boom';
+import { HipError } from './core';
 import {
   AttachData,
   DoWork,
@@ -36,11 +36,11 @@ export function htMongooseFactory(mongoose: any) {
       // validation passes when it shouldn't - this example is b/c
       // mongoose won't initialize with invalid ObjectIds passed to it.
       if (!id || !id.toString()) {
-        throw Boom.badRequest('Missing dependent resource ID');
+        throw new HipError(400, 'Missing dependent resource ID');
       }
       const result = await Model.findById(id).exec();
       if (!result) {
-        throw Boom.notFound('Resource not found');
+        throw new HipError(404, 'Resource not found');
       }
       return result;
     };
@@ -50,7 +50,7 @@ export function htMongooseFactory(mongoose: any) {
     // tslint:disable-next-line:only-arrow-functions
     return async function(fieldValue: any) {
       if (!fieldValue || !fieldValue.toString()) {
-        throw Boom.badRequest('Missing dependent resource value');
+        throw new HipError(400, 'Missing dependent resource value');
       }
       const result = await Model.findOne({
         [fieldName]: {
@@ -58,7 +58,7 @@ export function htMongooseFactory(mongoose: any) {
         },
       }).exec();
       if (!result) {
-        throw Boom.notFound('Resource not found');
+        throw new HipError(404, 'Resource not found');
       }
       return result;
     };
@@ -127,7 +127,7 @@ export function htMongooseFactory(mongoose: any) {
       const doc = DocFactory(unsafeParams);
       const validateErrors = doc.validateSync();
       if (validateErrors !== undefined) {
-        throw Boom.badRequest('Params not valid');
+        throw new HipError(400, 'Params not valid');
       }
       // @tswtf: why do I need to force this?!
       return doc.toObject({ transform: stripIdTransform }) as TSafeParam;
@@ -144,7 +144,7 @@ export function htMongooseFactory(mongoose: any) {
       const doc = DocFactory(unsafeQueryParams);
       const validateErrors = doc.validateSync();
       if (validateErrors !== undefined) {
-        throw Boom.badRequest('Query params not valid');
+        throw new HipError(400, 'Query params not valid');
       }
       return doc.toObject({ transform: stripIdTransform }) as TSafeQueryParam;
     });
@@ -163,7 +163,7 @@ export function htMongooseFactory(mongoose: any) {
         validateModifiedOnly: true,
       });
       if (validateErrors !== undefined) {
-        throw Boom.badRequest('Body not valid');
+        throw new HipError(400, 'Body not valid');
       }
       // @tswtf: why do I need to force this?!
       return doc.toObject({ transform: stripIdTransform }) as TSafeBody;
@@ -176,12 +176,13 @@ export function htMongooseFactory(mongoose: any) {
         try {
           return await context[propertyKeyOfDocument].save();
         } catch (err) {
-          throw Boom.badData(
+          throw new HipError(
+            422,
             'Unable to save. Please check if data sent was valid.'
           );
         }
       } else {
-        throw Boom.badRequest('Resource not found');
+        throw new HipError(400, 'Resource not found');
       }
     });
   }
@@ -196,7 +197,7 @@ export function htMongooseFactory(mongoose: any) {
           context[propertyKeyWithNewData]
         );
       } else {
-        throw Boom.badRequest('Resource not found');
+        throw new HipError(400, 'Resource not found');
       }
     });
   }
