@@ -2500,7 +2500,11 @@ export function HTPipeSanitizeResponse<
 }
 
 export * from './core';
+export * from './adapter';
 export * from './express';
+export * from './fastify';
+export * from './hono';
+export * from './next';
 export * from './mongoose';
 export * from './zod';
 export * from './user';

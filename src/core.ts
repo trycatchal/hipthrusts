@@ -191,14 +191,16 @@ function transformThrowSync<TOrigFn extends (param: any) => any>(
   }
 }
 
-function transformThrowPossiblyAsync<
+async function transformThrowPossiblyAsync<
   TOrigFn extends (param: any) => PromiseOrSync<any>
 >(
   toThrow: any,
   origFn: TOrigFn,
   origParam: Parameters<TOrigFn>[0]
 ): Promise<PromiseResolveOrSync<ReturnType<TOrigFn>>> {
-  return Promise.resolve(origFn(origParam)).catch(exception => {
+  try {
+    return await Promise.resolve(origFn(origParam));
+  } catch (exception) {
     if (exception instanceof HipRedirectException || HipError.isHipError(exception)) {
       // Don't transform redirect exceptions or intentionally constructed HipErrors
       throw exception;
@@ -206,7 +208,7 @@ function transformThrowPossiblyAsync<
       // All other uncaught exceptions transform to whatever is requested
       throw toThrow;
     }
-  });
+  }
 }
 
 export async function executeHipthrustable<

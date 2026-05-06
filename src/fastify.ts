@@ -1,10 +1,7 @@
-import {
-  NextFunction,
-  Request,
-  Response,
-} from 'express';
+import type { FastifyRequest, FastifyReply } from 'fastify';
 import {
   executeHipthrustable,
+  HipError,
   HipRedirectException,
 } from './core';
 import {
@@ -19,7 +16,7 @@ import {
   SanitizeResponseReqsSatisfied,
 } from './adapter';
 
-export function hipExpressHandlerFactory<
+export function hipFastifyHandlerFactory<
   TConf extends HasAllNotRequireds &
     HasAllRequireds &
     PreAuthReqsSatisfied<TConf> &
@@ -30,26 +27,30 @@ export function hipExpressHandlerFactory<
     SanitizeResponseReqsSatisfied<TConf>
 >(handlingStrategy: TConf) {
   const fullHipthrustable = prepareHipthrustable(handlingStrategy);
-  return async (
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ) => {
+
+  return async (req: FastifyRequest, reply: FastifyReply) => {
     try {
       const { response, status } = await executeHipthrustable(
         fullHipthrustable,
-        { req, res },
-        req.params,
-        req.query,
-        req.body
+        { req, reply },
+        req.params as Record<string, string>,
+        req.query as Record<string, string>,
+        req.body as Record<string, unknown> || {}
       );
-      res.status(status).json(response);
+
+      return reply.status(status).send(response);
     } catch (exception) {
       if (exception instanceof HipRedirectException) {
-        res.redirect(exception.redirectCode, exception.redirectUrl);
-      } else {
-        next(exception);
+        return reply.redirect(exception.redirectUrl);
       }
+
+      if (HipError.isHipError(exception)) {
+        return reply
+          .status(exception.statusCode)
+          .send({ error: exception.message });
+      }
+
+      return reply.status(500).send({ error: 'Internal server error' });
     }
   };
 }

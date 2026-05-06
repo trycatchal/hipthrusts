@@ -1,9 +1,4 @@
-import { expect, use } from 'chai';
-import chaiAsPromised from 'chai-as-promised';
-
-// tslint:disable-next-line:no-var-requires
-const { describe, it } = require('mocha');
-
+import { describe, it, expect } from 'vitest';
 import { hipExpressHandlerFactory, HTPipe } from '../src';
 import {
   AllAsyncStageKeys,
@@ -21,8 +16,6 @@ import {
   HasSanitizeResponse,
   PromiseResolveOrSync,
 } from '../src/types';
-
-use(chaiAsPromised);
 
 interface MockUser {
   _id: string;
@@ -103,7 +96,7 @@ async function HTPipeTest<
   const pipedLifecycleStage = pipe[lifecycleStage];
 
   // tslint:disable-next-line:no-unused-expression
-  expect(pipedLifecycleStage).to.not.be.eql({});
+  expect(pipedLifecycleStage).not.toEqual({});
   if (pipedLifecycleStage) {
     const pipedLifecycleStageResult =
       lifecycleStage === 'attachData' ||
@@ -111,7 +104,7 @@ async function HTPipeTest<
       lifecycleStage === 'finalAuthorize'
         ? await pipedLifecycleStage(pipeIn)
         : pipedLifecycleStage(pipeIn);
-    expect(pipedLifecycleStageResult).to.deep.equal(pipeOut);
+    expect(pipedLifecycleStageResult).toEqual(pipeOut);
   }
 }
 
@@ -162,7 +155,7 @@ describe('HipThrusTS', () => {
         // @ts-expect-error
         mockUserEmailTypeIsOkay = false;
 
-        expect(hipRequestInstance.user_user.email).to.be.equal(
+        expect(hipRequestInstance.user_user.email).toBe(
           'link@example.com'
         );
       });
@@ -174,7 +167,7 @@ describe('HipThrusTS', () => {
         // @ts-expect-error
         existingFieldTypeIsOkay = false;
 
-        expect(hipRequestInstance.existingField).to.be.equal('Hyrule');
+        expect(hipRequestInstance.existingField).toBe('Hyrule');
       });
     });
     describe('WithAttached', () => {
@@ -276,7 +269,7 @@ describe('HipThrusTS', () => {
             // @ts-expect-error
             thingIdTypeIsOkay = false;
 
-            expect(requestWithParamId.existingField).to.be.equal('Hyrule');
+            expect(requestWithParamId.existingField).toBe('Hyrule');
           });
           it('news up instances that have the attachData lifecycle stage', () => {
             // tslint:disable-next-line:prefer-const
@@ -298,7 +291,7 @@ describe('HipThrusTS', () => {
           describe('after calling attachData', () => {
             it('news up instances that can call the attachData lifecycle stage', async () => {
               await requestWithParamId.attachData();
-              expect(requestWithParamId.thingId).to.be.equal('stringy');
+              expect(requestWithParamId.thingId).toBe('stringy');
             });
           });
         });
@@ -383,7 +376,7 @@ describe('HipThrusTS', () => {
       });
       it('gets all members after attachData() is called', async () => {
         await happyFamily.attachData();
-        expect(happyFamily.childAge).to.be.equal(33);
+        expect(happyFamily.childAge).toBe(33);
       });
     });
   });
@@ -577,7 +570,7 @@ describe('HipThrusTS', () => {
           errorReturned = err;
         }
         // tslint:disable-next-line:no-unused-expression
-        expect(errorReturned).to.exist;
+        expect(errorReturned).toBeDefined();
       });
     });
     describe('HTPipe', () => {
@@ -635,12 +628,12 @@ describe('HipThrusTS', () => {
           };
 
           const leftProjector = (htCtx: { a: string }) => {
-            expect(htCtx.a).to.be.equal(testConstants.aPassedIn);
+            expect(htCtx.a).toBe(testConstants.aPassedIn);
             return { b: testConstants.bPassedIn };
           };
 
           const rightProjector = (htCtx: { b: number }) => {
-            expect(htCtx.b).to.be.equal(testConstants.bPassedIn);
+            expect(htCtx.b).toBe(testConstants.bPassedIn);
             return { c: testConstants.cReturned };
           };
 
@@ -723,12 +716,12 @@ describe('HipThrusTS', () => {
           };
 
           const leftProjector = (htCtx: { a: number }) => {
-            expect(htCtx.a).to.be.equal(testConstants.aPassedIn);
+            expect(htCtx.a).toBe(testConstants.aPassedIn);
             return { b: testConstants.bPassedIn };
           };
 
           const rightProjector = (htCtx: { b: string }) => {
-            expect(htCtx.b).to.be.equal(testConstants.bPassedIn);
+            expect(htCtx.b).toBe(testConstants.bPassedIn);
             return { b: testConstants.bReturned };
           };
 
@@ -811,13 +804,13 @@ describe('HipThrusTS', () => {
           };
 
           const leftProjector = (htCtx: { a: string }) => {
-            expect(htCtx.a).to.be.equal(testConstants.aPassedIn);
+            expect(htCtx.a).toBe(testConstants.aPassedIn);
             return { b: testConstants.bReturned };
           };
 
           const rightProjector = (context: { b: number; other: string }) => {
-            expect(context.other).to.be.equal(testConstants.otherPassedIn);
-            expect(context.b).to.be.equal(testConstants.bReturned);
+            expect(context.other).toBe(testConstants.otherPassedIn);
+            expect(context.b).toBe(testConstants.bReturned);
             return { c: testConstants.cReturned };
           };
 
@@ -902,12 +895,12 @@ describe('HipThrusTS', () => {
           };
 
           const leftProjector = (htCtx: { a: string }) => {
-            expect(htCtx.a).to.be.equal(testConstants.aPassedIn);
+            expect(htCtx.a).toBe(testConstants.aPassedIn);
             return { b: testConstants.bReturned };
           };
 
           const rightProjector = (htCtx: { other: string }) => {
-            expect(htCtx.other).to.be.equal(testConstants.otherPassedIn);
+            expect(htCtx.other).toBe(testConstants.otherPassedIn);
             return { c: testConstants.cReturned };
           };
 
@@ -988,7 +981,7 @@ describe('HipThrusTS', () => {
           };
 
           const leftProjector = (htCtx: { a: string }) => {
-            expect(htCtx.a).to.be.equals(testConstants.aPassedIn);
+            expect(htCtx.a).toBe(testConstants.aPassedIn);
             return { b: testConstants.bReturned };
           };
 
@@ -1067,8 +1060,8 @@ describe('HipThrusTS', () => {
           const leftProjector = {};
 
           const rightProjector = (htCtx: { b: number; other: string }) => {
-            expect(htCtx.b).to.be.equal(testConstants.bPassedIn);
-            expect(htCtx.other).to.be.equal(testConstants.otherPassedIn);
+            expect(htCtx.b).toBe(testConstants.bPassedIn);
+            expect(htCtx.other).toBe(testConstants.otherPassedIn);
             return { c: testConstants.cReturned };
           };
 
@@ -1170,17 +1163,15 @@ describe('HipThrusTS', () => {
             );
           }
         });
-        it('attachData sync', async () => {
-          it('no attaches data when left sync outputs have type mismatch with right inputs', () => {
-            const lifecycleStage = 'attachData';
-            function expectErrorWithHTPipe() {
-              // @ts-expect-error
-              const pipedError = HTPipe(
-                errorCaseTest(lifecycleStage).left,
-                errorCaseTest(lifecycleStage).right
-              );
-            }
-          });
+        it('attachData sync - no attaches data when left sync outputs have type mismatch with right inputs', () => {
+          const lifecycleStage = 'attachData';
+          function expectErrorWithHTPipe() {
+            // @ts-expect-error
+            const pipedError = HTPipe(
+              errorCaseTest(lifecycleStage).left,
+              errorCaseTest(lifecycleStage).right
+            );
+          }
         });
         it('attachData async', async () => {
           const lifecycleStage = 'attachData';
@@ -1215,7 +1206,7 @@ describe('HipThrusTS', () => {
           // @ts-expect-error
           const assignableFromCorrect: assignableFromCorrect = false;
 
-          expect(pipedWithEmptyObjectsOnly).to.be.eql({});
+          expect(pipedWithEmptyObjectsOnly).toEqual({});
         });
       });
     });
@@ -1235,7 +1226,7 @@ describe('HipThrusTS', () => {
         const leftProjector = (context: {
           someObj: { a: string; b: string };
         }) => {
-          expect(context).to.deep.equal({
+          expect(context).toEqual({
             someObj: {
               a: testConstants.aPassedIn,
               b: testConstants.bPassedIn,
@@ -1245,8 +1236,8 @@ describe('HipThrusTS', () => {
         };
 
         const rightProjector = (context: { a: string; b: string }) => {
-          expect(context).to.not.has.property('someObj');
-          expect(context).to.deep.equal({
+          expect(context).not.toHaveProperty('someObj');
+          expect(context).toEqual({
             a: testConstants.aPassedIn,
             b: testConstants.bPassedIn,
           });
@@ -1319,7 +1310,7 @@ describe('HipThrusTS', () => {
 
         const left = {
           respond(context: { someObj: { a: string; b: string } }) {
-            expect(context).to.deep.equal({
+            expect(context).toEqual({
               someObj: {
                 a: aPassedIn,
                 b: bPassedIn,
@@ -1331,8 +1322,8 @@ describe('HipThrusTS', () => {
 
         const right = {
           respond(context: { a: string; b: string }) {
-            expect(context).to.not.has.property('someObj');
-            expect(context).to.deep.equal({
+            expect(context).not.toHaveProperty('someObj');
+            expect(context).toEqual({
               a: aPassedIn,
               b: bPassedIn,
             });
@@ -1600,7 +1591,7 @@ describe('HipThrusTS', () => {
         }
 
         // tslint:disable-next-line:no-unused-expression
-        expect(hipExpressHandlerFactoryError).to.not.be.undefined;
+        expect(hipExpressHandlerFactoryError).toBeDefined();
       });
       it('should give error when finalAuthorize is missing', () => {
         const handlingStrategy = {
@@ -1630,7 +1621,7 @@ describe('HipThrusTS', () => {
         }
 
         // tslint:disable-next-line:no-unused-expression
-        expect(hipExpressHandlerFactoryError).to.not.be.undefined;
+        expect(hipExpressHandlerFactoryError).toBeDefined();
       });
       it('should give error when respond is missing', () => {
         const handlingStrategy = {
@@ -1660,7 +1651,7 @@ describe('HipThrusTS', () => {
         }
 
         // tslint:disable-next-line:no-unused-expression
-        expect(hipExpressHandlerFactoryError).to.not.be.undefined;
+        expect(hipExpressHandlerFactoryError).toBeDefined();
       });
       it('should give error when sanitizeResponse is missing', () => {
         const handlingStrategy = {
@@ -1690,7 +1681,7 @@ describe('HipThrusTS', () => {
         }
 
         // tslint:disable-next-line:no-unused-expression
-        expect(hipExpressHandlerFactoryError).to.not.be.undefined;
+        expect(hipExpressHandlerFactoryError).toBeDefined();
       });
     });
   });
