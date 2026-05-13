@@ -1,12 +1,10 @@
-import {
-  NextFunction,
-  Request,
-  Response,
-} from 'express';
+import { NextFunction, Request, Response } from 'express';
 import {
   assertHipthrustable,
   executeHipthrustable,
+  HasSuccessStatus,
   HipRedirectException,
+  SuccessStatus,
   withDefaultImplementations,
 } from './core';
 import {
@@ -15,104 +13,118 @@ import {
   FinalAuthReqsSatisfied,
   HasAllNotRequireds,
   HasAllRequireds,
-  HipWorkResponse,
   PreAuthReqsSatisfied,
   PromiseOrSync,
   PromiseResolveOrSync,
-  RespondReqsSatisfied,
   SanitizeResponseReqsSatisfied,
 } from './types';
 
-// Type for handler config with computed context types that enable inference
-// Note: TParams, TBody, etc. represent the RAW return type (possibly Promise-wrapped)
-// The context types use PromiseResolveOrSync to unwrap them
+// Canonical input shape produced by the express adapter baseline extractInputs.
+export interface ExpressRawInputs {
+  params: any;
+  query: any;
+  body: any;
+  headers: any;
+}
+
+export interface ExpressRaw {
+  req: Request;
+  res: Response;
+}
+
+// Handler config the dev writes for an express endpoint.
+// `extractInputs` chains AFTER the adapter baseline; if omitted, the canonical
+// {params, query, body, headers} shape flows directly to sanitizeInputs.
+// tslint:disable-next-line:interface-over-type-literal
 type ExpressHandlerConfig<
-  TParams = never,
-  TBody = never,
-  TQueryParams = never,
+  TInputs = ExpressRawInputs,
+  TSafeInputs = any,
   TPreContext = never,
   TPreAuthOut = unknown,
   TAttachDataOut = unknown,
   TFinalAuthOut = unknown,
-  TDoWorkOut = unknown,
+  TUnsafeResponse = unknown,
   TResponse = unknown
 > = {
-  initPreContext?: (unsafe: any) => TPreContext;
-  sanitizeParams?: (i: { params: any }) => TParams;
-  sanitizeBody?: (i: { body: any }) => TBody;
-  sanitizeQueryParams?: (i: { queryParams: any }) => TQueryParams;
+  initPreContext?: (raw: ExpressRaw) => TPreContext;
+  extractInputs?: (canonical: ExpressRawInputs) => TInputs;
+  sanitizeInputs: (unsafe: TInputs) => TSafeInputs;
   preAuthorize: (
-    context: ([TParams] extends [never] ? {} : { params: PromiseResolveOrSync<TParams> }) &
-      ([TBody] extends [never] ? {} : { body: PromiseResolveOrSync<TBody> }) &
-      ([TQueryParams] extends [never] ? {} : { queryParams: PromiseResolveOrSync<TQueryParams> }) &
-      ([TPreContext] extends [never] ? {} : { preContext: TPreContext })
+    context: { inputs: PromiseResolveOrSync<TSafeInputs> } & ([
+      TPreContext
+    ] extends [never]
+      ? {}
+      : { preContext: TPreContext })
   ) => TPreAuthOut;
   attachData?: (
-    context: ([TParams] extends [never] ? {} : { params: PromiseResolveOrSync<TParams> }) &
-      ([TBody] extends [never] ? {} : { body: PromiseResolveOrSync<TBody> }) &
-      ([TQueryParams] extends [never] ? {} : { queryParams: PromiseResolveOrSync<TQueryParams> }) &
-      ([TPreContext] extends [never] ? {} : { preContext: TPreContext }) &
+    context: { inputs: PromiseResolveOrSync<TSafeInputs> } & ([
+      TPreContext
+    ] extends [never]
+      ? {}
+      : { preContext: TPreContext }) &
       PromiseResolveOrSync<TPreAuthOut>
   ) => PromiseOrSync<TAttachDataOut>;
   finalAuthorize: (
-    context: ([TParams] extends [never] ? {} : { params: PromiseResolveOrSync<TParams> }) &
-      ([TBody] extends [never] ? {} : { body: PromiseResolveOrSync<TBody> }) &
-      ([TQueryParams] extends [never] ? {} : { queryParams: PromiseResolveOrSync<TQueryParams> }) &
-      ([TPreContext] extends [never] ? {} : { preContext: TPreContext }) &
+    context: { inputs: PromiseResolveOrSync<TSafeInputs> } & ([
+      TPreContext
+    ] extends [never]
+      ? {}
+      : { preContext: TPreContext }) &
       PromiseResolveOrSync<TPreAuthOut> &
       PromiseResolveOrSync<TAttachDataOut>
   ) => PromiseOrSync<TFinalAuthOut>;
-  doWork?: (
-    context: ([TParams] extends [never] ? {} : { params: PromiseResolveOrSync<TParams> }) &
-      ([TBody] extends [never] ? {} : { body: PromiseResolveOrSync<TBody> }) &
-      ([TQueryParams] extends [never] ? {} : { queryParams: PromiseResolveOrSync<TQueryParams> }) &
-      ([TPreContext] extends [never] ? {} : { preContext: TPreContext }) &
+  doWork: (
+    context: { inputs: PromiseResolveOrSync<TSafeInputs> } & ([
+      TPreContext
+    ] extends [never]
+      ? {}
+      : { preContext: TPreContext }) &
       PromiseResolveOrSync<TPreAuthOut> &
       PromiseResolveOrSync<TAttachDataOut> &
       PromiseResolveOrSync<TFinalAuthOut>
-  ) => PromiseOrSync<TDoWorkOut>;
-  respond: (
-    context: ([TParams] extends [never] ? {} : { params: PromiseResolveOrSync<TParams> }) &
-      ([TBody] extends [never] ? {} : { body: PromiseResolveOrSync<TBody> }) &
-      ([TQueryParams] extends [never] ? {} : { queryParams: PromiseResolveOrSync<TQueryParams> }) &
-      ([TPreContext] extends [never] ? {} : { preContext: TPreContext }) &
-      PromiseResolveOrSync<TPreAuthOut> &
-      PromiseResolveOrSync<TAttachDataOut> &
-      PromiseResolveOrSync<TFinalAuthOut> &
-      PromiseResolveOrSync<TDoWorkOut>
-  ) => HipWorkResponse<TResponse>;
-  sanitizeResponse: (r: { response: TResponse }) => any;
+  ) => PromiseOrSync<TUnsafeResponse>;
+  sanitizeResponse: (
+    unsafe: PromiseResolveOrSync<TUnsafeResponse>
+  ) => TResponse;
+  successStatus?: SuccessStatus;
 };
 
-// The output type that's compatible with hipExpressHandlerFactory and HTPipe
-type InferredHandlerConfig = HasAllNotRequireds & HasAllRequireds;
+type InferredHandlerConfig = HasAllNotRequireds &
+  HasAllRequireds &
+  HasSuccessStatus;
 
-// Identity function - returns input unchanged, but enables TypeScript to infer types
-// The return type is cast to be compatible with hipExpressHandlerFactory while
-// preserving the inference benefits at the call site
+// Identity function for inference-friendly config authoring.
 export const defineExpressHandler = <
-  TParams = never,
-  TBody = never,
-  TQueryParams = never,
+  TInputs = ExpressRawInputs,
+  TSafeInputs = any,
   TPreContext = never,
   TPreAuthOut = unknown,
   TAttachDataOut = unknown,
   TFinalAuthOut = unknown,
-  TDoWorkOut = unknown,
+  TUnsafeResponse = unknown,
   TResponse = unknown
 >(
   config: ExpressHandlerConfig<
-    TParams,
-    TBody,
-    TQueryParams,
+    TInputs,
+    TSafeInputs,
     TPreContext,
     TPreAuthOut,
     TAttachDataOut,
     TFinalAuthOut,
-    TDoWorkOut,
+    TUnsafeResponse,
     TResponse
   >
-): InferredHandlerConfig => config as InferredHandlerConfig;
+): InferredHandlerConfig => (config as unknown) as InferredHandlerConfig;
+
+// Adapter-baseline extractInputs: produces the canonical {params, query, body, headers} shape.
+function expressBaselineExtractInputs(raw: ExpressRaw): ExpressRawInputs {
+  return {
+    params: raw.req.params,
+    query: raw.req.query,
+    body: raw.req.body,
+    headers: raw.req.headers,
+  };
+}
 
 export function hipExpressHandlerFactory<
   TConf extends HasAllNotRequireds &
@@ -121,23 +133,36 @@ export function hipExpressHandlerFactory<
     AttachDataReqsSatisfiedOptional<TConf> &
     FinalAuthReqsSatisfied<TConf> &
     DoWorkReqsSatisfiedOptional<TConf> &
-    RespondReqsSatisfied<TConf> &
-    SanitizeResponseReqsSatisfied<TConf>
+    SanitizeResponseReqsSatisfied<TConf> &
+    HasSuccessStatus
 >(handlingStrategy: TConf) {
   assertHipthrustable(handlingStrategy);
-  const fullHipthrustable = withDefaultImplementations(handlingStrategy);
-  return async (
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ) => {
+
+  // Compose: baseline runs first, handler's extractInputs (if any) chains after.
+  const handlerExtract = (handlingStrategy as any).extractInputs;
+  const composedExtractInputs = handlerExtract
+    ? (raw: ExpressRaw) => {
+        const canonical = expressBaselineExtractInputs(raw);
+        const additions = handlerExtract(canonical) || {};
+        return { ...canonical, ...additions };
+      }
+    : expressBaselineExtractInputs;
+
+  const strategyWithBaseline = {
+    ...handlingStrategy,
+    extractInputs: composedExtractInputs,
+  };
+
+  const fullHipthrustable = withDefaultImplementations(
+    strategyWithBaseline as any
+  );
+
+  return async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { response, status } = await executeHipthrustable(
-        fullHipthrustable,
+        fullHipthrustable as any,
         { req, res },
-        req.params,
-        req.query,
-        req.body
+        200
       );
       res.status(status).json(response);
     } catch (exception) {

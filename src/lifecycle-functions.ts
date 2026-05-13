@@ -7,30 +7,21 @@ export function InitPreContext<
   };
 }
 
-export function SanitizeParams<
+export function ExtractInputs<
   TContextIn extends object,
   TContextOut extends object
 >(projector: (htCtx: TContextIn) => TContextOut) {
   return {
-    sanitizeParams: projector,
+    extractInputs: projector,
   };
 }
 
-export function SanitizeQueryParams<
+export function SanitizeInputs<
   TContextIn extends object,
   TContextOut extends object
 >(projector: (htCtx: TContextIn) => TContextOut) {
   return {
-    sanitizeQueryParams: projector,
-  };
-}
-
-export function SanitizeBody<
-  TContextIn extends object,
-  TContextOut extends object
->(projector: (htCtx: TContextIn) => TContextOut) {
-  return {
-    sanitizeBody: projector,
+    sanitizeInputs: projector,
   };
 }
 
@@ -61,33 +52,17 @@ export function FinalAuthorize<
   };
 }
 
-export function DoWork<
-  TContextIn extends object,
-  TContextOut extends object | void
->(projector: (htCtx: TContextIn) => TContextOut) {
+export function DoWork<TContextIn extends object, TUnsafeResponse>(
+  projector: (htCtx: TContextIn) => TUnsafeResponse
+) {
   return {
     doWork: projector,
   };
 }
 
-export function Respond<TContextIn extends object, TContextOut extends object>(
-  projector: (htCtx: TContextIn) => TContextOut,
-  successStatusCode: number
+export function SanitizeResponse<TUnsafeResponse, TResponse>(
+  projector: (unsafe: TUnsafeResponse) => TResponse
 ) {
-  return {
-    respond: (htCtx: any) => {
-      return {
-        unsafeResponse: projector(htCtx),
-        status: successStatusCode,
-      };
-    },
-  };
-}
-
-export function SanitizeResponse<
-  TContextIn extends object,
-  TContextOut extends object
->(projector: (htCtx: TContextIn) => TContextOut) {
   return {
     sanitizeResponse: projector,
   };

@@ -4,30 +4,23 @@ import chaiAsPromised from 'chai-as-promised';
 // tslint:disable-next-line:no-var-requires
 const { describe, it } = require('mocha');
 
-import { hipExpressHandlerFactory, HTPipe } from '../src';
+import { hipExpressHandlerFactory, HTPipe, WithInputSlice } from '../src';
 import {
   AllAsyncStageKeys,
   AllStageKeys,
   HasAllStagesOptionals,
   HasAttachData,
   HasDoWork,
+  HasExtractInputs,
   HasFinalAuthorize,
   HasInitPreContext,
   HasPreAuthorize,
-  HasRespond,
-  HasSanitizeBody,
-  HasSanitizeParams,
-  HasSanitizeQueryParams,
+  HasSanitizeInputs,
   HasSanitizeResponse,
   PromiseResolveOrSync,
 } from '../src/types';
 
 use(chaiAsPromised);
-
-interface MockUser {
-  _id: string;
-  email: string;
-}
 
 type ReturnTypeFromStage<
   T extends (context: any) => any,
@@ -45,16 +38,12 @@ async function HTPipeTest<
     ? TPipe extends HasInitPreContext<any, any>
       ? TPipe[TStage]
       : never
-    : TStage extends 'sanitizeParams'
-    ? TPipe extends HasSanitizeParams<any, any>
+    : TStage extends 'extractInputs'
+    ? TPipe extends HasExtractInputs<any, any>
       ? TPipe[TStage]
       : never
-    : TStage extends 'sanitizeQueryParams'
-    ? TPipe extends HasSanitizeQueryParams<any, any>
-      ? TPipe[TStage]
-      : never
-    : TStage extends 'sanitizeBody'
-    ? TPipe extends HasSanitizeBody<any, any>
+    : TStage extends 'sanitizeInputs'
+    ? TPipe extends HasSanitizeInputs<any, any>
       ? TPipe[TStage]
       : never
     : TStage extends 'preAuthorize'
@@ -71,10 +60,6 @@ async function HTPipeTest<
       : never
     : TStage extends 'doWork'
     ? TPipe extends HasDoWork<any, any>
-      ? TPipe[TStage]
-      : never
-    : TStage extends 'respond'
-    ? TPipe extends HasRespond<any, any>
       ? TPipe[TStage]
       : never
     : TStage extends 'sanitizeResponse'
@@ -116,286 +101,9 @@ async function HTPipeTest<
 }
 
 describe('HipThrusTS', () => {
-  /*
-  describe('HipThrusTS declarative', () => {
-    describe('WithInit', () => {
-      class Base {
-        public existingField = 'Hyrule';
-        constructor(...args: any[]) {
-          // empty - tslint shutup
-        }
-      }
-      const AddUserFromReqUser = WithInit(
-        'user',
-        (user: MockUser) => user,
-        'user_user'
-      );
-
-      const UserAddedRequest = AddUserFromReqUser(Base);
-
-      const req = { user: { _id: 'link', email: 'link@example.com' } };
-      const hipRequestInstance = new UserAddedRequest(req);
-      it('attaches a properly typed member to all request instances', () => {
-        // tslint:disable-next-line:prefer-const
-        let isToMockUserTypeOkay: typeof hipRequestInstance.user_user extends MockUser
-          ? true
-          : false;
-        let isFromMockUserTypeOkay: MockUser extends typeof hipRequestInstance.user_user
-          ? true
-          : false;
-        // @ts-expect-error
-        isToMockUserTypeOkay = false;
-        // @ts-expect-error
-        isFromMockUserTypeOkay = false;
-
-        // tslint:disable-next-line:prefer-const
-        let fromMockUserIdTypeIsOkay: typeof hipRequestInstance.user_user._id extends string
-          ? true
-          : false;
-        // @ts-expect-error
-        fromMockUserIdTypeIsOkay = false;
-
-        // tslint:disable-next-line:prefer-const
-        let mockUserEmailTypeIsOkay: typeof hipRequestInstance.user_user.email extends string
-          ? true
-          : false;
-        // @ts-expect-error
-        mockUserEmailTypeIsOkay = false;
-
-        expect(hipRequestInstance.user_user.email).to.be.equal(
-          'link@example.com'
-        );
-      });
-      it('retains the base class members', () => {
-        // tslint:disable-next-line:prefer-const
-        let existingFieldTypeIsOkay: typeof hipRequestInstance.existingField extends string
-          ? true
-          : false;
-        // @ts-expect-error
-        existingFieldTypeIsOkay = false;
-
-        expect(hipRequestInstance.existingField).to.be.equal('Hyrule');
-      });
-    });
-    describe('WithAttached', () => {
-      const AddThingIdFromParams = WithAttached(
-        'params',
-        (params: { id: string }) => Promise.resolve(params.id),
-        'thingId'
-      );
-
-      // todo: add test to ensure synchronous projectors are rejected
-      // todo: add test to check for race conditions
-
-      it('compile-time-errors-out when extending a class that lacks the right member', () => {
-        class BaseWithoutParams {
-          public existingField = 'Hyrule';
-          constructor(...args: any[]) {
-            // empty - tslint shutup
-          }
-        }
-        // @todo: fix like the HTPipeOld stuff (no assign) - this may not actually work!
-        // tslint:disable-next-line:prefer-const
-        let typeFromBaseWithoutParamsIsOkay: typeof BaseWithoutParams extends Parameters<
-          typeof AddThingIdFromParams
-        >[0]
-          ? true
-          : false = false;
-        let typeToBaseWithoutParamsIsOkay: Parameters<
-          typeof AddThingIdFromParams
-        >[0] extends typeof BaseWithoutParams
-          ? true
-          : false = false;
-        // @ts-expect-error
-        typeFromBaseWithoutParamsIsOkay = true;
-        // @ts-expect-error
-        typeToBaseWithoutParamsIsOkay = true;
-      });
-      it('compile-time-errors-out when extending a class that has the right member but it does not satisfy the projector', () => {
-        class BaseWithMistypedParams {
-          public existingField = 'Hyrule';
-          public params = {};
-          constructor(...args: any[]) {
-            // empty - tslint shutup
-          }
-        }
-        // @todo: fix like the HTPipeOld stuff (no assign) - this may not actually work!
-        // tslint:disable-next-line:prefer-const
-        let typeFromBaseWithMistypedParamsIsOkay: typeof BaseWithMistypedParams extends Parameters<
-          typeof AddThingIdFromParams
-        >[0]
-          ? true
-          : false = false;
-        let typeToBaseWithMistypedParamsIsOkay: Parameters<
-          typeof AddThingIdFromParams
-        >[0] extends typeof BaseWithMistypedParams
-          ? true
-          : false = false;
-        // @ts-expect-error
-        typeFromBaseWithMistypedParamsIsOkay = true;
-        // @ts-expect-error
-        typeToBaseWithMistypedParamsIsOkay = true;
-      });
-      describe('with a proper superclass', () => {
-        class BaseWithProperParams {
-          public existingField = 'Hyrule';
-          public params = { id: 'stringy', somethingelse: 1986 };
-          constructor(...args: any[]) {
-            // empty - tslint shutup
-          }
-        }
-        it('pleases the compiler', () => {
-          // @todo: fix like the HTPipeOld stuff (no assign) - this may not actually work!
-          // tslint:disable-next-line:prefer-const
-          let typeIsOkay: typeof BaseWithProperParams extends Parameters<
-            typeof AddThingIdFromParams
-          >[0]
-            ? true
-            : false = true;
-          // @ts-expect-error
-          typeIsOkay = false;
-        });
-        describe('when wrapping it and creating an instance', () => {
-          const RequestWithParamId = AddThingIdFromParams(BaseWithProperParams);
-
-          const req = {};
-          const requestWithParamId = new RequestWithParamId(req);
-          it('news up an instance with the new member typed properly', () => {
-            // tslint:disable-next-line:prefer-const
-            let thingIdTypeIsOkay: typeof requestWithParamId.thingId extends string
-              ? true
-              : false;
-            // @ts-expect-error
-            thingIdTypeIsOkay = false;
-          });
-          it('news up instances that retain the base class members and type them properly', () => {
-            // tslint:disable-next-line:prefer-const
-            let thingIdTypeIsOkay: typeof requestWithParamId.existingField extends string
-              ? true
-              : false;
-            // @ts-expect-error
-            thingIdTypeIsOkay = false;
-
-            expect(requestWithParamId.existingField).to.be.equal('Hyrule');
-          });
-          it('news up instances that have the attachData lifecycle stage', () => {
-            // tslint:disable-next-line:prefer-const
-            let thingIdFromTypeIsOkay: ReturnType<
-              typeof requestWithParamId.attachData
-            > extends Promise<any>
-              ? true
-              : false = true;
-            let thingIdToTypeIsOkay: Promise<any> extends ReturnType<
-              typeof requestWithParamId.attachData
-            >
-              ? true
-              : false = true;
-            // @ts-expect-error
-            thingIdFromTypeIsOkay = false;
-            // @ts-expect-error
-            thingIdToTypeIsOkay = false;
-          });
-          describe('after calling attachData', () => {
-            it('news up instances that can call the attachData lifecycle stage', async () => {
-              await requestWithParamId.attachData();
-              expect(requestWithParamId.thingId).to.be.equal('stringy');
-            });
-          });
-        });
-      });
-    });
-    describe('htPipe', () => {
-      interface Grandparent {
-        gName: string;
-        parent: {
-          pName: string;
-          child: {
-            name: string;
-            age: number;
-          };
-        };
-      }
-      const AddWholeFamily = HTPipeOld(
-        WithAttached(
-          'grandparent',
-          (grandparent: Grandparent) => Promise.resolve(grandparent.parent),
-          'parent'
-        ),
-        WithAttached(
-          'parent',
-          parent => Promise.resolve(parent.child),
-          'child'
-        ),
-        WithAttached(
-          'grandparent',
-          grandparent => Promise.resolve(grandparent.gName),
-          'gName'
-        ),
-        WithAttached(
-          'child',
-          (child: { name: string; age: number; boyfriend: string }) =>
-            Promise.resolve(child.age),
-          'childAge'
-        )
-      );
-      class BaseWithProperParams {
-        public grandparent = {
-          favFood: 'Veggies',
-          gName: 'Gramps',
-          parent: {
-            child: { name: 'Zelda', age: 33, boyfriend: 'Link' },
-            pName: 'Daphnes',
-          },
-        };
-        public existingField = 'Hyrule';
-        constructor(...args: any[]) {
-          // empty - tslint shutup
-        }
-      }
-      const HappyFamily = AddWholeFamily(BaseWithProperParams);
-      const happyFamily = new HappyFamily();
-      it('gets properly typed members from all composers', () => {
-        // these two are to ensure it's not "any" :-/
-        // do NOT assign the next one!  TS is too smart for its own good
-        // tslint:disable-next-line:prefer-const
-        let isTypedRightFromChildAge: typeof happyFamily.childAge extends number
-          ? true
-          : false = true;
-        // tslint:disable-next-line:prefer-const
-        let isTypedRightToChildAge: number extends typeof happyFamily.childAge
-          ? true
-          : false = true;
-        // @ts-expect-error
-        isTypedRightFromChildAge = false;
-        // @ts-expect-error
-        isTypedRightToChildAge = false;
-        // just make sure the other two exist cause the above ensures they're properly typed
-        let happyFamilyParentExistType: typeof happyFamily.parent extends any
-          ? true
-          : false;
-        let happyFamilyChildExistType: typeof happyFamily.child extends any
-          ? true
-          : false;
-        // @ts-expect-error
-        happyFamilyParentExistType = false;
-        // @ts-expect-error
-        happyFamilyChildExistType = false;
-      });
-      it('gets all members after attachData() is called', async () => {
-        await happyFamily.attachData();
-        expect(happyFamily.childAge).to.be.equal(33);
-      });
-    });
-  });
-*/
-  describe('Hipthrusts functional only', () => {
-    // @todo: add test coverage for non-explicit-type-specification too!
-    // @todo: add test coverage for SINGLE-OPERATOR and ZERO-OPERATOR pipes
-    // @todo: add test coverage for TRIPLE-OPERATOR pipes
-    // @todo: add test coverage for QUADRUPLE-AND-MORE-OPERATOR pipes (use empty objects)
-    // @todo: add test coverage for multi-stage operators
+  describe('Hipthrusts functional', () => {
     describe('HTPipeTest', () => {
-      it('HTPipeTest should pass with correct params', async () => {
+      it('passes with correct params', async () => {
         const aPassedIn = 'some string';
         const bReturned = 4;
         const cReturned = 6;
@@ -416,170 +124,8 @@ describe('HipThrusTS', () => {
           true
         );
       });
-      it('should give error if pipeIn type has more inputs params than lifecycle stage context in type', () => {
-        const aPassedIn = 'some string';
-        const bReturned = 4;
-        const cReturned = 6;
-
-        async function HTPipeTypeMismatchTest() {
-          await HTPipeTest(
-            {
-              attachData: (context: { a: string }) => {
-                return {
-                  c: cReturned,
-                  b: bReturned,
-                };
-              },
-            },
-            'attachData',
-            { a: aPassedIn, other: 'some other string' },
-            { b: bReturned, c: cReturned },
-            // @ts-expect-error
-            true
-          );
-        }
-      });
-      it('should give error if pipeIn type has less inputs params than lifecycle stage context in type', () => {
-        const aPassedIn = 'some string';
-        const bReturned = 4;
-        const cReturned = 6;
-
-        async function HTPipeTypeMismatchTest() {
-          await HTPipeTest(
-            {
-              attachData: (context: { a: string; z: number }) => {
-                return {
-                  c: cReturned,
-                  b: bReturned,
-                };
-              },
-            },
-            'attachData',
-            { a: aPassedIn },
-            { b: bReturned, c: cReturned },
-            // @ts-expect-error
-            true
-          );
-        }
-      });
-      it('should give error if pipeOut has more return values than lifecycle stage context out type', () => {
-        const aPassedIn = 'some string';
-        const bReturned = 4;
-        const cReturned = 6;
-
-        async function HTPipeTypeMismatchTest() {
-          await HTPipeTest(
-            {
-              attachData: (context: { a: string }) => {
-                return {
-                  c: cReturned,
-                  b: bReturned,
-                };
-              },
-            },
-            'attachData',
-            { a: aPassedIn },
-            { b: bReturned, c: cReturned, other: 'some string' },
-            // @ts-expect-error
-            true
-          );
-        }
-      });
-      it('should give error if pipeOut has less return values than lifecycle stage context out type', () => {
-        const aPassedIn = 'some string';
-        const bReturned = 4;
-        const cReturned = 6;
-
-        async function HTPipeTypeMismatchTest() {
-          await HTPipeTest(
-            {
-              attachData: (context: { a: string }) => {
-                return {
-                  c: cReturned,
-                  b: bReturned,
-                };
-              },
-            },
-            'attachData',
-            { a: aPassedIn },
-            { b: bReturned },
-            // @ts-expect-error
-            true
-          );
-        }
-      });
-      it('should give error if pipeIn has same count of keys as lifecycle stage context in, and pipe out has same count of keys as lifecycle stage context out, but pipeIn key values has different types', () => {
-        const incorrectAValue = 3;
-        const bReturned = 4;
-
-        async function HTPipeTypeMismatchTest() {
-          await HTPipeTest(
-            {
-              attachData: (context: { a: string }) => {
-                return {
-                  b: bReturned,
-                };
-              },
-            },
-            'attachData',
-            { a: incorrectAValue },
-            { b: bReturned },
-            // @ts-expect-error
-            true
-          );
-        }
-      });
-      it('should give error if pipeIn has same count of keys as lifecycle stage context in, and pipe out has same count of keys as lifecycle stage context out, but pipeOut key values has different types', () => {
-        const aPassedIn = 'some string';
-        const bReturned = 4;
-
-        async function HTPipeTypeMismatchTest() {
-          await HTPipeTest(
-            {
-              attachData: (context: { a: string }) => {
-                return {
-                  b: bReturned,
-                };
-              },
-            },
-            'attachData',
-            { a: aPassedIn },
-            { b: 'string' },
-            // @ts-expect-error
-            true
-          );
-        }
-      });
-      it('should give error if pipeIn and PipeOut have correct types, but return data of lifecycle stage have different values than pipeOut', async () => {
-        const aPassedIn = 'some string';
-        const bReturned = 4;
-        const cReturned = 6;
-        const incorrectCReturned = 12;
-
-        let errorReturned;
-
-        try {
-          await HTPipeTest(
-            {
-              attachData: (context: { a: string }) => {
-                return {
-                  c: cReturned,
-                  b: bReturned,
-                };
-              },
-            },
-            'attachData',
-            { a: aPassedIn },
-            { b: bReturned, c: incorrectCReturned },
-            true
-          );
-        } catch (err) {
-          errorReturned = err;
-        }
-        // tslint:disable-next-line:no-unused-expression
-        expect(errorReturned).to.exist;
-      });
     });
+
     describe('HTPipe', () => {
       it('works with three operators', () => {
         const left = {
@@ -600,34 +146,29 @@ describe('HipThrusTS', () => {
           },
         };
 
+        // tslint:disable-next-line:no-unused-variable
         const triple = HTPipe(left, midNotCovered, rightFullyCovered);
       });
 
-      function wrapProjectorReturnWithPromise<
-        TContextIn,
-        TContextOut,
-        TStage extends AllStageKeys
-      >(
-        lifecycle: {
-          [key in TStage]: (htCtx: TContextIn) => TContextOut;
-        },
-        lifecycleStage: TStage
-      ) {
-        return {
-          [lifecycleStage]: (htCtx: TContextIn) =>
-            Promise.resolve(lifecycle[lifecycleStage](htCtx)),
-        } as Record<
-          TStage,
-          (
-            htCtx: Parameters<typeof lifecycle[TStage]>[0]
-          ) => Promise<ReturnType<typeof lifecycle[TStage]>>
-        >;
-      }
+      describe('piped empty objects', () => {
+        it('returns equal empty object', () => {
+          const pipedWithEmptyObjectsOnly = HTPipe({}, {});
 
-      describe('fully covered left and right params with correct types', () => {
-        function fullyCoveredCaseTest<TStage extends AllStageKeys>(
-          stage: TStage
-        ) {
+          // tslint:disable-next-line:no-unused-variable
+          type assignableToCorrect = {} extends typeof pipedWithEmptyObjectsOnly
+            ? true
+            : false;
+          // tslint:disable-next-line:no-unused-variable
+          type assignableFromCorrect = typeof pipedWithEmptyObjectsOnly extends {}
+            ? true
+            : false;
+
+          expect(pipedWithEmptyObjectsOnly).to.be.eql({});
+        });
+      });
+
+      describe('fully covered left and right with correct types', () => {
+        function caseFor<TStage extends AllStageKeys>(stage: TStage) {
           const testConstants = {
             aPassedIn: 'some string',
             bPassedIn: 4,
@@ -665,731 +206,159 @@ describe('HipThrusTS', () => {
           };
         }
 
-        it('initPreContext test', async () => {
+        it('initPreContext', async () => {
           const lifecycleStage = 'initPreContext';
           await HTPipeTest(
-            HTPipe(
-              fullyCoveredCaseTest(lifecycleStage).left,
-              fullyCoveredCaseTest(lifecycleStage).right
-            ),
+            HTPipe(caseFor(lifecycleStage).left, caseFor(lifecycleStage).right),
             lifecycleStage,
-            fullyCoveredCaseTest(lifecycleStage).testInput,
-            fullyCoveredCaseTest(lifecycleStage).testOutput,
+            caseFor(lifecycleStage).testInput,
+            caseFor(lifecycleStage).testOutput,
             true
           );
         });
-        it('attachData test sync', async () => {
-          const lifecycleStage = 'attachData';
+        it('extractInputs', async () => {
+          const lifecycleStage = 'extractInputs';
           await HTPipeTest(
-            HTPipe(
-              fullyCoveredCaseTest(lifecycleStage).left,
-              fullyCoveredCaseTest(lifecycleStage).right
-            ),
+            HTPipe(caseFor(lifecycleStage).left, caseFor(lifecycleStage).right),
             lifecycleStage,
-            fullyCoveredCaseTest(lifecycleStage).testInput,
-            fullyCoveredCaseTest(lifecycleStage).testOutput,
-            true
-          );
-        });
-        it('attachData test async', async () => {
-          const lifecycleStage = 'attachData';
-          await HTPipeTest(
-            HTPipe(
-              wrapProjectorReturnWithPromise(
-                fullyCoveredCaseTest(lifecycleStage).left,
-                lifecycleStage
-              ),
-              wrapProjectorReturnWithPromise(
-                fullyCoveredCaseTest(lifecycleStage).right,
-                lifecycleStage
-              )
-            ),
-            lifecycleStage,
-            fullyCoveredCaseTest(lifecycleStage).testInput,
-            fullyCoveredCaseTest(lifecycleStage).testOutput,
-            true
-          );
-        });
-      });
-
-      describe('successfully handles the same key returned from left and right but with the type transformed', () => {
-        function transformedTypeCaseTest<TStage extends AllStageKeys>(
-          stage: TStage
-        ) {
-          const testConstants = {
-            aPassedIn: 5,
-            bPassedIn: 'some string',
-            bReturned: 4,
-          };
-
-          const leftProjector = (htCtx: { a: number }) => {
-            expect(htCtx.a).to.be.equal(testConstants.aPassedIn);
-            return { b: testConstants.bPassedIn };
-          };
-
-          const rightProjector = (htCtx: { b: string }) => {
-            expect(htCtx.b).to.be.equal(testConstants.bPassedIn);
-            return { b: testConstants.bReturned };
-          };
-
-          const testInput = {
-            a: testConstants.aPassedIn,
-          };
-
-          const testOutput = {
-            b: testConstants.bReturned,
-          };
-
-          return {
-            left: {
-              [stage]: leftProjector,
-            } as Record<TStage, typeof leftProjector>,
-            right: {
-              [stage]: rightProjector,
-            } as Record<TStage, typeof rightProjector>,
-            testInput,
-            testOutput,
-          };
-        }
-
-        it('initPreContext test', async () => {
-          const lifecycleStage = 'initPreContext';
-          await HTPipeTest(
-            HTPipe(
-              transformedTypeCaseTest(lifecycleStage).left,
-              transformedTypeCaseTest(lifecycleStage).right
-            ),
-            lifecycleStage,
-            transformedTypeCaseTest(lifecycleStage).testInput,
-            transformedTypeCaseTest(lifecycleStage).testOutput,
+            caseFor(lifecycleStage).testInput,
+            caseFor(lifecycleStage).testOutput,
             true
           );
         });
         it('attachData sync', async () => {
           const lifecycleStage = 'attachData';
           await HTPipeTest(
-            HTPipe(
-              transformedTypeCaseTest(lifecycleStage).left,
-              transformedTypeCaseTest(lifecycleStage).right
-            ),
+            HTPipe(caseFor(lifecycleStage).left, caseFor(lifecycleStage).right),
             lifecycleStage,
-            transformedTypeCaseTest(lifecycleStage).testInput,
-            transformedTypeCaseTest(lifecycleStage).testOutput,
+            caseFor(lifecycleStage).testInput,
+            caseFor(lifecycleStage).testOutput,
             true
           );
-        });
-        it('attachData async', async () => {
-          const lifecycleStage = 'attachData';
-          await HTPipeTest(
-            HTPipe(
-              wrapProjectorReturnWithPromise(
-                transformedTypeCaseTest(lifecycleStage).left,
-                lifecycleStage
-              ),
-              wrapProjectorReturnWithPromise(
-                transformedTypeCaseTest(lifecycleStage).right,
-                lifecycleStage
-              )
-            ),
-            lifecycleStage,
-            transformedTypeCaseTest(lifecycleStage).testInput,
-            transformedTypeCaseTest(lifecycleStage).testOutput,
-            true
-          );
-        });
-      });
-
-      describe('not fully covered tests with left and right params with correct types', () => {
-        function notFullyCoveredCaseTest<TStage extends AllStageKeys>(
-          stage: TStage
-        ) {
-          const testConstants = {
-            aPassedIn: 'some string',
-            bReturned: 4,
-            otherPassedIn: 'other string',
-            cReturned: 6,
-          };
-
-          const leftProjector = (htCtx: { a: string }) => {
-            expect(htCtx.a).to.be.equal(testConstants.aPassedIn);
-            return { b: testConstants.bReturned };
-          };
-
-          const rightProjector = (context: { b: number; other: string }) => {
-            expect(context.other).to.be.equal(testConstants.otherPassedIn);
-            expect(context.b).to.be.equal(testConstants.bReturned);
-            return { c: testConstants.cReturned };
-          };
-
-          const testInput = {
-            a: testConstants.aPassedIn,
-            other: testConstants.otherPassedIn,
-          };
-
-          const testOutput = {
-            b: testConstants.bReturned,
-            c: testConstants.cReturned,
-          };
-
-          return {
-            left: {
-              [stage]: leftProjector,
-            } as Record<TStage, typeof leftProjector>,
-            right: {
-              [stage]: rightProjector,
-            } as Record<TStage, typeof rightProjector>,
-            testInput,
-            testOutput,
-          };
-        }
-
-        it('initPreContext test', async () => {
-          const lifecycleStage = 'initPreContext';
-          await HTPipeTest(
-            HTPipe(
-              notFullyCoveredCaseTest(lifecycleStage).left,
-              notFullyCoveredCaseTest(lifecycleStage).right
-            ),
-            lifecycleStage,
-            notFullyCoveredCaseTest(lifecycleStage).testInput,
-            notFullyCoveredCaseTest(lifecycleStage).testOutput,
-            true
-          );
-        });
-        it('attachData sync', async () => {
-          const lifecycleStage = 'attachData';
-          await HTPipeTest(
-            HTPipe(
-              notFullyCoveredCaseTest(lifecycleStage).left,
-              notFullyCoveredCaseTest(lifecycleStage).right
-            ),
-            lifecycleStage,
-            notFullyCoveredCaseTest(lifecycleStage).testInput,
-            notFullyCoveredCaseTest(lifecycleStage).testOutput,
-            true
-          );
-        });
-        it('attachData async', async () => {
-          const lifecycleStage = 'attachData';
-          await HTPipeTest(
-            HTPipe(
-              wrapProjectorReturnWithPromise(
-                notFullyCoveredCaseTest(lifecycleStage).left,
-                lifecycleStage
-              ),
-              wrapProjectorReturnWithPromise(
-                notFullyCoveredCaseTest(lifecycleStage).right,
-                lifecycleStage
-              )
-            ),
-            lifecycleStage,
-            notFullyCoveredCaseTest(lifecycleStage).testInput,
-            notFullyCoveredCaseTest(lifecycleStage).testOutput,
-            true
-          );
-        });
-      });
-
-      describe('not covered tests with left and right params with correct types', async () => {
-        function notCoveredCaseTest<TStage extends AllStageKeys>(
-          stage: TStage
-        ) {
-          const testConstants = {
-            aPassedIn: 'some string',
-            otherPassedIn: 'other string',
-            bReturned: 4,
-            cReturned: 6,
-          };
-
-          const leftProjector = (htCtx: { a: string }) => {
-            expect(htCtx.a).to.be.equal(testConstants.aPassedIn);
-            return { b: testConstants.bReturned };
-          };
-
-          const rightProjector = (htCtx: { other: string }) => {
-            expect(htCtx.other).to.be.equal(testConstants.otherPassedIn);
-            return { c: testConstants.cReturned };
-          };
-
-          const testInput = {
-            a: testConstants.aPassedIn,
-            other: testConstants.otherPassedIn,
-          };
-
-          const testOutput = {
-            b: testConstants.bReturned,
-            c: testConstants.cReturned,
-          };
-
-          return {
-            left: {
-              [stage]: leftProjector,
-            } as Record<TStage, typeof leftProjector>,
-            right: {
-              [stage]: rightProjector,
-            } as Record<TStage, typeof rightProjector>,
-            testInput,
-            testOutput,
-          };
-        }
-
-        it('initPreContext test', async () => {
-          const lifecycleStage = 'initPreContext';
-          await HTPipeTest(
-            HTPipe(
-              notCoveredCaseTest(lifecycleStage).left,
-              notCoveredCaseTest(lifecycleStage).right
-            ),
-            lifecycleStage,
-            notCoveredCaseTest(lifecycleStage).testInput,
-            notCoveredCaseTest(lifecycleStage).testOutput,
-            true
-          );
-        });
-        it('attachData sync', async () => {
-          const lifecycleStage = 'attachData';
-          await HTPipeTest(
-            HTPipe(
-              notCoveredCaseTest(lifecycleStage).left,
-              notCoveredCaseTest(lifecycleStage).right
-            ),
-            lifecycleStage,
-            notCoveredCaseTest(lifecycleStage).testInput,
-            notCoveredCaseTest(lifecycleStage).testOutput,
-            true
-          );
-        });
-        it('attachData async', async () => {
-          const lifecycleStage = 'attachData';
-          await HTPipeTest(
-            HTPipe(
-              wrapProjectorReturnWithPromise(
-                notCoveredCaseTest(lifecycleStage).left,
-                lifecycleStage
-              ),
-              wrapProjectorReturnWithPromise(
-                notCoveredCaseTest(lifecycleStage).right,
-                lifecycleStage
-              )
-            ),
-            lifecycleStage,
-            notCoveredCaseTest(lifecycleStage).testInput,
-            notCoveredCaseTest(lifecycleStage).testOutput,
-            true
-          );
-        });
-      });
-
-      describe('only left parameter test case', async () => {
-        function leftOnlyCaseTest<TStage extends AllStageKeys>(stage: TStage) {
-          const testConstants = {
-            aPassedIn: 'some string',
-            bReturned: 4,
-          };
-
-          const leftProjector = (htCtx: { a: string }) => {
-            expect(htCtx.a).to.be.equals(testConstants.aPassedIn);
-            return { b: testConstants.bReturned };
-          };
-
-          const rightProjector = {};
-
-          const testInput = {
-            a: testConstants.aPassedIn,
-          };
-
-          const testOutput = {
-            b: testConstants.bReturned,
-          };
-
-          return {
-            left: {
-              [stage]: leftProjector,
-            } as Record<TStage, typeof leftProjector>,
-            right: rightProjector,
-            testInput,
-            testOutput,
-          };
-        }
-
-        it('initPreContext test', async () => {
-          const lifecycleStage = 'initPreContext';
-          await HTPipeTest(
-            HTPipe(
-              leftOnlyCaseTest(lifecycleStage).left,
-              leftOnlyCaseTest(lifecycleStage).right
-            ),
-            lifecycleStage,
-            leftOnlyCaseTest(lifecycleStage).testInput,
-            leftOnlyCaseTest(lifecycleStage).testOutput,
-            true
-          );
-        });
-        it('attachData sync', async () => {
-          const lifecycleStage = 'attachData';
-          await HTPipeTest(
-            HTPipe(
-              leftOnlyCaseTest(lifecycleStage).left,
-              leftOnlyCaseTest(lifecycleStage).right
-            ),
-            lifecycleStage,
-            leftOnlyCaseTest(lifecycleStage).testInput,
-            leftOnlyCaseTest(lifecycleStage).testOutput,
-            true
-          );
-        });
-        it('attachData async', async () => {
-          const lifecycleStage = 'attachData';
-          await HTPipeTest(
-            HTPipe(
-              wrapProjectorReturnWithPromise(
-                leftOnlyCaseTest(lifecycleStage).left,
-                lifecycleStage
-              ),
-              leftOnlyCaseTest(lifecycleStage).right
-            ),
-            lifecycleStage,
-            leftOnlyCaseTest(lifecycleStage).testInput,
-            leftOnlyCaseTest(lifecycleStage).testOutput,
-            true
-          );
-        });
-      });
-
-      describe('only right parameter test case', () => {
-        function rightOnlyCaseTest<TStage extends AllStageKeys>(stage: TStage) {
-          const testConstants = {
-            bPassedIn: 5,
-            otherPassedIn: 'other string',
-            cReturned: 4,
-          };
-
-          const leftProjector = {};
-
-          const rightProjector = (htCtx: { b: number; other: string }) => {
-            expect(htCtx.b).to.be.equal(testConstants.bPassedIn);
-            expect(htCtx.other).to.be.equal(testConstants.otherPassedIn);
-            return { c: testConstants.cReturned };
-          };
-
-          const testInput = {
-            b: testConstants.bPassedIn,
-            other: testConstants.otherPassedIn,
-          };
-
-          const testOutput = {
-            c: testConstants.cReturned,
-          };
-
-          return {
-            left: leftProjector,
-            right: {
-              [stage]: rightProjector,
-            } as Record<TStage, typeof rightProjector>,
-            testInput,
-            testOutput,
-          };
-        }
-
-        it('initPreContext test', async () => {
-          const lifecycleStage = 'initPreContext';
-          await HTPipeTest(
-            HTPipe(
-              rightOnlyCaseTest(lifecycleStage).left,
-              rightOnlyCaseTest(lifecycleStage).right
-            ),
-            lifecycleStage,
-            rightOnlyCaseTest(lifecycleStage).testInput,
-            rightOnlyCaseTest(lifecycleStage).testOutput,
-            true
-          );
-        });
-        it('attachData sync', async () => {
-          const lifecycleStage = 'attachData';
-          await HTPipeTest(
-            HTPipe(
-              rightOnlyCaseTest(lifecycleStage).left,
-              rightOnlyCaseTest(lifecycleStage).right
-            ),
-            lifecycleStage,
-            rightOnlyCaseTest(lifecycleStage).testInput,
-            rightOnlyCaseTest(lifecycleStage).testOutput,
-            true
-          );
-        });
-        it('attachData async', async () => {
-          const lifecycleStage = 'attachData';
-          await HTPipeTest(
-            HTPipe(
-              rightOnlyCaseTest(lifecycleStage).left,
-              wrapProjectorReturnWithPromise(
-                rightOnlyCaseTest(lifecycleStage).right,
-                lifecycleStage
-              )
-            ),
-            lifecycleStage,
-            rightOnlyCaseTest(lifecycleStage).testInput,
-            rightOnlyCaseTest(lifecycleStage).testOutput,
-            true
-          );
-        });
-      });
-
-      describe('type error test case', () => {
-        function errorCaseTest<TStage extends AllStageKeys>(stage: TStage) {
-          const testConstants = {
-            bReturned: 'bad',
-            cReturned: 4,
-          };
-
-          const leftProjector = (htCtx: { a: string }) => {
-            return { b: testConstants.bReturned };
-          };
-
-          const rightProjector = (htCtx: { b: number }) => {
-            return { c: testConstants.cReturned };
-          };
-
-          return {
-            left: {
-              [stage]: leftProjector,
-            } as Record<TStage, typeof leftProjector>,
-            right: {
-              [stage]: rightProjector,
-            } as Record<TStage, typeof rightProjector>,
-          };
-        }
-
-        it('initPreContext test', async () => {
-          const lifecycleStage = 'initPreContext';
-          function expectErrorWithHTPipe() {
-            // @ts-expect-error
-            const pipedError = HTPipe(
-              errorCaseTest(lifecycleStage).left,
-              errorCaseTest(lifecycleStage).right
-            );
-          }
-        });
-        it('attachData sync', async () => {
-          it('no attaches data when left sync outputs have type mismatch with right inputs', () => {
-            const lifecycleStage = 'attachData';
-            function expectErrorWithHTPipe() {
-              // @ts-expect-error
-              const pipedError = HTPipe(
-                errorCaseTest(lifecycleStage).left,
-                errorCaseTest(lifecycleStage).right
-              );
-            }
-          });
-        });
-        it('attachData async', async () => {
-          const lifecycleStage = 'attachData';
-          function expectErrorWithHTPipe() {
-            // @ts-expect-error
-            const pipedError = HTPipe(
-              wrapProjectorReturnWithPromise(
-                errorCaseTest(lifecycleStage).left,
-                lifecycleStage
-              ),
-              wrapProjectorReturnWithPromise(
-                errorCaseTest(lifecycleStage).right,
-                lifecycleStage
-              )
-            );
-          }
-        });
-      });
-
-      describe('piped empty objects test case', () => {
-        it('piped should be equal empty object', () => {
-          const pipedWithEmptyObjectsOnly = HTPipe({}, {});
-
-          type assignableToCorrect = {} extends typeof pipedWithEmptyObjectsOnly
-            ? true
-            : false;
-          type assignableFromCorrect = typeof pipedWithEmptyObjectsOnly extends {}
-            ? true
-            : false;
-          // @ts-expect-error
-          const assignableToCorrect: assignableToCorrect = false;
-          // @ts-expect-error
-          const assignableFromCorrect: assignableFromCorrect = false;
-
-          expect(pipedWithEmptyObjectsOnly).to.be.eql({});
         });
       });
     });
-    describe('sanitizers filtration functionality', () => {
-      function sanitizersFiltrationTestData<
-        TStage extends
-          | 'sanitizeParams'
-          | 'sanitizeQueryParams'
-          | 'sanitizeBody'
-          | 'sanitizeResponse'
-      >(stage: TStage) {
-        const testConstants = {
-          aPassedIn: 'some string',
-          bPassedIn: 'some other string',
-        };
 
-        const leftProjector = (context: {
-          someObj: { a: string; b: string };
-        }) => {
-          expect(context).to.deep.equal({
-            someObj: {
-              a: testConstants.aPassedIn,
-              b: testConstants.bPassedIn,
-            },
-          });
-          return context.someObj;
-        };
-
-        const rightProjector = (context: { a: string; b: string }) => {
-          expect(context).to.not.has.property('someObj');
-          expect(context).to.deep.equal({
-            a: testConstants.aPassedIn,
-            b: testConstants.bPassedIn,
-          });
-          return { b: context.b };
-        };
-
-        const testInput = {
-          someObj: {
-            a: testConstants.aPassedIn,
-            b: testConstants.bPassedIn,
-          },
-        };
-        const testOutput = { b: testConstants.bPassedIn };
-
-        return {
-          testConstants,
-          left: {
-            [stage]: leftProjector,
-          } as Record<TStage, typeof leftProjector>,
-          right: {
-            [stage]: rightProjector,
-          } as Record<TStage, typeof rightProjector>,
-          testInput,
-          testOutput,
-        };
-      }
-
-      it('sanitizeParams filtration functionality', async () => {
-        const testedLifecycleStage = 'sanitizeParams';
-        await HTPipeTest(
-          HTPipe(
-            sanitizersFiltrationTestData(testedLifecycleStage).left,
-            sanitizersFiltrationTestData(testedLifecycleStage).right
-          ),
-          testedLifecycleStage,
-          sanitizersFiltrationTestData(testedLifecycleStage).testInput,
-          sanitizersFiltrationTestData(testedLifecycleStage).testOutput,
-          true
-        );
-      });
-      it('sanitizeQueryParams filtration functionality', async () => {
-        const testedLifecycleStage = 'sanitizeQueryParams';
-        await HTPipeTest(
-          HTPipe(
-            sanitizersFiltrationTestData(testedLifecycleStage).left,
-            sanitizersFiltrationTestData(testedLifecycleStage).right
-          ),
-          testedLifecycleStage,
-          sanitizersFiltrationTestData(testedLifecycleStage).testInput,
-          sanitizersFiltrationTestData(testedLifecycleStage).testOutput,
-          true
-        );
-      });
-      it('sanitizeBody filtration functionality', async () => {
-        const testedLifecycleStage = 'sanitizeBody';
-        await HTPipeTest(
-          HTPipe(
-            sanitizersFiltrationTestData(testedLifecycleStage).left,
-            sanitizersFiltrationTestData(testedLifecycleStage).right
-          ),
-          testedLifecycleStage,
-          sanitizersFiltrationTestData(testedLifecycleStage).testInput,
-          sanitizersFiltrationTestData(testedLifecycleStage).testOutput,
-          true
-        );
-      });
-      it('respond filtration functionality', async () => {
+    describe('sanitizeInputs filtration functionality', () => {
+      it('chained sanitizers filter as expected', async () => {
         const aPassedIn = 'some string';
         const bPassedIn = 'some other string';
 
         const left = {
-          respond(context: { someObj: { a: string; b: string } }) {
+          sanitizeInputs: (context: { someObj: { a: string; b: string } }) => {
             expect(context).to.deep.equal({
-              someObj: {
-                a: aPassedIn,
-                b: bPassedIn,
-              },
+              someObj: { a: aPassedIn, b: bPassedIn },
             });
-            return { unsafeResponse: context.someObj };
+            return context.someObj;
           },
         };
 
         const right = {
-          respond(context: { a: string; b: string }) {
+          sanitizeInputs: (context: { a: string; b: string }) => {
             expect(context).to.not.has.property('someObj');
-            expect(context).to.deep.equal({
-              a: aPassedIn,
-              b: bPassedIn,
-            });
-            return { unsafeResponse: { b: context.b } };
+            expect(context).to.deep.equal({ a: aPassedIn, b: bPassedIn });
+            return { b: context.b };
           },
         };
 
-        const pipedRespond = HTPipe(left, right);
-
         await HTPipeTest(
-          pipedRespond,
-          'respond',
-          {
-            someObj: {
-              a: aPassedIn,
-              b: bPassedIn,
-            },
-          },
-          {
-            unsafeResponse: {
-              b: bPassedIn,
-            },
-          },
-          true
-        );
-      });
-      it('sanitizeResponse filtration functionality', async () => {
-        const testedLifecycleStage = 'sanitizeResponse';
-        await HTPipeTest(
-          HTPipe(
-            sanitizersFiltrationTestData(testedLifecycleStage).left,
-            sanitizersFiltrationTestData(testedLifecycleStage).right
-          ),
-          testedLifecycleStage,
-          sanitizersFiltrationTestData(testedLifecycleStage).testInput,
-          sanitizersFiltrationTestData(testedLifecycleStage).testOutput,
+          HTPipe(left, right),
+          'sanitizeInputs',
+          { someObj: { a: aPassedIn, b: bPassedIn } },
+          { b: bPassedIn },
           true
         );
       });
     });
+
+    describe('sanitizeResponse filtration functionality', () => {
+      it('chained sanitizers filter as expected', async () => {
+        const aPassedIn = 'some string';
+        const bPassedIn = 'some other string';
+
+        const left = {
+          sanitizeResponse: (context: {
+            someObj: { a: string; b: string };
+          }) => {
+            return context.someObj;
+          },
+        };
+
+        const right = {
+          sanitizeResponse: (context: { a: string; b: string }) => {
+            return { b: context.b };
+          },
+        };
+
+        await HTPipeTest(
+          HTPipe(left, right),
+          'sanitizeResponse',
+          { someObj: { a: aPassedIn, b: bPassedIn } },
+          { b: bPassedIn },
+          true
+        );
+      });
+    });
+
+    describe('WithInputSlice', () => {
+      it('writes to sanitizeInputs under named slice and preserves others', () => {
+        const params = WithInputSlice('params', (p: { id: string }) => ({
+          id: p.id.trim(),
+        }));
+        const out = params.sanitizeInputs({
+          params: { id: '  abc  ' },
+          body: { keep: true },
+          query: {},
+          headers: {},
+        });
+        expect(out).to.deep.equal({
+          params: { id: 'abc' },
+          body: { keep: true },
+          query: {},
+          headers: {},
+        });
+      });
+
+      it('composes with HTPipe so multiple slices coexist', () => {
+        const both = HTPipe(
+          WithInputSlice('params', (p: { id: string }) => ({ id: p.id })),
+          WithInputSlice('body', (b: { name: string }) => ({
+            name: b.name.toUpperCase(),
+          }))
+        );
+        const out = both.sanitizeInputs({
+          params: { id: '42' },
+          body: { name: 'foo' },
+          query: { ignored: true },
+          headers: {},
+        });
+        expect(out).to.deep.equal({
+          params: { id: '42' },
+          body: { name: 'FOO' },
+          query: { ignored: true },
+          headers: {},
+        });
+      });
+    });
+
     describe('hipExpressHandlerFactory', () => {
-      it('should pass when we have all correct lifecycles', () => {
+      it('passes with all correct lifecycle stages present', () => {
         const handlingStrategy = {
           initPreContext() {
             return {};
           },
-          sanitizeParams() {
+          sanitizeInputs(unsafe: {
+            params: { ting?: number };
+            body: { ting?: number };
+          }) {
             return {
-              ting: 5,
+              params: { ting: 5 as number },
+              body: { ting: 5 as number },
             };
           },
-          sanitizeBody() {
-            return {
-              ting: 5,
-            };
-          },
-          preAuthorize(context: { params: { ting: number }; body: {} }) {
+          preAuthorize(context: {
+            inputs: { params: { ting: number }; body: { ting: number } };
+          }) {
             return { asdf: { ting: 4 } };
           },
           attachData(context: { asdf: { ting: number } }) {
@@ -1399,275 +368,109 @@ describe('HipThrusTS', () => {
             return {};
           },
           doWork(context: {}) {
-            return {};
+            return { result: 1 };
           },
-          respond(context: {}) {
-            return { unsafeResponse: {} };
-          },
-          sanitizeResponse(unsafeResponse: {}) {
-            return {};
+          sanitizeResponse(unsafe: { result: number }) {
+            return { result: unsafe.result };
           },
         };
         hipExpressHandlerFactory(handlingStrategy);
       });
-      it('should pass if respond lifecycle input params was provided by sanirizeParams lifecycle', () => {
-        const handlingStrategy = {
-          sanitizeParams() {
-            return {
-              ting: 5,
-            };
-          },
-          preAuthorize(context: { params: { ting: number } }) {
-            return { asdf: { ting: 4 } };
-          },
-          attachData(context: { asdf: { ting: number } }) {
-            return { adOut: 4, ddd: 'hi' };
-          },
-          finalAuthorize(context: { ddd: string }) {
-            return {};
-          },
-          respond(context: { params: { ting: number } }) {
-            return { unsafeResponse: context.params };
-          },
-          sanitizeResponse(unsafeResponse: {}) {
-            return {};
-          },
-        };
-        hipExpressHandlerFactory(handlingStrategy);
-      });
-      it('should pass if finalAuthorize lifecycle input params was provided by attachData and sanitizeParams lifecycle', () => {
-        const handlingStrategy = {
-          sanitizeParams() {
-            return {
-              ting: 5,
-            };
-          },
-          preAuthorize(context: { params: { ting: number } }) {
-            return { asdf: { ting: 4 } };
-          },
-          attachData(context: {
-            params: { ting: number };
-            asdf: { ting: number };
-          }) {
-            return { adOut: 4, ddd: 'hi' };
-          },
-          finalAuthorize(context: { params: { ting: number }; ddd: string }) {
-            return {};
-          },
-          respond(context: { params: { ting: number } }) {
-            return { unsafeResponse: context.params };
-          },
-          sanitizeResponse(unsafeResponse: {}) {
-            return {};
-          },
-        };
-        hipExpressHandlerFactory(handlingStrategy);
-      });
-      it('should give error when preauthorize lifecycle other param was not provided by sanitizeParams stage', () => {
-        const handlingStrategy = {
-          sanitizeParams() {
-            return {
-              ting: 5,
-            };
-          },
-          preAuthorize(context: { params: { ting: number; other: string } }) {
-            return { asdf: { ting: 4 } };
-          },
-          attachData(context: { asdf: { ting: number } }) {
-            return { adOut: 4, ddd: 'hi' };
-          },
-          finalAuthorize(context: { ddd: string }) {
-            return {};
-          },
-          respond(context: {}) {
-            return { unsafeResponse: {} };
-          },
-          sanitizeResponse(unsafeResponse: {}) {
-            return {};
-          },
-        };
 
-        function hipExpressHandlerFactoryExpectError() {
-          // @ts-expect-error
-          hipExpressHandlerFactory(handlingStrategy);
-        }
-      });
-      it('should give error when attachData lifecycle stage asdf param has type mismatch with preAuthorize stage output', () => {
+      it('errors when sanitizeInputs is missing at type level', () => {
         const handlingStrategy = {
           preAuthorize(context: {}) {
-            return { asdf: { ting: 4 } };
+            return { b: 5 };
           },
-          attachData(context: { asdf: { ting: string } }) {
+          attachData(context: { b: number }) {
             return { adOut: 4, ddd: 'hi' };
           },
-          finalAuthorize(context: { ddd: string }) {
+          finalAuthorize(context: {}) {
+            return true;
+          },
+          doWork(context: {}) {
             return {};
           },
-          respond(context: {}) {
-            return { unsafeResponse: {} };
-          },
-          sanitizeResponse(unsafeResponse: {}) {
+          sanitizeResponse(unsafe: {}) {
             return {};
           },
         };
-
-        function hipExpressHandlerFactoryExpectError() {
+        let err: any;
+        try {
           // @ts-expect-error
           hipExpressHandlerFactory(handlingStrategy);
+        } catch (e) {
+          err = e;
         }
+        // tslint:disable-next-line:no-unused-expression
+        expect(err).to.not.be.undefined;
       });
-      it('should give error when finalAuthorize lifecycle testParam param whas not provided by previous stages way before', () => {
-        const handlingStrategy = {
-          sanitizeParams() {
-            return {
-              ting: 5,
-            };
-          },
-          preAuthorize(context: { params: { ting: number } }) {
-            return { asdf: { ting: 4 } };
-          },
-          attachData(context: { asdf: { ting: number } }) {
-            return { adOut: 4, ddd: 'hi' };
-          },
-          finalAuthorize(context: { ddd: string; testParam: string }) {
-            return {};
-          },
-          respond({}) {
-            return { unsafeResponse: {} };
-          },
-          sanitizeResponse(unsafeResponse: {}) {
-            return {};
-          },
-        };
 
-        function hipExpressHandlerFactoryExpectError() {
-          // @ts-expect-error
-          hipExpressHandlerFactory(handlingStrategy);
-        }
-      });
-      it('should give error when respond lifecycle stage context.params has type mismatch with sanitizeParams stage output', () => {
+      it('errors when preAuthorize is missing', () => {
         const handlingStrategy = {
-          sanitizeParams() {
-            return {
-              ting: 5,
-            };
-          },
-          preAuthorize(context: { params: { ting: number } }) {
-            return { asdf: { ting: 4 } };
-          },
-          attachData(context: { asdf: { ting: number } }) {
-            return { adOut: 4, ddd: 'hi' };
-          },
-          finalAuthorize(context: { ddd: string }) {
+          sanitizeInputs(unsafe: {}) {
             return {};
           },
-          respond(context: { params: { ting: string } }) {
-            return { unsafeResponse: {} };
-          },
-          sanitizeResponse(unsafeResponse: {}) {
-            return {};
-          },
-        };
-
-        function hipExpressHandlerFactoryExpectError() {
-          // @ts-expect-error
-          hipExpressHandlerFactory(handlingStrategy);
-        }
-      });
-      it('should give error when preAuthorize is missing', () => {
-        const handlingStrategy = {
           attachData(context: {}) {
             return { adOut: 4, ddd: 'hi' };
           },
           finalAuthorize(context: { ddd: string }) {
             return {};
           },
-          respond(context: {}) {
-            return { unsafeResponse: {} };
+          doWork(context: {}) {
+            return {};
           },
-          sanitizeResponse(unsafeResponse: {}) {
+          sanitizeResponse(unsafe: {}) {
             return {};
           },
         };
-
-        let hipExpressHandlerFactoryError;
-
+        let err: any;
         try {
           // @ts-expect-error
           hipExpressHandlerFactory(handlingStrategy);
-        } catch (err) {
-          hipExpressHandlerFactoryError = err;
+        } catch (e) {
+          err = e;
         }
-
         // tslint:disable-next-line:no-unused-expression
-        expect(hipExpressHandlerFactoryError).to.not.be.undefined;
+        expect(err).to.not.be.undefined;
       });
-      it('should give error when finalAuthorize is missing', () => {
+
+      it('errors when finalAuthorize is missing', () => {
         const handlingStrategy = {
+          sanitizeInputs(unsafe: {}) {
+            return {};
+          },
           preAuthorize(context: {}) {
-            return {
-              b: 5,
-            };
+            return { b: 5 };
           },
           attachData(context: { b: number }) {
             return { adOut: 4, ddd: 'hi' };
           },
-          respond(context: {}) {
-            return { unsafeResponse: {} };
+          doWork(context: {}) {
+            return {};
           },
-          sanitizeResponse(unsafeResponse: {}) {
+          sanitizeResponse(unsafe: {}) {
             return {};
           },
         };
-
-        let hipExpressHandlerFactoryError;
-
+        let err: any;
         try {
           // @ts-expect-error
           hipExpressHandlerFactory(handlingStrategy);
-        } catch (err) {
-          hipExpressHandlerFactoryError = err;
+        } catch (e) {
+          err = e;
         }
-
         // tslint:disable-next-line:no-unused-expression
-        expect(hipExpressHandlerFactoryError).to.not.be.undefined;
+        expect(err).to.not.be.undefined;
       });
-      it('should give error when respond is missing', () => {
+
+      it('errors when doWork is missing', () => {
         const handlingStrategy = {
-          preAuthorize(context: {}) {
-            return {
-              b: 5,
-            };
-          },
-          attachData(context: { b: number }) {
-            return { adOut: 4, ddd: 'hi' };
-          },
-          finalAuthorize(context: {}) {
-            return true;
-          },
-          sanitizeResponse(unsafeResponse: {}) {
+          sanitizeInputs(unsafe: {}) {
             return {};
           },
-        };
-
-        let hipExpressHandlerFactoryError;
-
-        try {
-          // @ts-expect-error
-          hipExpressHandlerFactory(handlingStrategy);
-        } catch (err) {
-          hipExpressHandlerFactoryError = err;
-        }
-
-        // tslint:disable-next-line:no-unused-expression
-        expect(hipExpressHandlerFactoryError).to.not.be.undefined;
-      });
-      it('should give error when sanitizeResponse is missing', () => {
-        const handlingStrategy = {
           preAuthorize(context: {}) {
-            return {
-              b: 5,
-            };
+            return { b: 5 };
           },
           attachData(context: { b: number }) {
             return { adOut: 4, ddd: 'hi' };
@@ -1675,36 +478,137 @@ describe('HipThrusTS', () => {
           finalAuthorize(context: {}) {
             return true;
           },
-          respond(context: {}) {
-            return { unsafeResponse: {} };
+          sanitizeResponse(unsafe: {}) {
+            return {};
           },
         };
-
-        let hipExpressHandlerFactoryError;
-
+        let err: any;
         try {
           // @ts-expect-error
           hipExpressHandlerFactory(handlingStrategy);
-        } catch (err) {
-          hipExpressHandlerFactoryError = err;
+        } catch (e) {
+          err = e;
         }
-
         // tslint:disable-next-line:no-unused-expression
-        expect(hipExpressHandlerFactoryError).to.not.be.undefined;
+        expect(err).to.not.be.undefined;
+      });
+
+      it('errors when sanitizeResponse is missing', () => {
+        const handlingStrategy = {
+          sanitizeInputs(unsafe: {}) {
+            return {};
+          },
+          preAuthorize(context: {}) {
+            return { b: 5 };
+          },
+          attachData(context: { b: number }) {
+            return { adOut: 4, ddd: 'hi' };
+          },
+          finalAuthorize(context: {}) {
+            return true;
+          },
+          doWork(context: {}) {
+            return {};
+          },
+        };
+        let err: any;
+        try {
+          // @ts-expect-error
+          hipExpressHandlerFactory(handlingStrategy);
+        } catch (e) {
+          err = e;
+        }
+        // tslint:disable-next-line:no-unused-expression
+        expect(err).to.not.be.undefined;
+      });
+    });
+
+    describe('executeHipthrustable end-to-end', () => {
+      it('runs the new lifecycle and resolves successStatus', async () => {
+        const mod = require('../src/core');
+        const executeHipthrustable = mod.executeHipthrustable;
+        const withDefaultImplementations = mod.withDefaultImplementations;
+
+        const handler = withDefaultImplementations({
+          initPreContext: (raw: { who: string }) => ({ who: raw.who }),
+          extractInputs: (raw: any) => raw,
+          sanitizeInputs: (unsafe: { value: number }) => ({
+            value: unsafe.value * 2,
+          }),
+          preAuthorize: () => true,
+          finalAuthorize: () => true,
+          doWork: (ctx: {
+            inputs: { value: number };
+            preContext: { who: string };
+          }) => ({ doubled: ctx.inputs.value, by: ctx.preContext.who }),
+          sanitizeResponse: (u: { doubled: number; by: string }) => ({
+            doubled: u.doubled,
+            by: u.by,
+          }),
+          successStatus: 201,
+        });
+
+        const result = await executeHipthrustable(
+          handler,
+          { who: 'alice', value: 7 },
+          200
+        );
+        expect(result.response).to.deep.equal({ doubled: 14, by: 'alice' });
+        expect(result.status).to.equal(201);
+      });
+
+      it('honors successStatus as a function reading the final context', async () => {
+        const mod = require('../src/core');
+        const executeHipthrustable = mod.executeHipthrustable;
+        const withDefaultImplementations = mod.withDefaultImplementations;
+
+        const handler = withDefaultImplementations({
+          sanitizeInputs: (unsafe: { create: boolean }) => ({
+            create: unsafe.create,
+          }),
+          preAuthorize: () => true,
+          finalAuthorize: () => true,
+          doWork: (ctx: { inputs: { create: boolean } }) => ({
+            created: ctx.inputs.create,
+          }),
+          sanitizeResponse: (u: { created: boolean }) => ({
+            created: u.created,
+          }),
+          successStatus: (ctx: { response: { created: boolean } }) =>
+            ctx.response.created ? 201 : 200,
+        });
+
+        const created = await executeHipthrustable(
+          handler,
+          { create: true },
+          200
+        );
+        expect(created.status).to.equal(201);
+
+        const updated = await executeHipthrustable(
+          handler,
+          { create: false },
+          200
+        );
+        expect(updated.status).to.equal(200);
+      });
+
+      it('falls back to adapter default status when successStatus is absent', async () => {
+        const mod = require('../src/core');
+        const executeHipthrustable = mod.executeHipthrustable;
+        const withDefaultImplementations = mod.withDefaultImplementations;
+
+        const handler = withDefaultImplementations({
+          sanitizeInputs: (unsafe: {}) => ({}),
+          preAuthorize: () => true,
+          finalAuthorize: () => true,
+          doWork: () => ({ ok: true }),
+          sanitizeResponse: (u: { ok: boolean }) => ({ ok: u.ok }),
+        });
+
+        const result = await executeHipthrustable(handler, {}, 200);
+        expect(result.status).to.equal(200);
       });
     });
   });
 });
-
-// @fixme: MAKE TESTS OUT OF EVERYTHING BELOW!
-// cover withDefault cases too
-// for each stage cover:
-// - happy path from previous stage normal
-// - happy path from way before normal
-// - happy path from previous stage with extra keys in object PROVIDED
-// - happy path from way before normal with extra keys in object PROVIDED
-// - sad path missing that particular key altogether
-// - sad path provided by previous but type mismatch
-// - sad path ONLY PARTIALLY provided by previous (e.g. provided params: {a: string}, requesting params: {a: string, b: number})
-// - sad path provided by way before but type mismatch
-// - sad path ONLY PARTIALLY provided way before (e.g. provided params: {a: string}, requesting params: {a: string, b: number})

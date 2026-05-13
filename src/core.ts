@@ -8,28 +8,23 @@ import {
   HasAllStagesNotOptionals,
   HasAttachData,
   HasDoWork,
+  HasExtractInputs,
   HasFinalAuthorize,
   HasInitPreContext,
   HasPreAuthorize,
-  HasRespond,
-  HasSanitizeBody,
-  HasSanitizeParams,
-  HasSanitizeQueryParams,
+  HasSanitizeInputs,
   HasSanitizeResponse,
   MightHaveFinalAuthorize,
   MightHavePreAuthorize,
-  MightHaveRespond,
   MightHaveSanitizeResponse,
   OptionallyHasAttachData,
   OptionallyHasDoWork,
+  OptionallyHasExtractInputs,
   OptionallyHasInitPreContext,
-  OptionallyHasSanitizeBody,
-  OptionallyHasSanitizeParams,
-  OptionallyHasSanitizeQueryParams,
+  OptionallyHasSanitizeInputs,
   PreAuthReqsSatisfied,
   PromiseOrSync,
   PromiseResolveOrSync,
-  RespondReqsSatisfied,
   SanitizeResponseReqsSatisfied,
 } from './types';
 
@@ -40,30 +35,17 @@ export function withDefaultImplementations<
     AttachDataReqsSatisfiedOptional<TStrategy> &
     FinalAuthReqsSatisfied<TStrategy> &
     DoWorkReqsSatisfiedOptional<TStrategy> &
-    RespondReqsSatisfied<TStrategy> &
     SanitizeResponseReqsSatisfied<TStrategy>
 >(strategy: TStrategy): HasAllStagesNotOptionals {
   return {
+    ...(strategy as any),
     initPreContext:
       strategy.initPreContext ||
       (() => {
         return {};
       }),
-    sanitizeParams:
-      strategy.sanitizeParams ||
-      (() => {
-        return {};
-      }),
-    sanitizeQueryParams:
-      strategy.sanitizeQueryParams ||
-      (() => {
-        return {};
-      }),
-    sanitizeBody:
-      strategy.sanitizeBody ||
-      (() => {
-        return {};
-      }),
+    extractInputs: strategy.extractInputs || ((raw: any) => raw),
+    sanitizeInputs: strategy.sanitizeInputs,
     preAuthorize: strategy.preAuthorize,
     attachData:
       strategy.attachData ||
@@ -71,12 +53,7 @@ export function withDefaultImplementations<
         return {};
       }),
     finalAuthorize: strategy.finalAuthorize,
-    doWork:
-      strategy.doWork ||
-      (() => {
-        return {};
-      }),
-    respond: strategy.respond,
+    doWork: strategy.doWork,
     sanitizeResponse: strategy.sanitizeResponse,
   };
 }
@@ -87,22 +64,16 @@ export function isHasInitPreContext<TContextIn, TContextOut>(
   return !!(thing && thing.initPreContext);
 }
 
-export function isHasSanitizeParams<TContextIn, TContextOut>(
-  thing: OptionallyHasSanitizeParams<TContextIn, TContextOut>
-): thing is HasSanitizeParams<TContextIn, TContextOut> {
-  return !!(thing && thing.sanitizeParams);
+export function isHasExtractInputs<TContextIn, TContextOut>(
+  thing: OptionallyHasExtractInputs<TContextIn, TContextOut>
+): thing is HasExtractInputs<TContextIn, TContextOut> {
+  return !!(thing && thing.extractInputs);
 }
 
-export function isHasSanitizeQueryParams<TContextIn, TContextOut>(
-  thing: OptionallyHasSanitizeQueryParams<TContextIn, TContextOut>
-): thing is HasSanitizeQueryParams<TContextIn, TContextOut> {
-  return !!(thing && thing.sanitizeQueryParams);
-}
-
-export function isHasSanitizeBody<TContextIn, TContextOut>(
-  thing: OptionallyHasSanitizeBody<TContextIn, TContextOut>
-): thing is HasSanitizeBody<TContextIn, TContextOut> {
-  return !!(thing && thing.sanitizeBody);
+export function isHasSanitizeInputs<TContextIn, TContextOut>(
+  thing: OptionallyHasSanitizeInputs<TContextIn, TContextOut>
+): thing is HasSanitizeInputs<TContextIn, TContextOut> {
+  return !!(thing && thing.sanitizeInputs);
 }
 
 export function isHasPreAuthorize<TContextIn, TContextOut>(
@@ -127,12 +98,6 @@ export function isHasDoWork<TContextIn, TContextOut>(
   thing: OptionallyHasDoWork<TContextIn, TContextOut>
 ): thing is HasDoWork<TContextIn, TContextOut> {
   return !!(thing && thing.doWork);
-}
-
-export function isHasRespond<TContextIn, TContextOut>(
-  thing: MightHaveRespond<TContextIn, TContextOut>
-): thing is HasRespond<TContextIn, TContextOut> {
-  return !!(thing && thing.respond);
 }
 
 export function isHasSanitizeResponse<TContextIn, TContextOut>(
@@ -166,10 +131,8 @@ function transformThrowSync<TOrigFn extends (param: any) => any>(
     return origFn(origParam);
   } catch (exception) {
     if (exception instanceof HipRedirectException || Boom.isBoom(exception)) {
-      // Don't transform redirect exceptions or intentionally constructed boom errors
       throw exception;
     } else {
-      // All other uncaught exceptions transform to whatever is requested
       throw toThrow;
     }
   }
@@ -184,13 +147,31 @@ function transformThrowPossiblyAsync<
 ): Promise<PromiseResolveOrSync<ReturnType<TOrigFn>>> {
   return Promise.resolve(origFn(origParam)).catch(exception => {
     if (exception instanceof HipRedirectException || Boom.isBoom(exception)) {
-      // Don't transform redirect exceptions or intentionally constructed boom errors
       throw exception;
     } else {
-      // All other uncaught exceptions transform to whatever is requested
       throw toThrow;
     }
   });
+}
+
+export type SuccessStatus<TCtx = any> = number | ((ctx: TCtx) => number);
+
+export interface HasSuccessStatus<TCtx = any> {
+  successStatus?: SuccessStatus<TCtx>;
+}
+
+function resolveSuccessStatus(
+  successStatus: SuccessStatus | undefined,
+  ctx: any,
+  fallback: number
+): number {
+  if (typeof successStatus === 'number') {
+    return successStatus;
+  }
+  if (typeof successStatus === 'function') {
+    return successStatus(ctx);
+  }
+  return fallback;
 }
 
 export async function executeHipthrustable<
@@ -199,46 +180,35 @@ export async function executeHipthrustable<
     AttachDataReqsSatisfiedOptional<TConf> &
     FinalAuthReqsSatisfied<TConf> &
     DoWorkReqsSatisfiedOptional<TConf> &
-    RespondReqsSatisfied<TConf> &
-    SanitizeResponseReqsSatisfied<TConf>,
-  TUnsafe,
-  TUnsafeParams,
-  TUnsafeQueryParams,
-  TUnsafeBody
->(
-  requestHandler: TConf,
-  unsafe: TUnsafe,
-  unsafeParams: TUnsafeParams,
-  unsafeQueryParams: TUnsafeQueryParams,
-  unsafeBody: TUnsafeBody
-) {
+    SanitizeResponseReqsSatisfied<TConf> &
+    HasSuccessStatus,
+  TRaw
+>(requestHandler: TConf, raw: TRaw, defaultStatus: number = 200) {
   const badDataThrow = Boom.badData('User input sanitization failure');
-  const safeInitPreContext = transformThrowSync(
+
+  const safePreContext = transformThrowSync(
     badDataThrow,
     requestHandler.initPreContext,
-    unsafe
+    raw
   );
-  // @todo: maybe params should throw something different like 400
-  const safeParams = transformThrowSync(
+
+  const preContextSlot = { preContext: safePreContext };
+
+  const unsafeInputs = transformThrowSync(
     badDataThrow,
-    requestHandler.sanitizeParams,
-    unsafeParams
+    requestHandler.extractInputs,
+    { ...(raw as any), ...preContextSlot }
   );
-  const safeQueryParams = transformThrowSync(
+
+  const safeInputs = transformThrowSync(
     badDataThrow,
-    requestHandler.sanitizeQueryParams,
-    unsafeQueryParams
+    requestHandler.sanitizeInputs,
+    unsafeInputs
   );
-  const safeBody = transformThrowSync(
-    badDataThrow,
-    requestHandler.sanitizeBody,
-    unsafeBody
-  );
+
   const inputsContext = {
-    preContext: safeInitPreContext,
-    params: safeParams,
-    queryParams: safeQueryParams,
-    body: safeBody,
+    preContext: safePreContext,
+    inputs: safeInputs,
   };
 
   const forbiddenPreAuthThrow = Boom.forbidden(
@@ -301,23 +271,32 @@ export async function executeHipthrustable<
   };
 
   try {
-    // to keep executeHipthrustable from being too opinionated, it's doWork's responsibility to handle and throw client errors.
-    // Any un-boom'ed errors here should be interpreted as server errors
-    const doWorkContextOnly =
-      (await Promise.resolve(requestHandler.doWork(finalAuthContext))) || {};
+    const unsafeResponse = await Promise.resolve(
+      requestHandler.doWork(finalAuthContext)
+    );
 
-    const doWorkContext = { ...finalAuthContext, ...doWorkContextOnly };
-
-    const { unsafeResponse, status } = requestHandler.respond(doWorkContext);
     const safeResponse = requestHandler.sanitizeResponse(unsafeResponse);
-    const responseAndStatus = { response: safeResponse, status: status || 200 };
-    return responseAndStatus;
+
+    const successCtx =
+      unsafeResponse !== null && typeof unsafeResponse === 'object'
+        ? {
+            ...finalAuthContext,
+            ...(unsafeResponse as object),
+            response: safeResponse,
+          }
+        : { ...finalAuthContext, response: safeResponse };
+
+    const status = resolveSuccessStatus(
+      (requestHandler as HasSuccessStatus).successStatus,
+      successCtx,
+      defaultStatus
+    );
+
+    return { response: safeResponse, status };
   } catch (exception) {
     if (exception instanceof HipRedirectException || Boom.isBoom(exception)) {
-      // Don't transform redirect exceptions or intentionally constructed boom errors
       throw exception;
     } else {
-      // All other uncaught exceptions transform to generic 500s here
       throw Boom.badImplementation('Uncaught exception');
     }
   }
@@ -327,9 +306,10 @@ export function assertHipthrustable(
   requestHandler: HasAllRequireds & Record<string, any>
 ) {
   const requiredMethods = [
+    'sanitizeInputs',
     'preAuthorize',
     'finalAuthorize',
-    'respond',
+    'doWork',
     'sanitizeResponse',
   ];
   requiredMethods.forEach(method => {
