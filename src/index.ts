@@ -2,25 +2,21 @@ import {
   authorizationPassed,
   isHasAttachData,
   isHasDoWork,
+  isHasExtractInputs,
   isHasFinalAuthorize,
   isHasInitPreContext,
   isHasPreAuthorize,
-  isHasRespond,
-  isHasSanitizeBody,
-  isHasSanitizeParams,
-  isHasSanitizeQueryParams,
+  isHasSanitizeInputs,
   isHasSanitizeResponse,
 } from './core';
 import {
   AttachData,
   DoWork,
+  ExtractInputs,
   FinalAuthorize,
   InitPreContext,
   PreAuthorize,
-  Respond,
-  SanitizeBody,
-  SanitizeParams,
-  SanitizeQueryParams,
+  SanitizeInputs,
   SanitizeResponse,
 } from './lifecycle-functions';
 import {
@@ -29,24 +25,20 @@ import {
   HasAllRequireds,
   HasAttachData,
   HasDoWork,
+  HasExtractInputs,
   HasFinalAuthorize,
   HasInitPreContext,
   HasPreAuthorize,
-  HasRespond,
-  HasSanitizeBody,
-  HasSanitizeParams,
-  HasSanitizeQueryParams,
+  HasSanitizeInputs,
   HasSanitizeResponse,
   MightHaveFinalAuthorize,
   MightHavePreAuthorize,
-  MightHaveRespond,
   MightHaveSanitizeResponse,
   OptionallyHasAttachData,
   OptionallyHasDoWork,
+  OptionallyHasExtractInputs,
   OptionallyHasInitPreContext,
-  OptionallyHasSanitizeBody,
-  OptionallyHasSanitizeParams,
-  OptionallyHasSanitizeQueryParams,
+  OptionallyHasSanitizeInputs,
   PromiseResolveOrSync,
 } from './types';
 
@@ -113,7 +105,7 @@ export function InitPreContextFromTo<
   });
 }
 
-export function SanitizeParamsFrom<
+export function ExtractInputsFrom<
   TWhereToLook extends string,
   TContextIn extends { [key in TWhereToLook]: TContextIn[TWhereToLook] },
   TContextOut extends object
@@ -121,22 +113,20 @@ export function SanitizeParamsFrom<
   whereToLook: TWhereToLook,
   projector: (htCtx: TContextIn[TWhereToLook]) => TContextOut
 ) {
-  return SanitizeParams((htCtx: TContextIn) => projector(htCtx[whereToLook]));
+  return ExtractInputs((htCtx: TContextIn) => projector(htCtx[whereToLook]));
 }
 
-export function SanitizeParamsTo<
+export function ExtractInputsTo<
   TWhereToStore extends string,
   TContextIn extends object,
   TContextOut extends object
 >(projector: (htCtx: TContextIn) => TContextOut, whereToStore: TWhereToStore) {
-  return SanitizeParams((htCtx: TContextIn) => {
-    return {
-      [whereToStore]: projector(htCtx),
-    };
+  return ExtractInputs((htCtx: TContextIn) => {
+    return { [whereToStore]: projector(htCtx) };
   });
 }
 
-export function SanitizeParamsFromTo<
+export function ExtractInputsFromTo<
   TWhereToLook extends string,
   TWhereToStore extends string,
   TContextIn extends { [key in TWhereToLook]: TContextIn[TWhereToLook] },
@@ -146,14 +136,12 @@ export function SanitizeParamsFromTo<
   projector: (htCtx: TContextIn[TWhereToLook]) => TContextOut,
   whereToStore: TWhereToStore
 ) {
-  return SanitizeParams((htCtx: TContextIn) => {
-    return {
-      [whereToStore]: projector(htCtx[whereToLook]),
-    };
+  return ExtractInputs((htCtx: TContextIn) => {
+    return { [whereToStore]: projector(htCtx[whereToLook]) };
   });
 }
 
-export function SanitizeQueryParamsFrom<
+export function SanitizeInputsFrom<
   TWhereToLook extends string,
   TContextIn extends { [key in TWhereToLook]: TContextIn[TWhereToLook] },
   TContextOut extends object
@@ -161,24 +149,22 @@ export function SanitizeQueryParamsFrom<
   whereToLook: TWhereToLook,
   projector: (htCtx: TContextIn[TWhereToLook]) => TContextOut
 ) {
-  return SanitizeQueryParams((htCtx: TContextIn) =>
-    projector(htCtx[whereToLook])
-  );
+  return SanitizeInputs((htCtx: TContextIn) => projector(htCtx[whereToLook]));
 }
 
-export function SanitizeQueryParamsTo<
+export function SanitizeInputsTo<
   TWhereToStore extends string,
   TContextIn extends object,
   TContextOut extends object
 >(projector: (htCtx: TContextIn) => TContextOut, whereToStore: TWhereToStore) {
-  return SanitizeQueryParams((htCtx: any) => {
+  return SanitizeInputs((htCtx: TContextIn) => {
     return {
       [whereToStore]: projector(htCtx),
     };
   });
 }
 
-export function SanitizeQueryParamsFromTo<
+export function SanitizeInputsFromTo<
   TWhereToLook extends string,
   TWhereToStore extends string,
   TContextIn extends { [key in TWhereToLook]: TContextIn[TWhereToLook] },
@@ -188,50 +174,31 @@ export function SanitizeQueryParamsFromTo<
   projector: (htCtx: TContextIn[TWhereToLook]) => TContextOut,
   whereToStore: TWhereToStore
 ) {
-  return SanitizeQueryParams((htCtx: TContextIn) => {
+  return SanitizeInputs((htCtx: TContextIn) => {
     return {
       [whereToStore]: projector(htCtx[whereToLook]),
     };
   });
 }
 
-export function SanitizeBodyFrom<
-  TWhereToLook extends string,
-  TContextIn extends { [key in TWhereToLook]: TContextIn[TWhereToLook] },
-  TContextOut extends object
->(
-  whereToLook: TWhereToLook,
-  projector: (htCtx: TContextIn[TWhereToLook]) => TContextOut
-) {
-  return SanitizeBody((htCtx: TContextIn) => projector(htCtx[whereToLook]));
-}
-
-export function SanitizeBodyTo<
-  TWhereToStore extends string,
-  TContextIn extends object,
-  TContextOut extends object
->(projector: (htCtx: TContextIn) => TContextOut, whereToStore: TWhereToStore) {
-  return SanitizeBody((htCtx: TContextIn) => {
+// Per-slot composer: writes to sanitizeInputs under a chosen key, preserving any other
+// slices already present. This restores per-slot ergonomics on top of the single-slot core.
+// Example: WithInputSlice('params', IdSchema.parse) becomes the new WithParamsSanitized.
+// Input type is intentionally loose (Record<string, any>) so multiple WithInputSlice mixins
+// can chain freely; the sanitizer enforces the slice's own runtime shape.
+export function WithInputSlice<
+  TSliceName extends string,
+  TUnsafeSlice,
+  TSafeSlice
+>(sliceName: TSliceName, sanitizer: (unsafeSlice: TUnsafeSlice) => TSafeSlice) {
+  return SanitizeInputs((unsafeInputs: Record<string, any>): {
+    [K in TSliceName]: TSafeSlice;
+  } &
+    Record<string, any> => {
     return {
-      [whereToStore]: projector(htCtx),
-    };
-  });
-}
-
-export function SanitizeBodyFromTo<
-  TWhereToLook extends string,
-  TWhereToStore extends string,
-  TContextIn extends { [key in TWhereToLook]: TContextIn[TWhereToLook] },
-  TContextOut extends object
->(
-  whereToLook: TWhereToLook,
-  projector: (htCtx: TContextIn[TWhereToLook]) => TContextOut,
-  whereToStore: TWhereToStore
-) {
-  return SanitizeBody((htCtx: TContextIn) => {
-    return {
-      [whereToStore]: projector(htCtx[whereToLook]),
-    };
+      ...unsafeInputs,
+      [sliceName]: sanitizer(unsafeInputs[sliceName] as TUnsafeSlice),
+    } as { [K in TSliceName]: TSafeSlice } & Record<string, any>;
   });
 }
 
@@ -366,10 +333,10 @@ export function FinalAuthorizeFromTo<
 export function DoWorkFrom<
   TWhereToLook extends string,
   TContextIn extends { [key in TWhereToLook]: TContextIn[TWhereToLook] },
-  TContextOut extends PromiseResolveOrSync<object | void>
+  TUnsafeResponse
 >(
   whereToLook: TWhereToLook,
-  projector: (htCtx: TContextIn[TWhereToLook]) => TContextOut
+  projector: (htCtx: TContextIn[TWhereToLook]) => TUnsafeResponse
 ) {
   return DoWork((htCtx: TContextIn) => projector(htCtx[whereToLook]));
 }
@@ -377,8 +344,11 @@ export function DoWorkFrom<
 export function DoWorkTo<
   TWhereToStore extends string,
   TContextIn extends object,
-  TContextOut extends PromiseResolveOrSync<object | void>
->(projector: (htCtx: TContextIn) => TContextOut, whereToStore: TWhereToStore) {
+  TUnsafeResponse
+>(
+  projector: (htCtx: TContextIn) => TUnsafeResponse,
+  whereToStore: TWhereToStore
+) {
   return DoWork(async (htCtx: TContextIn) => {
     return {
       [whereToStore]: await Promise.resolve(projector(htCtx)),
@@ -390,10 +360,10 @@ export function DoWorkFromTo<
   TWhereToLook extends string,
   TWhereToStore extends string,
   TContextIn extends { [key in TWhereToLook]: TContextIn[TWhereToLook] },
-  TContextOut extends PromiseResolveOrSync<object | void>
+  TUnsafeResponse
 >(
   whereToLook: TWhereToLook,
-  projector: (htCtx: TContextIn[TWhereToLook]) => TContextOut,
+  projector: (htCtx: TContextIn[TWhereToLook]) => TUnsafeResponse,
   whereToStore: TWhereToStore
 ) {
   return DoWork(async (htCtx: TContextIn) => {
@@ -403,62 +373,10 @@ export function DoWorkFromTo<
   });
 }
 
-export function RespondFrom<
-  TWhereToLook extends string,
-  TSuccessStatusCode extends number,
-  TContextIn extends { [key in TWhereToLook]: TContextIn[TWhereToLook] },
-  TContextOut extends object
->(
-  whereToLook: TWhereToLook,
-  projector: (htCtx: TContextIn[TWhereToLook]) => TContextOut,
-  successStatusCode: TSuccessStatusCode
-) {
-  return Respond(
-    (htCtx: TContextIn) => projector(htCtx[whereToLook]),
-    successStatusCode
-  );
-}
-
-export function RespondTo<
-  TWhereToStore extends string,
-  TSuccessStatusCode extends number,
-  TContextIn extends object,
-  TContextOut extends object
->(
-  projector: (htCtx: TContextIn) => TContextOut,
-  whereToStore: TWhereToStore,
-  successStatusCode: TSuccessStatusCode
-) {
-  return Respond((htCtx: TContextIn) => {
-    return {
-      [whereToStore]: projector(htCtx),
-    };
-  }, successStatusCode);
-}
-
-export function RespondFromTo<
-  TWhereToLook extends string,
-  TWhereToStore extends string,
-  TSuccessStatusCode extends number,
-  TContextIn extends { [key in TWhereToLook]: TContextIn[TWhereToLook] },
-  TContextOut extends object
->(
-  whereToLook: TWhereToLook,
-  projector: (htCtx: TContextIn[TWhereToLook]) => TContextOut,
-  whereToStore: TWhereToStore,
-  successStatusCode: TSuccessStatusCode
-) {
-  return Respond((htCtx: TContextIn) => {
-    return {
-      [whereToStore]: projector(htCtx[whereToLook]),
-    };
-  }, successStatusCode);
-}
-
 export function SanitizeResponseFrom<
   TWhereToLook extends string,
   TContextIn extends { [key in TWhereToLook]: TContextIn[TWhereToLook] },
-  TContextOut extends object
+  TContextOut
 >(
   whereToLook: TWhereToLook,
   projector: (htCtx: TContextIn[TWhereToLook]) => TContextOut
@@ -468,8 +386,8 @@ export function SanitizeResponseFrom<
 
 export function SanitizeResponseTo<
   TWhereToStore extends string,
-  TContextIn extends object,
-  TContextOut extends object
+  TContextIn,
+  TContextOut
 >(projector: (htCtx: TContextIn) => TContextOut, whereToStore: TWhereToStore) {
   return SanitizeResponse((htCtx: TContextIn) => {
     return {
@@ -482,7 +400,7 @@ export function SanitizeResponseFromTo<
   TWhereToLook extends string,
   TWhereToStore extends string,
   TContextIn extends { [key in TWhereToLook]: TContextIn[TWhereToLook] },
-  TContextOut extends object
+  TContextOut
 >(
   whereToLook: TWhereToLook,
   projector: (htCtx: TContextIn[TWhereToLook]) => TContextOut,
@@ -502,25 +420,18 @@ type InitPreContextReturn<T extends HasInitPreContext<any, any>> = ReturnType<
   T['initPreContext']
 >;
 
-type SanitizeParamsContextIn<
-  T extends HasSanitizeParams<any, any>
-> = Parameters<T['sanitizeParams']>[0];
-type SanitizeParamsReturn<T extends HasSanitizeParams<any, any>> = ReturnType<
-  T['sanitizeParams']
+type ExtractInputsContextIn<T extends HasExtractInputs<any, any>> = Parameters<
+  T['extractInputs']
+>[0];
+type ExtractInputsReturn<T extends HasExtractInputs<any, any>> = ReturnType<
+  T['extractInputs']
 >;
 
-type SanitizeQueryParamsContextIn<
-  T extends HasSanitizeQueryParams<any, any>
-> = Parameters<T['sanitizeQueryParams']>[0];
-type SanitizeQueryParamsReturn<
-  T extends HasSanitizeQueryParams<any, any>
-> = ReturnType<T['sanitizeQueryParams']>;
-
-type SanitizeBodyContextIn<T extends HasSanitizeBody<any, any>> = Parameters<
-  T['sanitizeBody']
->[0];
-type SanitizeBodyReturn<T extends HasSanitizeBody<any, any>> = ReturnType<
-  T['sanitizeBody']
+type SanitizeInputsContextIn<
+  T extends HasSanitizeInputs<any, any>
+> = Parameters<T['sanitizeInputs']>[0];
+type SanitizeInputsReturn<T extends HasSanitizeInputs<any, any>> = ReturnType<
+  T['sanitizeInputs']
 >;
 
 type PreAuthorizeContextIn<T extends HasPreAuthorize<any, any>> = Parameters<
@@ -560,15 +471,6 @@ type DoWorkContextIn<T extends HasDoWork<any, any>> = Parameters<
 type DoWorkReturn<T extends HasDoWork<any, any>> = PromiseResolveOrSync<
   ReturnType<T['doWork']>
 >;
-type DoWorkContextOut<T extends HasDoWork<any, any>> = object &
-  PromiseResolveOrSync<ReturnType<T['doWork']>>;
-
-type RespondContextIn<T extends HasRespond<any, any>> = Parameters<
-  T['respond']
->[0];
-type RespondReturn<T extends HasRespond<any, any>> = ReturnType<
-  T['respond']
->['unsafeResponse'];
 
 type SanitizeResponseContextIn<
   T extends HasSanitizeResponse<any, any>
@@ -594,50 +496,37 @@ type PipedPreContext<TLeft, TRight> = [TLeft] extends [
   ? { initPreContext: TRight['initPreContext'] }
   : {};
 
-// @note must wrap types with arrays to avoid distribution over naked type conditionals blowing up exponentially - see
-// https://github.com/Microsoft/TypeScript/issues/29368#issuecomment-453529532
-type PipedSanitizeParams<TLeft, TRight> = [TLeft] extends [
-  HasSanitizeParams<any, any>
+type PipedExtractInputs<TLeft, TRight> = [TLeft] extends [
+  HasExtractInputs<any, any>
 ]
-  ? [TRight] extends [HasSanitizeParams<any, any>]
-    ? HasSanitizeParams<
-        SanitizeParamsContextIn<TLeft>,
-        SanitizeParamsReturn<TRight>
+  ? [TRight] extends [HasExtractInputs<any, any>]
+    ? HasExtractInputs<
+        ExtractInputsContextIn<TLeft> &
+          Omit<
+            ExtractInputsContextIn<TRight>,
+            keyof ExtractInputsReturn<TLeft>
+          >,
+        ExtractInputsReturn<TRight> &
+          Omit<ExtractInputsReturn<TLeft>, keyof ExtractInputsReturn<TRight>>
       >
-    : { sanitizeParams: TLeft['sanitizeParams'] }
-  : [TRight] extends [HasSanitizeParams<any, any>]
-  ? { sanitizeParams: TRight['sanitizeParams'] }
+    : { extractInputs: TLeft['extractInputs'] }
+  : [TRight] extends [HasExtractInputs<any, any>]
+  ? { extractInputs: TRight['extractInputs'] }
   : {};
 
-// @note must wrap types with arrays to avoid distribution over naked type conditionals blowing up exponentially - see
-// https://github.com/Microsoft/TypeScript/issues/29368#issuecomment-453529532
-type PipedSanitizeQueryParams<TLeft, TRight> = [TLeft] extends [
-  HasSanitizeQueryParams<any, any>
+type PipedSanitizeInputs<TLeft, TRight> = [TLeft] extends [
+  HasSanitizeInputs<any, any>
 ]
-  ? [TRight] extends [HasSanitizeQueryParams<any, any>]
-    ? HasSanitizeQueryParams<
-        SanitizeQueryParamsContextIn<TLeft>,
-        SanitizeQueryParamsReturn<TRight>
+  ? [TRight] extends [HasSanitizeInputs<any, any>]
+    ? HasSanitizeInputs<
+        SanitizeInputsContextIn<TLeft>,
+        SanitizeInputsReturn<TRight>
       >
-    : { sanitizeQueryParams: TLeft['sanitizeQueryParams'] }
-  : [TRight] extends [HasSanitizeQueryParams<any, any>]
-  ? { sanitizeQueryParams: TRight['sanitizeQueryParams'] }
+    : { sanitizeInputs: TLeft['sanitizeInputs'] }
+  : [TRight] extends [HasSanitizeInputs<any, any>]
+  ? { sanitizeInputs: TRight['sanitizeInputs'] }
   : {};
 
-// @note must wrap types with arrays to avoid distribution over naked type conditionals blowing up exponentially - see
-// https://github.com/Microsoft/TypeScript/issues/29368#issuecomment-453529532
-type PipedSanitizeBody<TLeft, TRight> = [TLeft] extends [
-  HasSanitizeBody<any, any>
-]
-  ? [TRight] extends [HasSanitizeBody<any, any>]
-    ? HasSanitizeBody<SanitizeBodyContextIn<TLeft>, SanitizeBodyReturn<TRight>>
-    : { sanitizeBody: TLeft['sanitizeBody'] }
-  : [TRight] extends [HasSanitizeBody<any, any>]
-  ? { sanitizeBody: TRight['sanitizeBody'] }
-  : {};
-
-// @note must wrap types with arrays to avoid distribution over naked type conditionals blowing up exponentially - see
-// https://github.com/Microsoft/TypeScript/issues/29368#issuecomment-453529532
 type PipedPreAuthorize<TLeft, TRight> = [TLeft] extends [
   HasPreAuthorize<any, any>
 ]
@@ -652,18 +541,18 @@ type PipedPreAuthorize<TLeft, TRight> = [TLeft] extends [
           >,
         PreAuthorizeReturn<TLeft> extends boolean
           ? PreAuthorizeReturn<TRight> extends boolean
-            ? boolean // BOTH left AND right have preAuthorize that returns ONLY booleans - never objects
+            ? boolean
             :
-                | PreAuthorizeContextOut<TRight> // left's preAuthorize returns ONLY booleans but right's might return objects
+                | PreAuthorizeContextOut<TRight>
                 | (PreAuthorizeContextOutFalseCase<TLeft> & false)
                 | (PreAuthorizeContextOutFalseCase<TRight> & false)
           : PreAuthorizeReturn<TRight> extends boolean
           ?
-              | PreAuthorizeContextOut<TLeft> // right's preAuthorize returns ONLY booleans but left's might return objects
+              | PreAuthorizeContextOut<TLeft>
               | (PreAuthorizeContextOutFalseCase<TLeft> & false)
               | (PreAuthorizeContextOutFalseCase<TRight> & false)
           :
-              | (PreAuthorizeContextOut<TRight> & // NEITHER left NOR right's preAuthorize return strictly boolean - so both might return objects
+              | (PreAuthorizeContextOut<TRight> &
                   Omit<
                     PreAuthorizeContextOut<TLeft>,
                     keyof PreAuthorizeContextOut<TRight>
@@ -676,8 +565,6 @@ type PipedPreAuthorize<TLeft, TRight> = [TLeft] extends [
   ? { preAuthorize: TRight['preAuthorize'] }
   : {};
 
-// @note must wrap types with arrays to avoid distribution over naked type conditionals blowing up exponentially - see
-// https://github.com/Microsoft/TypeScript/issues/29368#issuecomment-453529532
 type PipedAttachData<TLeft, TRight> = [TLeft] extends [HasAttachData<any, any>]
   ? [TRight] extends [HasAttachData<any, any>]
     ? HasAttachData<
@@ -691,8 +578,6 @@ type PipedAttachData<TLeft, TRight> = [TLeft] extends [HasAttachData<any, any>]
   ? { attachData: TRight['attachData'] }
   : {};
 
-// @note must wrap types with arrays to avoid distribution over naked type conditionals blowing up exponentially - see
-// https://github.com/Microsoft/TypeScript/issues/29368#issuecomment-453529532
 type PipedFinalAuthorize<TLeft, TRight> = [TLeft] extends [
   HasFinalAuthorize<any, any>
 ]
@@ -707,18 +592,18 @@ type PipedFinalAuthorize<TLeft, TRight> = [TLeft] extends [
           >,
         FinalAuthorizeReturn<TLeft> extends boolean
           ? FinalAuthorizeReturn<TRight> extends boolean
-            ? boolean // BOTH left AND right have finalAuthorize that returns ONLY booleans - never objects
+            ? boolean
             :
-                | FinalAuthorizeContextOut<TRight> // left's finalAuthorize returns ONLY booleans but right's might return objects
+                | FinalAuthorizeContextOut<TRight>
                 | (FinalAuthorizeContextOutFalseCase<TLeft> & false)
                 | (FinalAuthorizeContextOutFalseCase<TRight> & false)
           : FinalAuthorizeReturn<TRight> extends boolean
           ?
-              | FinalAuthorizeContextOut<TLeft> // right's finalAuthorize returns ONLY booleans but left's might return objects
+              | FinalAuthorizeContextOut<TLeft>
               | (FinalAuthorizeContextOutFalseCase<TLeft> & false)
               | (FinalAuthorizeContextOutFalseCase<TRight> & false)
           :
-              | (FinalAuthorizeContextOut<TRight> & // NEITHER left NOR right's finalAuthorize return strictly boolean - so both might return objects
+              | (FinalAuthorizeContextOut<TRight> &
                   Omit<
                     FinalAuthorizeContextOut<TLeft>,
                     keyof FinalAuthorizeContextOut<TRight>
@@ -731,44 +616,14 @@ type PipedFinalAuthorize<TLeft, TRight> = [TLeft] extends [
   ? { finalAuthorize: TRight['finalAuthorize'] }
   : {};
 
-// @note must wrap types with arrays to avoid distribution over naked type conditionals blowing up exponentially - see
-// https://github.com/Microsoft/TypeScript/issues/29368#issuecomment-453529532
 type PipedDoWork<TLeft, TRight> = [TLeft] extends [HasDoWork<any, any>]
   ? [TRight] extends [HasDoWork<any, any>]
-    ? HasDoWork<
-        DoWorkContextIn<TLeft> &
-          Omit<
-            DoWorkContextIn<TRight>,
-            DoWorkReturn<TLeft> extends void
-              ? keyof {}
-              : keyof DoWorkReturn<TLeft>
-          >,
-        DoWorkReturn<TLeft> extends void
-          ? DoWorkReturn<TRight> extends void
-            ? void // BOTH left AND right have doWork that returns ONLY void - never objects
-            : DoWorkContextOut<TRight> // left's doWork returns ONLY void but right's might return objects
-          : DoWorkReturn<TRight> extends void
-          ? DoWorkContextOut<TLeft> // right's doWork returns ONLY void but left's might return objects
-          : DoWorkContextOut<TRight> & // NEITHER left NOR right's doWork return void - so both might return objects
-              Omit<DoWorkContextOut<TLeft>, keyof DoWorkContextOut<TRight>>
-      >
+    ? HasDoWork<DoWorkContextIn<TLeft>, DoWorkReturn<TRight>>
     : { doWork: TLeft['doWork'] }
   : [TRight] extends [HasDoWork<any, any>]
   ? { doWork: TRight['doWork'] }
   : {};
 
-// @note must wrap types with arrays to avoid distribution over naked type conditionals blowing up exponentially - see
-// https://github.com/Microsoft/TypeScript/issues/29368#issuecomment-453529532
-type PipedRespond<TLeft, TRight> = [TLeft] extends [HasRespond<any, any>]
-  ? [TRight] extends [HasRespond<any, any>]
-    ? HasRespond<RespondContextIn<TLeft>, RespondReturn<TRight>>
-    : { respond: TLeft['respond'] }
-  : [TRight] extends [HasRespond<any, any>]
-  ? { respond: TRight['respond'] }
-  : {};
-
-// @note must wrap types with arrays to avoid distribution over naked type conditionals blowing up exponentially - see
-// https://github.com/Microsoft/TypeScript/issues/29368#issuecomment-453529532
 type PipedSanitizeResponse<TLeft, TRight> = [TLeft] extends [
   HasSanitizeResponse<any, any>
 ]
@@ -796,27 +651,24 @@ type ClashlessInitPreContext<TLeft, TRight> = OptionallyHasInitPreContext<
     : any
 >;
 
-type ClashlessSanitizeParams<TLeft, TRight> = OptionallyHasSanitizeParams<
+type ClashlessExtractInputs<TLeft, TRight> = OptionallyHasExtractInputs<
   any,
-  TRight extends HasSanitizeParams<any, any>
-    ? Parameters<TRight['sanitizeParams']>[0]
+  TRight extends HasExtractInputs<any, any>
+    ? Pick<
+        Parameters<TRight['extractInputs']>[0],
+        keyof ReturnType<
+          TLeft extends HasExtractInputs<any, any>
+            ? TLeft['extractInputs']
+            : () => {}
+        >
+      >
     : any
 >;
 
-type ClashlessSanitizeQueryParams<
-  TLeft,
-  TRight
-> = OptionallyHasSanitizeQueryParams<
+type ClashlessSanitizeInputs<TLeft, TRight> = OptionallyHasSanitizeInputs<
   any,
-  TRight extends HasSanitizeQueryParams<any, any>
-    ? Parameters<TRight['sanitizeQueryParams']>[0]
-    : any
->;
-
-type ClashlessSanitizeBody<TLeft, TRight> = OptionallyHasSanitizeBody<
-  any,
-  TRight extends HasSanitizeBody<any, any>
-    ? Parameters<TRight['sanitizeBody']>[0]
+  TRight extends HasSanitizeInputs<any, any>
+    ? Parameters<TRight['sanitizeInputs']>[0]
     : any
 >;
 
@@ -870,22 +722,7 @@ type ClashlessFinalAuthorize<TLeft, TRight> = MightHaveFinalAuthorize<
 
 type ClashlessDoWork<TLeft, TRight> = OptionallyHasDoWork<
   any,
-  | void
-  | (TRight extends HasDoWork<any, any>
-      ? Pick<
-          Parameters<TRight['doWork']>[0],
-          keyof PromiseResolveOrSync<
-            ReturnType<
-              TLeft extends HasDoWork<any, any> ? TLeft['doWork'] : () => {}
-            >
-          >
-        >
-      : any)
->;
-
-type ClashlessRespond<TLeft, TRight> = MightHaveRespond<
-  any,
-  TRight extends HasRespond<any, any> ? Parameters<TRight['respond']>[0] : any
+  TRight extends HasDoWork<any, any> ? Parameters<TRight['doWork']>[0] : any
 >;
 
 type ClashlessSanitizeResponse<TLeft, TRight> = MightHaveSanitizeResponse<
@@ -901,44 +738,33 @@ export function HTPipe(): {};
 // one parameter - returns a new object with all the valid lifecycle stages of the parameter
 export function HTPipe<
   T extends OptionallyHasInitPreContext<any, any> &
-    OptionallyHasSanitizeParams<any, any> &
-    OptionallyHasSanitizeQueryParams<any, any> &
-    OptionallyHasSanitizeBody<any, any> &
+    OptionallyHasExtractInputs<any, any> &
+    OptionallyHasSanitizeInputs<any, any> &
     MightHavePreAuthorize<any, any> &
     OptionallyHasAttachData<any, any> &
     MightHaveFinalAuthorize<any, any> &
     OptionallyHasDoWork<any, any> &
-    MightHaveRespond<any, any> &
     MightHaveSanitizeResponse<any, any>
 >(obj: T): Pick<T, AllStageKeys>;
 
-// two parameters with automatic type guessing or right - all or nothing!
-// @todo: add the ability for each stage to get outputs of previous stages too!
+// two parameters with automatic type guessing of right - all or nothing!
 export function HTPipe<
   TLeft extends OptionallyHasInitPreContext<any, any> &
-    OptionallyHasSanitizeParams<any, any> &
-    OptionallyHasSanitizeQueryParams<any, any> &
-    OptionallyHasSanitizeBody<any, any> &
+    OptionallyHasExtractInputs<any, any> &
+    OptionallyHasSanitizeInputs<any, any> &
     MightHavePreAuthorize<any, any> &
     OptionallyHasAttachData<any, any> &
     MightHaveFinalAuthorize<any, any> &
     OptionallyHasDoWork<any, any> &
-    MightHaveRespond<any, any> &
     MightHaveSanitizeResponse<any, any>,
   TRight extends (TLeft extends HasInitPreContext<any, any>
     ? OptionallyHasInitPreContext<ReturnType<TLeft['initPreContext']>, any>
     : {}) &
-    (TLeft extends HasSanitizeParams<any, any>
-      ? OptionallyHasSanitizeParams<ReturnType<TLeft['sanitizeParams']>, any>
+    (TLeft extends HasExtractInputs<any, any>
+      ? OptionallyHasExtractInputs<ReturnType<TLeft['extractInputs']>, any>
       : {}) &
-    (TLeft extends HasSanitizeQueryParams<any, any>
-      ? OptionallyHasSanitizeQueryParams<
-          ReturnType<TLeft['sanitizeQueryParams']>,
-          any
-        >
-      : {}) &
-    (TLeft extends HasSanitizeBody<any, any>
-      ? OptionallyHasSanitizeBody<ReturnType<TLeft['sanitizeBody']>, any>
+    (TLeft extends HasSanitizeInputs<any, any>
+      ? OptionallyHasSanitizeInputs<ReturnType<TLeft['sanitizeInputs']>, any>
       : {}) &
     (TLeft extends HasPreAuthorize<any, any>
       ? MightHavePreAuthorize<ReturnType<TLeft['preAuthorize']>, any>
@@ -961,9 +787,6 @@ export function HTPipe<
           any
         >
       : {}) &
-    (TLeft extends HasRespond<any, any>
-      ? MightHaveRespond<ReturnType<TLeft['respond']>, any>
-      : {}) &
     (TLeft extends HasSanitizeResponse<any, any>
       ? MightHaveSanitizeResponse<ReturnType<TLeft['sanitizeResponse']>, any>
       : {})
@@ -971,97 +794,81 @@ export function HTPipe<
   left: TLeft,
   right: TRight
 ): PipedPreContext<TLeft, TRight> &
-  PipedSanitizeParams<TLeft, TRight> &
-  PipedSanitizeQueryParams<TLeft, TRight> &
-  PipedSanitizeBody<TLeft, TRight> &
+  PipedExtractInputs<TLeft, TRight> &
+  PipedSanitizeInputs<TLeft, TRight> &
   PipedPreAuthorize<TLeft, TRight> &
   PipedAttachData<TLeft, TRight> &
   PipedFinalAuthorize<TLeft, TRight> &
   PipedDoWork<TLeft, TRight> &
-  PipedRespond<TLeft, TRight> &
   PipedSanitizeResponse<TLeft, TRight>;
 
 // two parameters with possibly added inputs
 export function HTPipe<
   TLeft extends ClashlessInitPreContext<TLeft, TRight> &
-    ClashlessSanitizeParams<TLeft, TRight> &
-    ClashlessSanitizeQueryParams<TLeft, TRight> &
-    ClashlessSanitizeBody<TLeft, TRight> &
+    ClashlessExtractInputs<TLeft, TRight> &
+    ClashlessSanitizeInputs<TLeft, TRight> &
     ClashlessPreAuthorize<TLeft, TRight> &
     ClashlessAttachData<TLeft, TRight> &
     ClashlessFinalAuthorize<TLeft, TRight> &
     ClashlessDoWork<TLeft, TRight> &
-    ClashlessRespond<TLeft, TRight> &
     ClashlessSanitizeResponse<TLeft, TRight>,
   TRight extends OptionallyHasInitPreContext<any, any> &
-    OptionallyHasSanitizeParams<any, any> &
-    OptionallyHasSanitizeQueryParams<any, any> &
-    OptionallyHasSanitizeBody<any, any> &
+    OptionallyHasExtractInputs<any, any> &
+    OptionallyHasSanitizeInputs<any, any> &
     MightHavePreAuthorize<any, any> &
     OptionallyHasAttachData<any, any> &
     MightHaveFinalAuthorize<any, any> &
     OptionallyHasDoWork<any, any> &
-    MightHaveRespond<any, any> &
     MightHaveSanitizeResponse<any, any>
 >(
   left: TLeft,
   right: TRight
 ): PipedPreContext<TLeft, TRight> &
-  PipedSanitizeParams<TLeft, TRight> &
-  PipedSanitizeQueryParams<TLeft, TRight> &
-  PipedSanitizeBody<TLeft, TRight> &
+  PipedExtractInputs<TLeft, TRight> &
+  PipedSanitizeInputs<TLeft, TRight> &
   PipedPreAuthorize<TLeft, TRight> &
   PipedAttachData<TLeft, TRight> &
   PipedFinalAuthorize<TLeft, TRight> &
   PipedDoWork<TLeft, TRight> &
-  PipedRespond<TLeft, TRight> &
   PipedSanitizeResponse<TLeft, TRight>;
 
 // three parameters with possibly added inputs
 export function HTPipe<
   T3 extends ClashlessInitPreContext<T3, PipedPreContext<T2, T1>> &
-    ClashlessSanitizeParams<T3, PipedSanitizeParams<T2, T1>> &
-    ClashlessSanitizeQueryParams<T3, PipedSanitizeQueryParams<T2, T1>> &
-    ClashlessSanitizeBody<T3, PipedSanitizeBody<T2, T1>> &
+    ClashlessExtractInputs<T3, PipedExtractInputs<T2, T1>> &
+    ClashlessSanitizeInputs<T3, PipedSanitizeInputs<T2, T1>> &
     ClashlessPreAuthorize<T3, PipedPreAuthorize<T2, T1>> &
     ClashlessAttachData<T3, PipedAttachData<T2, T1>> &
     ClashlessFinalAuthorize<T3, PipedFinalAuthorize<T2, T1>> &
     ClashlessDoWork<T3, PipedDoWork<T2, T1>> &
-    ClashlessRespond<T3, PipedRespond<T2, T1>> &
     ClashlessSanitizeResponse<T3, PipedSanitizeResponse<T2, T1>>,
   T2 extends ClashlessInitPreContext<T2, T1> &
-    ClashlessSanitizeParams<T2, T1> &
-    ClashlessSanitizeQueryParams<T2, T1> &
-    ClashlessSanitizeBody<T2, T1> &
+    ClashlessExtractInputs<T2, T1> &
+    ClashlessSanitizeInputs<T2, T1> &
     ClashlessPreAuthorize<T2, T1> &
     ClashlessAttachData<T2, T1> &
     ClashlessFinalAuthorize<T2, T1> &
     ClashlessDoWork<T2, T1> &
-    ClashlessRespond<T2, T1> &
     ClashlessSanitizeResponse<T2, T1>,
   T1 extends OptionallyHasInitPreContext<any, any> &
-    OptionallyHasSanitizeParams<any, any> &
-    OptionallyHasSanitizeQueryParams<any, any> &
-    OptionallyHasSanitizeBody<any, any> &
+    OptionallyHasExtractInputs<any, any> &
+    OptionallyHasSanitizeInputs<any, any> &
     MightHavePreAuthorize<any, any> &
     OptionallyHasAttachData<any, any> &
     MightHaveFinalAuthorize<any, any> &
     OptionallyHasDoWork<any, any> &
-    MightHaveRespond<any, any> &
     MightHaveSanitizeResponse<any, any>
 >(
   obj3: T3,
   obj2: T2,
   obj1: T1
 ): PipedPreContext<T3, PipedPreContext<T2, T1>> &
-  PipedSanitizeParams<T3, PipedSanitizeParams<T2, T1>> &
-  PipedSanitizeQueryParams<T3, PipedSanitizeQueryParams<T2, T1>> &
-  PipedSanitizeBody<T3, PipedSanitizeBody<T2, T1>> &
+  PipedExtractInputs<T3, PipedExtractInputs<T2, T1>> &
+  PipedSanitizeInputs<T3, PipedSanitizeInputs<T2, T1>> &
   PipedPreAuthorize<T3, PipedPreAuthorize<T2, T1>> &
   PipedAttachData<T3, PipedAttachData<T2, T1>> &
   PipedFinalAuthorize<T3, PipedFinalAuthorize<T2, T1>> &
   PipedDoWork<T3, PipedDoWork<T2, T1>> &
-  PipedRespond<T3, PipedRespond<T2, T1>> &
   PipedSanitizeResponse<T3, PipedSanitizeResponse<T2, T1>>;
 
 // four parameters with possibly added inputs
@@ -1070,17 +877,13 @@ export function HTPipe<
     T4,
     PipedPreContext<T3, PipedPreContext<T2, T1>>
   > &
-    ClashlessSanitizeParams<
+    ClashlessExtractInputs<
       T4,
-      PipedSanitizeParams<T3, PipedSanitizeParams<T2, T1>>
+      PipedExtractInputs<T3, PipedExtractInputs<T2, T1>>
     > &
-    ClashlessSanitizeQueryParams<
+    ClashlessSanitizeInputs<
       T4,
-      PipedSanitizeQueryParams<T3, PipedSanitizeQueryParams<T2, T1>>
-    > &
-    ClashlessSanitizeBody<
-      T4,
-      PipedSanitizeBody<T3, PipedSanitizeBody<T2, T1>>
+      PipedSanitizeInputs<T3, PipedSanitizeInputs<T2, T1>>
     > &
     ClashlessPreAuthorize<
       T4,
@@ -1092,40 +895,33 @@ export function HTPipe<
       PipedFinalAuthorize<T3, PipedFinalAuthorize<T2, T1>>
     > &
     ClashlessDoWork<T4, PipedDoWork<T3, PipedDoWork<T2, T1>>> &
-    ClashlessRespond<T4, PipedRespond<T3, PipedRespond<T2, T1>>> &
     ClashlessSanitizeResponse<
       T4,
       PipedSanitizeResponse<T3, PipedSanitizeResponse<T2, T1>>
     >,
   T3 extends ClashlessInitPreContext<T3, PipedPreContext<T2, T1>> &
-    ClashlessSanitizeParams<T3, PipedSanitizeParams<T2, T1>> &
-    ClashlessSanitizeQueryParams<T3, PipedSanitizeQueryParams<T2, T1>> &
-    ClashlessSanitizeBody<T3, PipedSanitizeBody<T2, T1>> &
+    ClashlessExtractInputs<T3, PipedExtractInputs<T2, T1>> &
+    ClashlessSanitizeInputs<T3, PipedSanitizeInputs<T2, T1>> &
     ClashlessPreAuthorize<T3, PipedPreAuthorize<T2, T1>> &
     ClashlessAttachData<T3, PipedAttachData<T2, T1>> &
     ClashlessFinalAuthorize<T3, PipedFinalAuthorize<T2, T1>> &
     ClashlessDoWork<T3, PipedDoWork<T2, T1>> &
-    ClashlessRespond<T3, PipedRespond<T2, T1>> &
     ClashlessSanitizeResponse<T3, PipedSanitizeResponse<T2, T1>>,
   T2 extends ClashlessInitPreContext<T2, T1> &
-    ClashlessSanitizeParams<T2, T1> &
-    ClashlessSanitizeQueryParams<T2, T1> &
-    ClashlessSanitizeBody<T2, T1> &
+    ClashlessExtractInputs<T2, T1> &
+    ClashlessSanitizeInputs<T2, T1> &
     ClashlessPreAuthorize<T2, T1> &
     ClashlessAttachData<T2, T1> &
     ClashlessFinalAuthorize<T2, T1> &
     ClashlessDoWork<T2, T1> &
-    ClashlessRespond<T2, T1> &
     ClashlessSanitizeResponse<T2, T1>,
   T1 extends OptionallyHasInitPreContext<any, any> &
-    OptionallyHasSanitizeParams<any, any> &
-    OptionallyHasSanitizeQueryParams<any, any> &
-    OptionallyHasSanitizeBody<any, any> &
+    OptionallyHasExtractInputs<any, any> &
+    OptionallyHasSanitizeInputs<any, any> &
     MightHavePreAuthorize<any, any> &
     OptionallyHasAttachData<any, any> &
     MightHaveFinalAuthorize<any, any> &
     OptionallyHasDoWork<any, any> &
-    MightHaveRespond<any, any> &
     MightHaveSanitizeResponse<any, any>
 >(
   obj4: T4,
@@ -1133,15 +929,11 @@ export function HTPipe<
   obj2: T2,
   obj1: T1
 ): PipedPreContext<T4, PipedPreContext<T3, PipedPreContext<T2, T1>>> &
-  PipedSanitizeParams<
+  PipedExtractInputs<T4, PipedExtractInputs<T3, PipedExtractInputs<T2, T1>>> &
+  PipedSanitizeInputs<
     T4,
-    PipedSanitizeParams<T3, PipedSanitizeParams<T2, T1>>
+    PipedSanitizeInputs<T3, PipedSanitizeInputs<T2, T1>>
   > &
-  PipedSanitizeQueryParams<
-    T4,
-    PipedSanitizeQueryParams<T3, PipedSanitizeQueryParams<T2, T1>>
-  > &
-  PipedSanitizeBody<T4, PipedSanitizeBody<T3, PipedSanitizeBody<T2, T1>>> &
   PipedPreAuthorize<T4, PipedPreAuthorize<T3, PipedPreAuthorize<T2, T1>>> &
   PipedAttachData<T4, PipedAttachData<T3, PipedAttachData<T2, T1>>> &
   PipedFinalAuthorize<
@@ -1149,7 +941,6 @@ export function HTPipe<
     PipedFinalAuthorize<T3, PipedFinalAuthorize<T2, T1>>
   > &
   PipedDoWork<T4, PipedDoWork<T3, PipedDoWork<T2, T1>>> &
-  PipedRespond<T4, PipedRespond<T3, PipedRespond<T2, T1>>> &
   PipedSanitizeResponse<
     T4,
     PipedSanitizeResponse<T3, PipedSanitizeResponse<T2, T1>>
@@ -1172,14 +963,11 @@ export function HTPipe(...objs: any[]) {
               const leftOut = left.initPreContext(context) || {};
               const rightIn = {
                 ...context,
-                // ...leftOut,
                 ...(leftOut as {}),
               };
               const rightOut = right.initPreContext(rightIn) || {};
               return {
-                // ...leftOut,
                 ...(leftOut as {}),
-                // ...rightOut
                 ...(rightOut as {}),
               };
             },
@@ -1189,48 +977,40 @@ export function HTPipe(...objs: any[]) {
         : isHasInitPreContext(right)
         ? { initPreContext: right.initPreContext }
         : {}) as PipedPreContext<any, any>),
-      ...((isHasSanitizeParams(left) && isHasSanitizeParams(right)
+      ...((isHasExtractInputs(left) && isHasExtractInputs(right)
         ? {
-            sanitizeParams: (context: any) => {
-              const leftOut = left.sanitizeParams(context) || {};
+            extractInputs: (context: any) => {
+              const leftOut = left.extractInputs(context) || {};
+              const rightIn = {
+                ...context,
+                ...(leftOut as {}),
+              };
+              const rightOut = right.extractInputs(rightIn) || {};
+              return {
+                ...(leftOut as {}),
+                ...(rightOut as {}),
+              };
+            },
+          }
+        : isHasExtractInputs(left)
+        ? { extractInputs: left.extractInputs }
+        : isHasExtractInputs(right)
+        ? { extractInputs: right.extractInputs }
+        : {}) as PipedExtractInputs<any, any>),
+      ...((isHasSanitizeInputs(left) && isHasSanitizeInputs(right)
+        ? {
+            sanitizeInputs: (context: any) => {
+              const leftOut = left.sanitizeInputs(context) || {};
               const rightIn = leftOut;
-              const rightOut = right.sanitizeParams(rightIn) || {};
+              const rightOut = right.sanitizeInputs(rightIn) || {};
               return rightOut as {};
             },
           }
-        : isHasSanitizeParams(left)
-        ? { sanitizeParams: left.sanitizeParams }
-        : isHasSanitizeParams(right)
-        ? { sanitizeParams: right.sanitizeParams }
-        : {}) as PipedSanitizeParams<any, any>),
-      ...((isHasSanitizeQueryParams(left) && isHasSanitizeQueryParams(right)
-        ? {
-            sanitizeQueryParams: (htCtx: any) => {
-              const leftOut = left.sanitizeQueryParams(htCtx) || {};
-              const rightIn = leftOut;
-              const rightOut = right.sanitizeQueryParams(rightIn) || {};
-              return rightOut as {};
-            },
-          }
-        : isHasSanitizeQueryParams(left)
-        ? { sanitizeQueryParams: left.sanitizeQueryParams }
-        : isHasSanitizeQueryParams(right)
-        ? { sanitizeQueryParams: right.sanitizeQueryParams }
-        : {}) as PipedSanitizeQueryParams<any, any>),
-      ...((isHasSanitizeBody(left) && isHasSanitizeBody(right)
-        ? {
-            sanitizeBody: (context: any) => {
-              const leftOut = left.sanitizeBody(context) || {};
-              const rightIn = leftOut;
-              const rightOut = right.sanitizeBody(rightIn) || {};
-              return rightOut as {};
-            },
-          }
-        : isHasSanitizeBody(left)
-        ? { sanitizeBody: left.sanitizeBody }
-        : isHasSanitizeBody(right)
-        ? { sanitizeBody: right.sanitizeBody }
-        : {}) as PipedSanitizeBody<any, any>),
+        : isHasSanitizeInputs(left)
+        ? { sanitizeInputs: left.sanitizeInputs }
+        : isHasSanitizeInputs(right)
+        ? { sanitizeInputs: right.sanitizeInputs }
+        : {}) as PipedSanitizeInputs<any, any>),
       ...((isHasPreAuthorize(left) && isHasPreAuthorize(right)
         ? {
             preAuthorize: (context: any) => {
@@ -1277,15 +1057,12 @@ export function HTPipe(...objs: any[]) {
                 (await Promise.resolve(left.attachData(context))) || {};
               const rightIn = {
                 ...context,
-                // ...leftOut
                 ...(leftOut as {}),
               };
               const rightOut =
                 (await Promise.resolve(right.attachData(rightIn))) || {};
               return {
-                // ...leftOut,
                 ...(leftOut as {}),
-                // ...rightOut
                 ...(rightOut as {}),
               };
             },
@@ -1341,15 +1118,8 @@ export function HTPipe(...objs: any[]) {
       ...((isHasDoWork(left) && isHasDoWork(right)
         ? {
             doWork: async (context: any) => {
-              const leftOut =
-                (await Promise.resolve(left.doWork(context))) || {};
-              const rightIn = {
-                ...context,
-                ...(leftOut as object),
-              };
-              const rightOut =
-                (await Promise.resolve(right.doWork(rightIn))) || {};
-              return { ...(leftOut as object), ...(rightOut as object) };
+              await Promise.resolve(left.doWork(context));
+              return await Promise.resolve(right.doWork(context));
             },
           }
         : isHasDoWork(left)
@@ -1357,25 +1127,6 @@ export function HTPipe(...objs: any[]) {
         : isHasDoWork(right)
         ? { doWork: right.doWork }
         : {}) as PipedDoWork<any, any>),
-      ...((isHasRespond(left) && isHasRespond(right)
-        ? {
-            respond: (context: any) => {
-              const leftOut = left.respond(context);
-              const rightOut = right.respond(leftOut.unsafeResponse);
-              return {
-                unsafeResponse: rightOut.unsafeResponse,
-                ...((rightOut &&
-                  rightOut.status && { status: rightOut.status }) ||
-                  (leftOut && leftOut.status && { status: leftOut.status }) ||
-                  {}),
-              };
-            },
-          }
-        : isHasRespond(left)
-        ? { respond: left.respond }
-        : isHasRespond(right)
-        ? { respond: right.respond }
-        : {}) as PipedRespond<any, any>),
       ...((isHasSanitizeResponse(left) && isHasSanitizeResponse(right)
         ? {
             sanitizeResponse: (context: any) => {
@@ -1400,18 +1151,21 @@ export function HTPipe(...objs: any[]) {
  * This type represents the union of all possible stage configurations.
  */
 type Pipeable = OptionallyHasInitPreContext<any, any> &
-  OptionallyHasSanitizeParams<any, any> &
-  OptionallyHasSanitizeQueryParams<any, any> &
-  OptionallyHasSanitizeBody<any, any> &
+  OptionallyHasExtractInputs<any, any> &
+  OptionallyHasSanitizeInputs<any, any> &
   MightHavePreAuthorize<any, any> &
   OptionallyHasAttachData<any, any> &
   MightHaveFinalAuthorize<any, any> &
   OptionallyHasDoWork<any, any> &
-  MightHaveRespond<any, any> &
   MightHaveSanitizeResponse<any, any>;
 
-export function composePipes(...pipes: Pipeable[]): HasAllNotRequireds & HasAllRequireds {
-  return pipes.reduce((prev, curr) => HTPipe(prev, curr), {} as Pipeable) as HasAllNotRequireds & HasAllRequireds;
+export function composePipes(
+  ...pipes: Pipeable[]
+): HasAllNotRequireds & HasAllRequireds {
+  return pipes.reduce(
+    (prev, curr) => HTPipe(prev, curr),
+    {} as Pipeable
+  ) as HasAllNotRequireds & HasAllRequireds;
 }
 
 // left has attachData AND right has attachData AND left's return keys that exist in right's parameters are assignable to right's correspondingly
@@ -1446,9 +1200,6 @@ export function HTPipeAttachData<
   TContextOutRight & Omit<TContextOutLeft, keyof TContextOutRight>
 >;
 
-// left has attachData and right does not
-// if right has attachData, left's return keys that exist in right's parameters must be assignable to right's correspondingly
-// this conditional type is necessary to disqualify left-and-right cases that fell through the first overload because of the type incompatibility so they aren't grouped in with the left-only cases
 export function HTPipeAttachData<
   TLeft extends HasAttachData<
     any,
@@ -1470,8 +1221,6 @@ export function HTPipeAttachData<
   TContextOutLeft extends PromiseResolveOrSync<ReturnType<TLeft['attachData']>>
 >(left: TLeft, right: TRight): HasAttachData<TContextInLeft, TContextOutLeft>;
 
-// right has attachData and left does not
-// this conditional type is necessary to disqualify left-and-right cases that fell through the first overload because of the type incompatibility so they aren't grouped in with the right-only cases
 export function HTPipeAttachData<
   TLeft extends OptionallyHasAttachData<
     any,
@@ -1495,8 +1244,6 @@ export function HTPipeAttachData<
   >
 >(left: TLeft, right: TRight): HasAttachData<TContextInRight, TContextOutRight>;
 
-// right and left doesn't have attachData
-// this conditional type is necessary to disqualify left-and-right cases that fell through the first overload because of the type incompatibility so they aren't grouped in with the right-only cases
 export function HTPipeAttachData<
   TLeft extends OptionallyHasAttachData<
     any,
@@ -1516,7 +1263,6 @@ export function HTPipeAttachData<
   TRight extends OptionallyHasAttachData<any, any>
 >(left: TLeft, right: TRight): {};
 
-// main function
 export function HTPipeAttachData<
   TLeft extends OptionallyHasAttachData<any, any>,
   TRight extends OptionallyHasAttachData<any, any>,
@@ -1551,17 +1297,14 @@ export function HTPipeAttachData<
       },
     };
   } else if (isHasAttachData(left)) {
-    // return { attachData: (context: TContextInLeft) => left.attachData(context) };
     return { attachData: left.attachData };
   } else if (isHasAttachData(right)) {
-    // return { attachData: (context: TContextInRight) => right.attachData(context) };
     return { attachData: right.attachData };
   } else {
     return {};
   }
 }
 
-// left has preAuthorize and right has preAuthorize
 export function HTPipePreAuthorize<
   TLeft extends HasPreAuthorize<
     any,
@@ -1598,7 +1341,6 @@ export function HTPipePreAuthorize<
     >
 >;
 
-// left has preAuthorize and right does not
 export function HTPipePreAuthorize<
   TLeft extends HasPreAuthorize<
     any,
@@ -1619,7 +1361,6 @@ export function HTPipePreAuthorize<
   TContextOutLeft extends ReturnType<TLeft['preAuthorize']>
 >(left: TLeft, right: TRight): HasPreAuthorize<TContextInLeft, TContextOutLeft>;
 
-// right has preAuthorize and left does not
 export function HTPipePreAuthorize<
   TLeft extends MightHavePreAuthorize<
     any,
@@ -1643,7 +1384,6 @@ export function HTPipePreAuthorize<
   right: TRight
 ): HasPreAuthorize<TContextInRight, TContextOutRight>;
 
-// right and left doesn't have preAuthorize
 export function HTPipePreAuthorize<
   TLeft extends MightHavePreAuthorize<
     any,
@@ -1662,7 +1402,6 @@ export function HTPipePreAuthorize<
   TRight extends MightHavePreAuthorize<any, any>
 >(left: TLeft, right: TRight): {};
 
-// main preAuthorize HTPipe
 export function HTPipePreAuthorize<
   TLeft extends MightHavePreAuthorize<any, any>,
   TRight extends MightHavePreAuthorize<any, any>,
@@ -1724,7 +1463,6 @@ export function HTPipePreAuthorize<
   }
 }
 
-// left has finalAuthorize and right has finalAuthorize
 export function HTPipeFinalAuthorize<
   TLeft extends HasFinalAuthorize<
     any,
@@ -1767,7 +1505,6 @@ export function HTPipeFinalAuthorize<
     >
 >;
 
-// left has finalAuthorize and right does not
 export function HTPipeFinalAuthorize<
   TLeft extends HasFinalAuthorize<
     any,
@@ -1795,7 +1532,6 @@ export function HTPipeFinalAuthorize<
   right: TRight
 ): HasFinalAuthorize<TContextInLeft, TContextOutLeft>;
 
-// right has finalAuthorize and left does not
 export function HTPipeFinalAuthorize<
   TLeft extends MightHaveFinalAuthorize<
     any,
@@ -1823,7 +1559,6 @@ export function HTPipeFinalAuthorize<
   right: TRight
 ): HasFinalAuthorize<TContextInRight, TContextOutRight>;
 
-// right and left doesn't have preAuthorize
 export function HTPipeFinalAuthorize<
   TLeft extends MightHaveFinalAuthorize<
     any,
@@ -1844,7 +1579,6 @@ export function HTPipeFinalAuthorize<
   TRight extends MightHaveFinalAuthorize<any, any>
 >(left: TLeft, right: TRight): {};
 
-// finalAuthorize main function
 export function HTPipeFinalAuthorize<
   TLeft extends MightHaveFinalAuthorize<any, any>,
   TRight extends MightHaveFinalAuthorize<any, any>,
@@ -1902,7 +1636,6 @@ export function HTPipeFinalAuthorize<
   }
 }
 
-// left has initPreContext and right has initPreContext
 export function HTPipeInitPreContext<
   TLeft extends HasInitPreContext<
     any,
@@ -1930,7 +1663,6 @@ export function HTPipeInitPreContext<
   TContextOutRight & Omit<TContextOutLeft, keyof TContextOutRight>
 >;
 
-// left has initPreContext and right doesn't
 export function HTPipeInitPreContext<
   TLeft extends HasInitPreContext<
     any,
@@ -1953,7 +1685,6 @@ export function HTPipeInitPreContext<
   right: TRight
 ): HasInitPreContext<TContextInLeft, TContextOutLeft>;
 
-// right has initPreContext and left doesn't
 export function HTPipeInitPreContext<
   TLeft extends OptionallyHasInitPreContext<
     any,
@@ -1976,7 +1707,6 @@ export function HTPipeInitPreContext<
   right: TRight
 ): HasInitPreContext<TContextInRight, TContextOutRight>;
 
-// right and left doesn't have initPreContext
 export function HTPipeInitPreContext<
   TLeft extends OptionallyHasInitPreContext<
     any,
@@ -1994,7 +1724,6 @@ export function HTPipeInitPreContext<
   TRight extends OptionallyHasInitPreContext<any, any>
 >(left: TLeft, right: TRight): {};
 
-// main initPreContext HTPipe function
 export function HTPipeInitPreContext<
   TLeft extends OptionallyHasInitPreContext<any, any>,
   TRight extends OptionallyHasInitPreContext<any, any>,
@@ -2039,135 +1768,43 @@ export function HTPipeInitPreContext<
   }
 }
 
-// left has doWork and right has doWork
-export function HTPipeDoWork<
-  TLeft extends HasDoWork<
-    any,
-    | void
-    | (TRight extends HasDoWork<any, any>
-        ? Pick<
-            Parameters<TRight['doWork']>[0],
-            keyof PromiseResolveOrSync<
-              ReturnType<
-                TLeft extends HasDoWork<any, any> ? TLeft['doWork'] : () => {}
-              >
-            >
-          >
-        : any)
-  >,
-  TRight extends HasDoWork<any, any>,
-  TContextInLeft extends Parameters<TLeft['doWork']>[0],
-  TContextInRight extends Parameters<TRight['doWork']>[0],
-  TContextOutLeft extends PromiseResolveOrSync<ReturnType<TLeft['doWork']>>,
-  TContextOutRight extends PromiseResolveOrSync<ReturnType<TLeft['doWork']>>
->(
-  left: TLeft,
-  right: TRight
-): HasDoWork<
-  TContextInLeft &
-    Omit<
-      TContextInRight,
-      TContextOutLeft extends void ? keyof {} : keyof TContextOutLeft
-    >,
-  TContextOutRight &
-    Omit<
-      TContextOutLeft,
-      TContextOutRight extends void ? keyof {} : keyof TContextOutRight
-    >
->;
-
-// left has doWork, right doesn't
-export function HTPipeDoWork<
-  TLeft extends HasDoWork<
-    any,
-    | void
-    | (TRight extends HasDoWork<any, any>
-        ? Pick<
-            Parameters<TRight['doWork']>[0],
-            keyof PromiseResolveOrSync<
-              ReturnType<
-                TLeft extends HasDoWork<any, any> ? TLeft['doWork'] : () => {}
-              >
-            >
-          >
-        : any)
-  >,
-  TRight extends OptionallyHasDoWork<any, any>,
-  TContextInLeft extends Parameters<TLeft['doWork']>[0],
-  TContextOutLeft extends PromiseResolveOrSync<TLeft['doWork']>
->(left: TLeft, right: TRight): HasDoWork<TContextInLeft, TContextOutLeft>;
-
-// right has do doWork, left doesn't
-export function HTPipeDoWork<
-  TLeft extends OptionallyHasDoWork<
-    any,
-    | void
-    | (TRight extends HasDoWork<any, any>
-        ? Pick<
-            Parameters<TRight['doWork']>[0],
-            keyof PromiseResolveOrSync<
-              ReturnType<
-                TLeft extends HasDoWork<any, any> ? TLeft['doWork'] : () => {}
-              >
-            >
-          >
-        : any)
-  >,
-  TRight extends HasDoWork<any, any>,
-  TContextInRight extends Parameters<TRight['doWork']>[0],
-  TContextOutRight extends PromiseResolveOrSync<ReturnType<TRight['doWork']>>
->(left: TLeft, right: TRight): HasDoWork<TContextInRight, TContextOutRight>;
-
-// right and left doesn't have doWork
-export function HTPipeDoWork<
-  TLeft extends OptionallyHasDoWork<
-    any,
-    | void
-    | (TRight extends HasDoWork<any, any>
-        ? Pick<
-            Parameters<TRight['doWork']>[0],
-            keyof PromiseResolveOrSync<
-              ReturnType<
-                TLeft extends HasDoWork<any, any> ? TLeft['doWork'] : () => {}
-              >
-            >
-          >
-        : any)
-  >,
-  TRight extends OptionallyHasDoWork<any, any>
->(left: TLeft, right: TRight): {};
-
-// main doWork HTPipe
-export function HTPipeDoWork<
-  TLeft extends OptionallyHasDoWork<any, any>,
-  TRight extends OptionallyHasDoWork<any, any>,
-  TContextInLeft extends TLeft extends HasDoWork<any, any>
-    ? Parameters<TLeft['doWork']>[0]
-    : never,
-  TContextInRight extends TRight extends HasDoWork<any, any>
-    ? Parameters<TRight['doWork']>[0]
-    : never,
-  TContextOutLeft extends TLeft extends HasDoWork<any, any>
-    ? PromiseResolveOrSync<ReturnType<TLeft['doWork']>>
-    : never,
-  TContextOutRight extends TRight extends HasDoWork<any, any>
-    ? PromiseResolveOrSync<ReturnType<TRight['doWork']>>
-    : never
+export function HTPipeExtractInputs<
+  TLeft extends OptionallyHasExtractInputs<any, any>,
+  TRight extends OptionallyHasExtractInputs<any, any>
 >(left: TLeft, right: TRight) {
-  if (isHasDoWork(left) && isHasDoWork(right)) {
+  if (isHasExtractInputs(left) && isHasExtractInputs(right)) {
     return {
-      doWork: async (
-        context: TContextOutLeft extends TContextInRight
-          ? TContextInLeft
-          : TContextInRight & TContextInLeft
-      ) => {
-        const leftOut = (await Promise.resolve(left.doWork(context))) || {};
+      extractInputs: (context: any) => {
+        const leftOut = left.extractInputs(context) || {};
         const rightIn = {
           ...context,
           ...leftOut,
         };
-        const rightOut = (await Promise.resolve(right.doWork(rightIn))) || {};
-        return { ...leftOut, ...rightOut };
+        const rightOut = right.extractInputs(rightIn) || {};
+        return {
+          ...leftOut,
+          ...rightOut,
+        };
+      },
+    };
+  } else if (isHasExtractInputs(left)) {
+    return { extractInputs: left.extractInputs };
+  } else if (isHasExtractInputs(right)) {
+    return { extractInputs: right.extractInputs };
+  } else {
+    return {};
+  }
+}
+
+export function HTPipeDoWork<
+  TLeft extends OptionallyHasDoWork<any, any>,
+  TRight extends OptionallyHasDoWork<any, any>
+>(left: TLeft, right: TRight) {
+  if (isHasDoWork(left) && isHasDoWork(right)) {
+    return {
+      doWork: async (context: any) => {
+        await Promise.resolve(left.doWork(context));
+        return await Promise.resolve(right.doWork(context));
       },
     };
   } else if (isHasDoWork(left)) {
@@ -2179,312 +1816,34 @@ export function HTPipeDoWork<
   }
 }
 
-// left has respond and right has respond
-export function HTPipeRespond<
-  TLeft extends HasRespond<
-    any,
-    TRight extends HasRespond<any, any> ? Parameters<TRight['respond']>[0] : any
-  >,
-  TRight extends HasRespond<any, any>,
-  TContextInLeft extends Parameters<TLeft['respond']>[0],
-  TContextOutRight extends ReturnType<TRight['respond']>
->(left: TLeft, right: TRight): HasRespond<TContextInLeft, TContextOutRight>;
-
-// left has respond and right doesn't
-export function HTPipeRespond<
-  TLeft extends HasRespond<
-    any,
-    TRight extends HasRespond<any, any> ? Parameters<TRight['respond']>[0] : any
-  >,
-  TRight extends MightHaveRespond<any, any>,
-  TContextInLeft extends Parameters<TLeft['respond']>[0],
-  TContextOutLeft extends ReturnType<TLeft['respond']>
->(left: TLeft, right: TRight): HasRespond<TContextInLeft, TContextOutLeft>;
-
-// right has respond and left doesn't
-export function HTPipeRespond<
-  TLeft extends MightHaveRespond<
-    any,
-    TRight extends HasRespond<any, any> ? Parameters<TRight['respond']>[0] : any
-  >,
-  TRight extends HasRespond<any, any>,
-  TContextInRight extends Parameters<TRight['respond']>[0],
-  TContextOutRight extends ReturnType<TRight['respond']>
->(left: TLeft, right: TRight): HasRespond<TContextInRight, TContextOutRight>;
-
-// right and left doesn't have respond
-export function HTPipeRespond<
-  TLeft extends MightHaveRespond<
-    any,
-    TRight extends HasRespond<any, any> ? Parameters<TRight['respond']>[0] : any
-  >,
-  TRight extends MightHaveRespond<any, any>
->(left: TLeft, right: TRight): {};
-
-// main respond HTPipe function
-export function HTPipeRespond<
-  TLeft extends MightHaveRespond<any, any>,
-  TRight extends MightHaveRespond<any, any>,
-  TContextInLeft extends TLeft extends HasRespond<any, any>
-    ? Parameters<TLeft['respond']>[0]
-    : never
+export function HTPipeSanitizeInputs<
+  TLeft extends OptionallyHasSanitizeInputs<any, any>,
+  TRight extends OptionallyHasSanitizeInputs<any, any>
 >(left: TLeft, right: TRight) {
-  if (isHasRespond(left) && isHasRespond(right)) {
+  if (isHasSanitizeInputs(left) && isHasSanitizeInputs(right)) {
     return {
-      respond: (context: TContextInLeft) => {
-        const leftOut = left.respond(context);
-        const rightOut = right.respond(leftOut.unsafeResponse);
-        return {
-          unsafeResponse: rightOut.unsafeResponse,
-          status:
-            rightOut.status === undefined ? leftOut.status : rightOut.status,
-        };
-      },
-    };
-  } else if (isHasRespond(left)) {
-    return { respond: left.respond };
-  } else if (isHasRespond(right)) {
-    return { respond: right.respond };
-  } else {
-    return {};
-  }
-}
-
-// left has sanitizeParams and right has sanitizeParams
-export function HTPipeSanitizeParams<
-  TLeft extends HasSanitizeParams<
-    any,
-    TRight extends HasSanitizeParams<any, any>
-      ? Parameters<TRight['sanitizeParams']>[0]
-      : any
-  >,
-  TRight extends HasSanitizeParams<any, any>,
-  TContextInLeft extends Parameters<TLeft['sanitizeParams']>[0],
-  TContextOutRight extends ReturnType<TRight['sanitizeParams']>
->(
-  left: TLeft,
-  right: TRight
-): HasSanitizeParams<TContextInLeft, TContextOutRight>;
-
-// left has sanitizeParams and right doesn't
-export function HTPipeSanitizeParams<
-  TLeft extends HasSanitizeParams<
-    any,
-    TRight extends HasSanitizeParams<any, any>
-      ? Parameters<TRight['sanitizeParams']>[0]
-      : any
-  >,
-  TRight extends OptionallyHasSanitizeParams<any, any>,
-  TContextInLeft extends Parameters<TLeft['sanitizeParams']>[0],
-  TContextOutLeft extends ReturnType<TLeft['sanitizeParams']>
->(
-  left: TLeft,
-  right: TRight
-): HasSanitizeParams<TContextInLeft, TContextOutLeft>;
-
-// right has sanitizeParams and left doesn't
-export function HTPipeSanitizeParams<
-  TLeft extends OptionallyHasSanitizeParams<
-    any,
-    TRight extends HasSanitizeParams<any, any>
-      ? Parameters<TRight['sanitizeParams']>[0]
-      : any
-  >,
-  TRight extends HasSanitizeParams<any, any>,
-  TContextInRight extends Parameters<TRight['sanitizeParams']>[0],
-  TContextOutRight extends ReturnType<TRight['sanitizeParams']>[0]
->(
-  left: TLeft,
-  right: TRight
-): HasSanitizeParams<TContextInRight, TContextOutRight>;
-
-// left and right doesn't have sanitizeParams
-export function HTPipeSanitizeParams<
-  TLeft extends OptionallyHasSanitizeParams<
-    any,
-    TRight extends HasSanitizeParams<any, any>
-      ? Parameters<TRight['sanitizeParams']>[0]
-      : any
-  >,
-  TRight extends OptionallyHasSanitizeParams<any, any>
->(left: TLeft, right: TRight): {};
-
-// main sanitizeParams HTPipe function
-export function HTPipeSanitizeParams<
-  TLeft extends OptionallyHasSanitizeParams<any, any>,
-  TRight extends OptionallyHasSanitizeParams<any, any>,
-  TContextInLeft extends TLeft extends HasSanitizeParams<any, any>
-    ? Parameters<TLeft['sanitizeParams']>[0]
-    : never
->(left: TLeft, right: TRight) {
-  if (isHasSanitizeParams(left) && isHasSanitizeParams(right)) {
-    return {
-      sanitizeParams: (context: TContextInLeft) => {
-        const leftOut = left.sanitizeParams(context) || {};
-        const rightOut = right.sanitizeParams(leftOut) || {};
+      sanitizeInputs: (context: any) => {
+        const leftOut = left.sanitizeInputs(context) || {};
+        const rightOut = right.sanitizeInputs(leftOut) || {};
         return rightOut;
       },
     };
-  } else if (isHasSanitizeParams(left)) {
-    return { sanitizeParams: left.sanitizeParams };
-  } else if (isHasSanitizeParams(right)) {
-    return { sanitizeParams: right.sanitizeParams };
+  } else if (isHasSanitizeInputs(left)) {
+    return { sanitizeInputs: left.sanitizeInputs };
+  } else if (isHasSanitizeInputs(right)) {
+    return { sanitizeInputs: right.sanitizeInputs };
   } else {
     return {};
   }
 }
 
-// left has sanitizeBody and right has sanitizeBody
-export function HTPipeSanitizeBody<
-  TLeft extends HasSanitizeBody<
-    any,
-    TRight extends HasSanitizeBody<any, any>
-      ? Parameters<TRight['sanitizeBody']>[0]
-      : any
-  >,
-  TRight extends HasSanitizeBody<any, any>,
-  TContextInLeft extends Parameters<TLeft['sanitizeBody']>[0],
-  TContextOutRight extends ReturnType<TRight['sanitizeBody']>
->(
-  left: TLeft,
-  right: TRight
-): HasSanitizeBody<TContextInLeft, TContextOutRight>;
-
-// left has sanitizeBody and right doesn't
-export function HTPipeSanitizeBody<
-  TLeft extends HasSanitizeBody<
-    any,
-    TRight extends HasSanitizeBody<any, any>
-      ? Parameters<TRight['sanitizeBody']>[0]
-      : any
-  >,
-  TRight extends OptionallyHasSanitizeBody<any, any>,
-  TContextInLeft extends Parameters<TLeft['sanitizeBody']>[0],
-  TContextOutLeft extends ReturnType<TLeft['sanitizeBody']>
->(left: TLeft, right: TRight): HasSanitizeBody<TContextInLeft, TContextOutLeft>;
-
-// right has sanitizeBody and left doesn't
-export function HTPipeSanitizeBody<
-  TLeft extends OptionallyHasSanitizeBody<
-    any,
-    TRight extends HasSanitizeBody<any, any>
-      ? Parameters<TRight['sanitizeBody']>[0]
-      : any
-  >,
-  TRight extends HasSanitizeBody<any, any>,
-  TContextInRight extends Parameters<TRight['sanitizeBody']>[0],
-  TContextOutRight extends ReturnType<TRight['sanitizeBody']>[0]
->(
-  left: TLeft,
-  right: TRight
-): HasSanitizeBody<TContextInRight, TContextOutRight>;
-
-// left and right doesn't have sanitizeBody
-export function HTPipeSanitizeBody<
-  TLeft extends OptionallyHasSanitizeBody<
-    any,
-    TRight extends HasSanitizeBody<any, any>
-      ? Parameters<TRight['sanitizeBody']>[0]
-      : any
-  >,
-  TRight extends OptionallyHasSanitizeBody<any, any>
->(left: TLeft, right: TRight): {};
-
-// main sanitizeBody HTPipe function
-export function HTPipeSanitizeBody<
-  TLeft extends OptionallyHasSanitizeBody<any, any>,
-  TRight extends OptionallyHasSanitizeBody<any, any>,
-  TContextInLeft extends TLeft extends HasSanitizeBody<any, any>
-    ? Parameters<TLeft['sanitizeBody']>[0]
-    : never
->(left: TLeft, right: TRight) {
-  if (isHasSanitizeBody(left) && isHasSanitizeBody(right)) {
-    return {
-      sanitizeBody: (context: TContextInLeft) => {
-        const leftOut = left.sanitizeBody(context) || {};
-        const rightOut = right.sanitizeBody(leftOut) || {};
-        return rightOut;
-      },
-    };
-  } else if (isHasSanitizeBody(left)) {
-    return { sanitizeBody: left.sanitizeBody };
-  } else if (isHasSanitizeBody(right)) {
-    return { sanitizeBody: right.sanitizeBody };
-  } else {
-    return {};
-  }
-}
-
-// left has sanitizeResponse and right has sanitizeResponse
-export function HTPipeSanitizeResponse<
-  TLeft extends HasSanitizeResponse<
-    any,
-    TRight extends HasSanitizeResponse<any, any>
-      ? Parameters<TRight['sanitizeResponse']>[0]
-      : any
-  >,
-  TRight extends HasSanitizeResponse<any, any>,
-  TContextInLeft extends Parameters<TLeft['sanitizeResponse']>[0],
-  TContextOutRight extends ReturnType<TRight['sanitizeResponse']>
->(
-  left: TLeft,
-  right: TRight
-): HasSanitizeResponse<TContextInLeft, TContextOutRight>;
-
-// left has sanitizeResponse and right doesn't
-export function HTPipeSanitizeResponse<
-  TLeft extends HasSanitizeResponse<
-    any,
-    TRight extends HasSanitizeResponse<any, any>
-      ? Parameters<TRight['sanitizeResponse']>[0]
-      : any
-  >,
-  TRight extends MightHaveSanitizeResponse<any, any>,
-  TContextInLeft extends Parameters<TLeft['sanitizeResponse']>[0],
-  TContextOutLeft extends ReturnType<TLeft['sanitizeResponse']>
->(
-  left: TLeft,
-  right: TRight
-): HasSanitizeResponse<TContextInLeft, TContextOutLeft>;
-
-// right has sanitizeResponse and left doesn't
-export function HTPipeSanitizeResponse<
-  TLeft extends MightHaveSanitizeResponse<
-    any,
-    TRight extends HasSanitizeResponse<any, any>
-      ? Parameters<TRight['sanitizeResponse']>[0]
-      : any
-  >,
-  TRight extends HasSanitizeResponse<any, any>,
-  TContextInRight extends Parameters<TRight['sanitizeResponse']>[0],
-  TContextOutRight extends ReturnType<TRight['sanitizeResponse']>[0]
->(
-  left: TLeft,
-  right: TRight
-): HasSanitizeResponse<TContextInRight, TContextOutRight>;
-
-// left and right doesn't have sanitizeResponse
-export function HTPipeSanitizeResponse<
-  TLeft extends MightHaveSanitizeResponse<
-    any,
-    TRight extends HasSanitizeResponse<any, any>
-      ? Parameters<TRight['sanitizeResponse']>[0]
-      : any
-  >,
-  TRight extends MightHaveSanitizeResponse<any, any>
->(left: TLeft, right: TRight): {};
-
-// main sanitizeResponse HTPipe function
 export function HTPipeSanitizeResponse<
   TLeft extends MightHaveSanitizeResponse<any, any>,
-  TRight extends MightHaveSanitizeResponse<any, any>,
-  TContextInLeft extends TLeft extends HasSanitizeResponse<any, any>
-    ? Parameters<TLeft['sanitizeResponse']>[0]
-    : never
+  TRight extends MightHaveSanitizeResponse<any, any>
 >(left: TLeft, right: TRight) {
   if (isHasSanitizeResponse(left) && isHasSanitizeResponse(right)) {
     return {
-      sanitizeResponse: (context: TContextInLeft) => {
+      sanitizeResponse: (context: any) => {
         const leftOut = left.sanitizeResponse(context) || {};
         const rightOut = right.sanitizeResponse(leftOut) || {};
         return rightOut;
@@ -2501,6 +1860,7 @@ export function HTPipeSanitizeResponse<
 
 export * from './core';
 export * from './express';
+export * from './trpc';
 export * from './mongoose';
 export * from './zod';
 export * from './user';

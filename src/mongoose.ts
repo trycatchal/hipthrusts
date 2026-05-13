@@ -1,10 +1,9 @@
 import Boom from '@hapi/boom';
+import { WithInputSlice } from './index';
 import {
   AttachData,
   DoWork,
-  SanitizeBody,
-  SanitizeParams,
-  SanitizeQueryParams,
+  SanitizeInputs,
   SanitizeResponse,
 } from './lifecycle-functions';
 import { Constructor } from './types';
@@ -31,10 +30,6 @@ export function htMongooseFactory(mongoose: any) {
   function findByIdRequired(Model: ModelWithFindById) {
     // tslint:disable-next-line:only-arrow-functions
     return async function(id: string) {
-      // prevent accidental searching for all from previous stages
-      // (e.g. if someone forgot to make id param required in schema so
-      // validation passes when it shouldn't - this example is b/c
-      // mongoose won't initialize with invalid ObjectIds passed to it.
       if (!id || !id.toString()) {
         throw Boom.badRequest('Missing dependent resource ID');
       }
@@ -71,7 +66,6 @@ export function htMongooseFactory(mongoose: any) {
 
   function deepWipeDefault(obj: any): any {
     if (Array.isArray(obj)) {
-      // if this looks weird, realize that "enum" takes an array ;)
       return obj.map(elm => deepWipeDefault(elm));
     } else if (typeof obj === 'object' && !obj.instanceOfSchema) {
       return Object.keys(obj).reduce((acc, key) => {
@@ -114,60 +108,60 @@ export function htMongooseFactory(mongoose: any) {
       new mongoose.Document(initializerPojo, schema);
   }
 
+  // Validates the whole inputs object against a single mongoose schema.
+  // For per-slice validation (one schema per params/body/etc.), use SanitizeInputsSliceWithMongoose.
   // @note for docs: NEVER use _id - mongoose gives it special treatment
-  // also, ALWAYS rememver to make required fields required cause mongoose will STRIP invalid fields first!
-  // figure out how to make that security gotcha harder to happen
-  function SanitizeParamsWithMongoose<
-    TSafeParam extends ReturnType<TInstance['toObject']>,
+  // also, ALWAYS remember to make required fields required cause mongoose will STRIP invalid fields first!
+  function SanitizeInputsWithMongoose<
+    TSafe extends ReturnType<TInstance['toObject']>,
     TDocFactory extends DocumentFactory<any>,
     TInstance extends ReturnType<TDocFactory>,
-    TUnsafeParam extends object
-  >(DocFactory: TDocFactory) {
-    return SanitizeParams((unsafeParams: TUnsafeParam) => {
-      const doc = DocFactory(unsafeParams);
-      const validateErrors = doc.validateSync();
+    TUnsafe extends object
+  >(DocFactory: TDocFactory, options?: { validateModifiedOnly?: boolean }) {
+    return SanitizeInputs((unsafeInputs: TUnsafe) => {
+      const doc = DocFactory(unsafeInputs);
+      const validateErrors = doc.validateSync(
+        undefined,
+        options?.validateModifiedOnly
+          ? { validateModifiedOnly: true }
+          : undefined
+      );
       if (validateErrors !== undefined) {
-        throw Boom.badRequest('Params not valid');
+        throw Boom.badRequest('Inputs not valid');
       }
-      // @tswtf: why do I need to force this?!
-      return doc.toObject({ transform: stripIdTransform }) as TSafeParam;
+      return doc.toObject({ transform: stripIdTransform }) as TSafe;
     });
   }
 
-  function SanitizeQueryParamsWithMongoose<
-    TSafeQueryParam extends ReturnType<TInstance['toObject']>,
+  // Per-slice mongoose validation; composes via WithInputSlice for per-slot ergonomics.
+  // Example: SanitizeInputsSliceWithMongoose('params', ThingByIdParamFactory)
+  function SanitizeInputsSliceWithMongoose<
+    TSliceName extends string,
+    TSafeSlice extends ReturnType<TInstance['toObject']>,
     TDocFactory extends DocumentFactory<any>,
     TInstance extends ReturnType<TDocFactory>,
-    TUnsafeQueryParam extends object
-  >(DocFactory: TDocFactory) {
-    return SanitizeQueryParams((unsafeQueryParams: TUnsafeQueryParam) => {
-      const doc = DocFactory(unsafeQueryParams);
-      const validateErrors = doc.validateSync();
-      if (validateErrors !== undefined) {
-        throw Boom.badRequest('Query params not valid');
+    TUnsafeSlice extends object
+  >(
+    sliceName: TSliceName,
+    DocFactory: TDocFactory,
+    options?: { validateModifiedOnly?: boolean }
+  ) {
+    return WithInputSlice<TSliceName, TUnsafeSlice, TSafeSlice>(
+      sliceName,
+      (unsafeSlice: TUnsafeSlice) => {
+        const doc = DocFactory(unsafeSlice);
+        const validateErrors = doc.validateSync(
+          undefined,
+          options?.validateModifiedOnly
+            ? { validateModifiedOnly: true }
+            : undefined
+        );
+        if (validateErrors !== undefined) {
+          throw Boom.badRequest(`${sliceName} not valid`);
+        }
+        return doc.toObject({ transform: stripIdTransform }) as TSafeSlice;
       }
-      return doc.toObject({ transform: stripIdTransform }) as TSafeQueryParam;
-    });
-  }
-
-  // @note: sanitize body validates modified only!  This is cause you usually will only send fields to update.
-  function SanitizeBodyWithMongoose<
-    TSafeBody extends ReturnType<TInstance['toObject']>,
-    TDocFactory extends DocumentFactory<any>,
-    TInstance extends ReturnType<TDocFactory>,
-    TUnsafeBody extends object
-  >(DocFactory: TDocFactory) {
-    return SanitizeBody((unsafeBody: TUnsafeBody) => {
-      const doc = DocFactory(unsafeBody);
-      const validateErrors = doc.validateSync(undefined, {
-        validateModifiedOnly: true,
-      });
-      if (validateErrors !== undefined) {
-        throw Boom.badRequest('Body not valid');
-      }
-      // @tswtf: why do I need to force this?!
-      return doc.toObject({ transform: stripIdTransform }) as TSafeBody;
-    });
+    );
   }
 
   function SaveOnDocumentFrom(propertyKeyOfDocument: string) {
@@ -186,15 +180,23 @@ export function htMongooseFactory(mongoose: any) {
     });
   }
 
+  // Updates a document with data from a key on context. By default reads from
+  // `context.inputs.body` (the canonical body slice). Pass `propertyKeyWithNewData`
+  // as a dot path or top-level key for custom layouts.
   function UpdateDocumentFromTo(
     propertyKeyOfDocument: string,
-    propertyKeyWithNewData: string = 'body'
+    propertyKeyWithNewData: string = 'inputs.body'
   ) {
+    const pathSegments = propertyKeyWithNewData.split('.');
+    function readPath(ctx: any) {
+      return pathSegments.reduce(
+        (acc, seg) => (acc == null ? acc : acc[seg]),
+        ctx
+      );
+    }
     return DoWork(async (context: any) => {
       if (context[propertyKeyOfDocument]) {
-        return await context[propertyKeyOfDocument].set(
-          context[propertyKeyWithNewData]
-        );
+        return await context[propertyKeyOfDocument].set(readPath(context));
       } else {
         throw Boom.badRequest('Resource not found');
       }
@@ -208,7 +210,6 @@ export function htMongooseFactory(mongoose: any) {
   >(DocFactory: TDocFactory) {
     return SanitizeResponse((unsafeResponse: any) => {
       const doc = DocFactory(unsafeResponse);
-      // @tswtf: why do I need to force this?!
       return doc.toObject() as TSafeResponse;
     });
   }
@@ -226,9 +227,8 @@ export function htMongooseFactory(mongoose: any) {
   }
 
   return {
-    SanitizeBodyWithMongoose,
-    SanitizeParamsWithMongoose,
-    SanitizeQueryParamsWithMongoose,
+    SanitizeInputsWithMongoose,
+    SanitizeInputsSliceWithMongoose,
     PojoToDocument,
     SanitizeResponseWithMongoose,
     UpdateDocumentFromTo,

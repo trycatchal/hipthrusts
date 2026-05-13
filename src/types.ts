@@ -3,19 +3,12 @@ export type Constructor<T = {}> = new (...args: any[]) => T;
 export type PromiseOrSync<T> = Promise<T> | T;
 export type PromiseResolveOrSync<T> = T extends Promise<infer U> ? U : T;
 
-export interface HipWorkResponse<ResponseShape> {
-  unsafeResponse: ResponseShape;
-  status?: number;
-}
-
 export type AllAsyncStageKeys = 'attachData' | 'finalAuthorize' | 'doWork';
 export type AllSyncStageKeys =
   | 'initPreContext'
-  | 'sanitizeParams'
-  | 'sanitizeQueryParams'
-  | 'sanitizeBody'
+  | 'extractInputs'
+  | 'sanitizeInputs'
   | 'preAuthorize'
-  | 'respond'
   | 'sanitizeResponse';
 export type AllStageKeys = AllAsyncStageKeys | AllSyncStageKeys;
 
@@ -23,45 +16,26 @@ export interface OptionallyHasInitPreContext<TUnsafe, TContextInit> {
   initPreContext?: (unsafe: TUnsafe) => TContextInit;
 }
 
-// @todo: maybe this needs some rework to ensure it's not express-biased
 export interface HasInitPreContext<TUnsafe, TContextInit> {
   initPreContext: (unsafe: TUnsafe) => TContextInit;
 }
 
-// @todo: should all these contexts be constrained to be object-like?
-
-export interface OptionallyHasSanitizeParams<TUnsafeParams, TSafeParams> {
-  sanitizeParams?: (unsafeParams: TUnsafeParams) => TSafeParams;
+export interface OptionallyHasExtractInputs<TContextIn, TUnsafeInputs> {
+  extractInputs?: (context: TContextIn) => TUnsafeInputs;
 }
 
-export interface HasSanitizeParams<TUnsafeParams, TSafeParams> {
-  sanitizeParams: (unsafeParams: TUnsafeParams) => TSafeParams;
+export interface HasExtractInputs<TContextIn, TUnsafeInputs> {
+  extractInputs: (context: TContextIn) => TUnsafeInputs;
 }
 
-export interface OptionallyHasSanitizeQueryParams<
-  TUnsafeQueryParams,
-  TSafeQueryParams
-> {
-  sanitizeQueryParams?: (
-    unsafeQueryParams: TUnsafeQueryParams
-  ) => TSafeQueryParams;
+export interface OptionallyHasSanitizeInputs<TUnsafeInputs, TSafeInputs> {
+  sanitizeInputs?: (unsafeInputs: TUnsafeInputs) => TSafeInputs;
 }
 
-export interface HasSanitizeQueryParams<TUnsafeQueryParams, TSafeQueryParams> {
-  sanitizeQueryParams: (
-    unsafeQueryParams: TUnsafeQueryParams
-  ) => TSafeQueryParams;
+export interface HasSanitizeInputs<TUnsafeInputs, TSafeInputs> {
+  sanitizeInputs: (unsafeInputs: TUnsafeInputs) => TSafeInputs;
 }
 
-export interface OptionallyHasSanitizeBody<TUnsafeBody, TSafeBody> {
-  sanitizeBody?: (unsafeBody: TUnsafeBody) => TSafeBody;
-}
-
-export interface HasSanitizeBody<TUnsafeBody, TSafeBody> {
-  sanitizeBody: (unsafeBody: TUnsafeBody) => TSafeBody;
-}
-
-// @todo: should TContextOut be constrained to be object-like or booly?
 export interface HasPreAuthorize<TContextIn, TContextOut> {
   preAuthorize: (context: TContextIn) => TContextOut;
 }
@@ -78,7 +52,6 @@ export interface HasAttachData<TContextIn, TContextOut> {
   attachData: (context: TContextIn) => PromiseOrSync<TContextOut>;
 }
 
-// @todo: should TContextOut be constrained to be object-like or booly?
 export interface MightHaveFinalAuthorize<TContextIn, TContextOut> {
   finalAuthorize?: (context: TContextIn) => PromiseOrSync<TContextOut>;
 }
@@ -87,62 +60,48 @@ export interface HasFinalAuthorize<TContextIn, TContextOut> {
   finalAuthorize: (context: TContextIn) => PromiseOrSync<TContextOut>;
 }
 
-export interface OptionallyHasDoWork<TContextIn, TContextOut> {
-  doWork?: (context: TContextIn) => PromiseOrSync<TContextOut>;
+export interface OptionallyHasDoWork<TContextIn, TUnsafeResponse> {
+  doWork?: (context: TContextIn) => PromiseOrSync<TUnsafeResponse>;
 }
 
-export interface HasDoWork<TContextIn, TContextOut> {
-  doWork: (context: TContextIn) => PromiseOrSync<TContextOut>;
-}
-
-export interface MightHaveRespond<TContextIn, TUnsafeResponse> {
-  respond?: (context: TContextIn) => HipWorkResponse<TUnsafeResponse>;
-}
-
-export interface HasRespond<TContextIn, TUnsafeResponse> {
-  respond: (context: TContextIn) => HipWorkResponse<TUnsafeResponse>;
+export interface HasDoWork<TContextIn, TUnsafeResponse> {
+  doWork: (context: TContextIn) => PromiseOrSync<TUnsafeResponse>;
 }
 
 export interface MightHaveSanitizeResponse<TUnsafeResponse, TResponse> {
-  sanitizeResponse?: (context: TUnsafeResponse) => TResponse;
+  sanitizeResponse?: (unsafe: TUnsafeResponse) => TResponse;
 }
 
 export interface HasSanitizeResponse<TUnsafeResponse, TResponse> {
-  sanitizeResponse: (context: TUnsafeResponse) => TResponse;
+  sanitizeResponse: (unsafe: TUnsafeResponse) => TResponse;
 }
 
-export type HasAllRequireds = HasPreAuthorize<any, any> &
+export type HasAllRequireds = HasSanitizeInputs<any, any> &
+  HasPreAuthorize<any, any> &
   HasFinalAuthorize<any, any> &
-  HasRespond<any, any> &
+  HasDoWork<any, any> &
   HasSanitizeResponse<any, any>;
 
 export type HasAllNotRequireds = OptionallyHasInitPreContext<any, any> &
-  OptionallyHasSanitizeParams<any, any> &
-  OptionallyHasSanitizeQueryParams<any, any> &
-  OptionallyHasSanitizeBody<any, any> &
-  OptionallyHasAttachData<any, any> &
-  OptionallyHasDoWork<any, any>;
+  OptionallyHasExtractInputs<any, any> &
+  OptionallyHasAttachData<any, any>;
 
 export type HasAllStagesNotOptionals = HasInitPreContext<any, any> &
-  HasSanitizeParams<any, any> &
-  HasSanitizeQueryParams<any, any> &
-  HasSanitizeBody<any, any> &
+  HasExtractInputs<any, any> &
+  HasSanitizeInputs<any, any> &
   HasPreAuthorize<any, any> &
   HasAttachData<any, any> &
   HasFinalAuthorize<any, any> &
   HasDoWork<any, any> &
-  HasRespond<any, any> &
   HasSanitizeResponse<any, any>;
 
 export type HasAllStagesOptionals = OptionallyHasInitPreContext<any, any> &
-  OptionallyHasSanitizeParams<any, any> &
-  OptionallyHasSanitizeQueryParams<any, any> &
-  OptionallyHasSanitizeBody<any, any> &
+  OptionallyHasExtractInputs<any, any> &
+  OptionallyHasSanitizeInputs<any, any> &
   MightHavePreAuthorize<any, any> &
   OptionallyHasAttachData<any, any> &
   MightHaveFinalAuthorize<any, any> &
   OptionallyHasDoWork<any, any> &
-  MightHaveRespond<any, any> &
   MightHaveSanitizeResponse<any, any>;
 
 /*
@@ -166,12 +125,8 @@ type IntersectProperties<T extends object> = keyof T extends never
   ? A
   : never;
 
-type ReturnedTypeUpToPreAuthorize<TValue, TKey> = TKey extends 'body'
-  ? HasSanitizeBody<any, TValue>
-  : TKey extends 'params'
-  ? HasSanitizeParams<any, TValue>
-  : TKey extends 'queryParams'
-  ? HasSanitizeQueryParams<any, TValue>
+type ReturnedTypeUpToPreAuthorize<TValue, TKey> = TKey extends 'inputs'
+  ? HasSanitizeInputs<any, TValue>
   : TKey extends 'preContext'
   ? HasInitPreContext<any, TValue>
   : {};
@@ -199,7 +154,7 @@ type ReturnedSomewhereUpToAttachData<
   ? HasPreAuthorize<any, Record<TKey, TValue>>
   : never;
 
-type AllInitKeys = 'preContext' | 'params' | 'queryParams' | 'body';
+type AllInitKeys = 'preContext' | 'inputs';
 
 export type AttachDataReqsSatisfiedOptional<T> = IntersectProperties<
   {
@@ -252,39 +207,15 @@ type ReturnedSomewhereUpToDoWork<
 export type DoWorkReqsSatisfiedOptional<T> = IntersectProperties<
   {
     [P in keyof OptionalDoWorkParams<T>]: [P] extends [AllInitKeys]
-      ? ReturnedTypeUpToPreAuthorize<OptionalDoWorkParams<T>, P>
+      ? ReturnedTypeUpToPreAuthorize<OptionalDoWorkParams<T>[P], P>
       : ReturnedSomewhereUpToDoWork<T, OptionalDoWorkParams<T>[P], P>;
   }
 >;
 
-type ReturnedSomewhereUpToRespond<
-  TOut,
-  TValue,
-  TKey extends string | symbol | number
-> = [TOut] extends [HasDoWork<any, Record<TKey, TValue>>]
-  ? HasDoWork<any, TValue>
-  : [TOut] extends [HasFinalAuthorize<any, Record<TKey, TValue>>]
-  ? HasFinalAuthorize<any, Record<TKey, TValue>>
-  : [TOut] extends [HasAttachData<any, Record<TKey, TValue>>]
-  ? HasAttachData<any, Record<TKey, TValue>>
-  : [TOut] extends [HasPreAuthorize<any, Record<TKey, TValue>>]
-  ? HasPreAuthorize<any, Record<TKey, TValue>>
-  : never;
-
-export type RespondReqsSatisfied<
-  T extends HasRespond<any, any>
-> = IntersectProperties<
-  {
-    [P in keyof Parameters<T['respond']>[0]]: [P] extends [AllInitKeys]
-      ? ReturnedTypeUpToPreAuthorize<Parameters<T['respond']>[0][P], P>
-      : ReturnedSomewhereUpToRespond<T, Parameters<T['respond']>[0][P], P>;
-  }
->;
-
 type ReturnedSomewhereUpToSanitizeResponse<TOut, TValue> = [TOut] extends [
-  HasRespond<any, TValue>
+  HasDoWork<any, TValue>
 ]
-  ? HasRespond<any, TValue>
+  ? HasDoWork<any, TValue>
   : never;
 
 export type SanitizeResponseReqsSatisfied<

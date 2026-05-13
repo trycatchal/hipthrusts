@@ -1,10 +1,9 @@
 import Boom from '@hapi/boom';
 import { z } from 'zod';
+import { WithInputSlice } from './index';
 import {
   AttachData,
-  SanitizeBody,
-  SanitizeParams,
-  SanitizeQueryParams,
+  SanitizeInputs,
   SanitizeResponse,
 } from './lifecycle-functions';
 
@@ -14,50 +13,41 @@ export function htZodFactory() {
     return rest;
   }
 
-  function SanitizeParamsWithZod<
-    TSafeParam extends z.infer<TSchema>,
+  function SanitizeInputsWithZod<
+    TSafe extends z.infer<TSchema>,
     TSchema extends z.ZodType<any, any, any>,
-    TUnsafeParam extends object
+    TUnsafe extends object
   >(schema: TSchema) {
-    return SanitizeParams((unsafeParams: TUnsafeParam) => {
-      const parseResult = schema.safeParse(unsafeParams);
+    return SanitizeInputs((unsafeInputs: TUnsafe) => {
+      const parseResult = schema.safeParse(unsafeInputs);
       if (!parseResult.success) {
-        throw Boom.badRequest('Params not valid', parseResult.error);
+        throw Boom.badRequest('Inputs not valid', parseResult.error);
       }
-      return stripIdTransform(parseResult.data) as TSafeParam;
+      return stripIdTransform(parseResult.data) as TSafe;
     });
   }
 
-  function SanitizeQueryParamsWithZod<
-    TSafeQueryParam extends z.infer<TSchema>,
+  function SanitizeInputsSliceWithZod<
+    TSliceName extends string,
+    TSafeSlice extends z.infer<TSchema>,
     TSchema extends z.ZodType<any, any, any>,
-    TUnsafeQueryParam extends object
-  >(schema: TSchema) {
-    return SanitizeQueryParams((unsafeQueryParams: TUnsafeQueryParam) => {
-      const parseResult = schema.safeParse(unsafeQueryParams);
-      if (!parseResult.success) {
-        throw Boom.badRequest('Query params not valid', parseResult.error);
-      }
-      return stripIdTransform(parseResult.data) as TSafeQueryParam;
-    });
-  }
+    TUnsafeSlice extends object
+  >(sliceName: TSliceName, schema: TSchema, options?: { partial?: boolean }) {
+    const effectiveSchema =
+      options?.partial && (schema as any).partial
+        ? (schema as any).partial()
+        : schema;
 
-  // @note: sanitize body validates all fields present in the body
-  // For partial updates, use schema.partial() to make all fields optional
-  function SanitizeBodyWithZod<
-    TSafeBody extends z.infer<TSchema>,
-    TSchema extends z.ZodObject<any, any>,
-    TUnsafeBody extends object
-  >(schema: TSchema, options?: { partial?: boolean }) {
-    const effectiveSchema = options?.partial ? schema.partial() : schema;
-
-    return SanitizeBody((unsafeBody: TUnsafeBody) => {
-      const parseResult = effectiveSchema.safeParse(unsafeBody);
-      if (!parseResult.success) {
-        throw Boom.badRequest('Body not valid', parseResult.error);
+    return WithInputSlice<TSliceName, TUnsafeSlice, TSafeSlice>(
+      sliceName,
+      (unsafeSlice: TUnsafeSlice) => {
+        const parseResult = effectiveSchema.safeParse(unsafeSlice);
+        if (!parseResult.success) {
+          throw Boom.badRequest(`${sliceName} not valid`, parseResult.error);
+        }
+        return stripIdTransform(parseResult.data) as TSafeSlice;
       }
-      return stripIdTransform(parseResult.data) as TSafeBody;
-    });
+    );
   }
 
   function SanitizeResponseWithZod<
@@ -67,9 +57,6 @@ export function htZodFactory() {
     return SanitizeResponse((unsafeResponse: any) => {
       const parseResult = schema.safeParse(unsafeResponse);
       if (!parseResult.success) {
-        // In production, you might want to log this error but return a safe default
-        // or throw an internal server error since response validation failing
-        // indicates a bug in your code, not invalid user input
         throw Boom.internal('Response validation failed', parseResult.error);
       }
       return parseResult.data as TSafeResponse;
@@ -93,9 +80,8 @@ export function htZodFactory() {
   }
 
   return {
-    SanitizeBodyWithZod,
-    SanitizeParamsWithZod,
-    SanitizeQueryParamsWithZod,
+    SanitizeInputsWithZod,
+    SanitizeInputsSliceWithZod,
     SanitizeResponseWithZod,
     PojoToValidated,
     stripIdTransform,
