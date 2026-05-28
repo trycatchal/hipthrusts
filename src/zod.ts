@@ -1,5 +1,5 @@
-import Boom from '@hapi/boom';
 import { z } from 'zod';
+import { HipBadInputs, HipInternal } from './errors';
 import { WithInputSlice } from './index';
 import {
   LoadResources,
@@ -21,7 +21,7 @@ export function htZodFactory() {
     return SanitizeInputs((unsafeInputs: TUnsafe) => {
       const parseResult = schema.safeParse(unsafeInputs);
       if (!parseResult.success) {
-        throw Boom.badRequest('Inputs not valid', parseResult.error);
+        throw new HipBadInputs('Inputs not valid', parseResult.error);
       }
       return stripIdTransform(parseResult.data) as TSafe;
     });
@@ -43,7 +43,7 @@ export function htZodFactory() {
       (unsafeSlice: TUnsafeSlice) => {
         const parseResult = effectiveSchema.safeParse(unsafeSlice);
         if (!parseResult.success) {
-          throw Boom.badRequest(`${sliceName} not valid`, parseResult.error);
+          throw new HipBadInputs(`${sliceName} not valid`, parseResult.error);
         }
         return stripIdTransform(parseResult.data) as TSafeSlice;
       }
@@ -57,7 +57,7 @@ export function htZodFactory() {
     return RedactResponse((unsafeResponse: any) => {
       const parseResult = schema.safeParse(unsafeResponse);
       if (!parseResult.success) {
-        throw Boom.internal('Response validation failed', parseResult.error);
+        throw new HipInternal('Response validation failed', parseResult.error);
       }
       return parseResult.data as TSafeResponse;
     });
@@ -71,7 +71,7 @@ export function htZodFactory() {
     return LoadResources((context: TContextIn) => {
       const parseResult = schema.safeParse(context[pojoKey]);
       if (!parseResult.success) {
-        throw Boom.badRequest('Data validation failed', parseResult.error);
+        throw new HipBadInputs('Data validation failed', parseResult.error);
       }
       return {
         [newValidatedKey]: parseResult.data,

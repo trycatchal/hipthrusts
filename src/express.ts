@@ -1,12 +1,11 @@
+import Boom from '@hapi/boom';
 import { NextFunction, Request, Response } from 'express';
 import {
   assertHipthrustable,
   executeHipthrustable,
-  HasSuccessStatus,
-  HipRedirectException,
-  SuccessStatus,
   withDefaultImplementations,
 } from './core';
+import { HipError, HipRedirect, isHipError } from './errors';
 import {
   LoadResourcesDepsMet,
   ExecuteDepsMet,
@@ -30,6 +29,37 @@ export interface ExpressRawInputs {
 export interface ExpressRaw {
   req: Request;
   res: Response;
+}
+
+// HTTP response metadata an express handler may emit. Lives only on the
+// express adapter — non-HTTP adapters (tRPC, ...) have no equivalent. May be a
+// static object or a function of the final lifecycle context.
+export interface ResponseMeta {
+  status?: number;
+  headers?: Record<string, string>;
+}
+
+export interface HasResponseMeta<TCtx = any> {
+  responseMeta?: ResponseMeta | ((ctx: TCtx) => ResponseMeta);
+}
+
+// Maps a transport-agnostic HipError to its Boom equivalent so existing express
+// error-handling middleware keeps working unchanged.
+function hipErrorToBoom(error: HipError): Error {
+  switch (error.kind) {
+    case 'badInputs':
+      return Boom.badData(error.message, error.detail);
+    case 'unauthorized':
+      return Boom.unauthorized(error.message);
+    case 'forbidden':
+      return Boom.forbidden(error.message);
+    case 'notFound':
+      return Boom.notFound(error.message);
+    case 'conflict':
+      return Boom.conflict(error.message);
+    default:
+      return Boom.badImplementation(error.message);
+  }
 }
 
 // Handler config the dev writes for an express endpoint.
@@ -86,12 +116,12 @@ type ExpressHandlerConfig<
   redactResponse: (
     unsafe: PromiseResolveOrSync<TUnsafeResponse>
   ) => TResponse;
-  successStatus?: SuccessStatus;
+  responseMeta?: ResponseMeta | ((ctx: any) => ResponseMeta);
 };
 
 type InferredHandlerConfig = OptionalStagesShape &
   HasRequiredStages &
-  HasSuccessStatus;
+  HasResponseMeta;
 
 // Identity function for inference-friendly config authoring.
 export const defineExpressHandler = <
@@ -134,7 +164,7 @@ export function toExpressHandler<
     FinalAuthorizeDepsMet<TConf> &
     ExecuteDepsMet<TConf> &
     RedactResponseDepsMet<TConf> &
-    HasSuccessStatus
+    HasResponseMeta
 >(handlingStrategy: TConf) {
   assertHipthrustable(handlingStrategy);
 
@@ -157,17 +187,29 @@ export function toExpressHandler<
     strategyWithBaseline as any
   );
 
+  const responseMeta = (handlingStrategy as HasResponseMeta).responseMeta;
+
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { response, status } = await executeHipthrustable(
+      const { response, context } = await executeHipthrustable(
         fullHipthrustable as any,
-        { req, res },
-        200
+        { req, res }
       );
-      res.status(status).json(response);
+      const meta: ResponseMeta =
+        typeof responseMeta === 'function'
+          ? responseMeta(context)
+          : responseMeta || {};
+      if (meta.headers) {
+        for (const headerName of Object.keys(meta.headers)) {
+          res.setHeader(headerName, meta.headers[headerName]);
+        }
+      }
+      res.status(meta.status || 200).json(response);
     } catch (exception) {
-      if (exception instanceof HipRedirectException) {
+      if (exception instanceof HipRedirect) {
         res.redirect(exception.redirectCode, exception.redirectUrl);
+      } else if (isHipError(exception)) {
+        next(hipErrorToBoom(exception));
       } else {
         next(exception);
       }

@@ -1,7 +1,6 @@
 import {
   assertHipthrustable,
   executeHipthrustable,
-  HasSuccessStatus,
   withDefaultImplementations,
 } from './core';
 import {
@@ -115,8 +114,7 @@ export function toTrpcProcedure<
     LoadResourcesDepsMet<TConf> &
     FinalAuthorizeDepsMet<TConf> &
     ExecuteDepsMet<TConf> &
-    RedactResponseDepsMet<TConf> &
-    HasSuccessStatus
+    RedactResponseDepsMet<TConf>
 >(handlingStrategy: TConf) {
   assertHipthrustable(handlingStrategy);
 
@@ -148,12 +146,13 @@ export function toTrpcProcedure<
   );
 
   return async <TCtx, TInput>({ ctx, input }: { ctx: TCtx; input: TInput }) => {
-    const { response } = await executeHipthrustable(
-      fullHipthrustable as any,
-      { ctx, input },
-      200
-    );
-    // tRPC procedures return the value directly. successStatus is silently ignored.
+    const { response } = await executeHipthrustable(fullHipthrustable as any, {
+      ctx,
+      input,
+    });
+    // tRPC procedures return the value directly. A thrown HipError propagates
+    // with its `.kind`; map it in your tRPC `errorFormatter` if you want
+    // specific TRPCError codes. There is no HTTP response metadata here.
     return response;
   };
 }

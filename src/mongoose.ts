@@ -1,4 +1,4 @@
-import Boom from '@hapi/boom';
+import { HipBadInputs, HipNotFound } from './errors';
 import { WithInputSlice } from './index';
 import {
   LoadResources,
@@ -31,11 +31,11 @@ export function htMongooseFactory(mongoose: any) {
     // tslint:disable-next-line:only-arrow-functions
     return async function(id: string) {
       if (!id || !id.toString()) {
-        throw Boom.badRequest('Missing dependent resource ID');
+        throw new HipBadInputs('Missing dependent resource ID');
       }
       const result = await Model.findById(id).exec();
       if (!result) {
-        throw Boom.notFound('Resource not found');
+        throw new HipNotFound('Resource not found');
       }
       return result;
     };
@@ -45,7 +45,7 @@ export function htMongooseFactory(mongoose: any) {
     // tslint:disable-next-line:only-arrow-functions
     return async function(fieldValue: any) {
       if (!fieldValue || !fieldValue.toString()) {
-        throw Boom.badRequest('Missing dependent resource value');
+        throw new HipBadInputs('Missing dependent resource value');
       }
       const result = await Model.findOne({
         [fieldName]: {
@@ -53,7 +53,7 @@ export function htMongooseFactory(mongoose: any) {
         },
       }).exec();
       if (!result) {
-        throw Boom.notFound('Resource not found');
+        throw new HipNotFound('Resource not found');
       }
       return result;
     };
@@ -127,7 +127,7 @@ export function htMongooseFactory(mongoose: any) {
           : undefined
       );
       if (validateErrors !== undefined) {
-        throw Boom.badRequest('Inputs not valid');
+        throw new HipBadInputs('Inputs not valid');
       }
       return doc.toObject({ transform: stripIdTransform }) as TSafe;
     });
@@ -157,7 +157,7 @@ export function htMongooseFactory(mongoose: any) {
             : undefined
         );
         if (validateErrors !== undefined) {
-          throw Boom.badRequest(`${sliceName} not valid`);
+          throw new HipBadInputs(`${sliceName} not valid`);
         }
         return doc.toObject({ transform: stripIdTransform }) as TSafeSlice;
       }
@@ -170,12 +170,12 @@ export function htMongooseFactory(mongoose: any) {
         try {
           return await context[propertyKeyOfDocument].save();
         } catch (err) {
-          throw Boom.badData(
+          throw new HipBadInputs(
             'Unable to save. Please check if data sent was valid.'
           );
         }
       } else {
-        throw Boom.badRequest('Resource not found');
+        throw new HipBadInputs('Resource not found');
       }
     });
   }
@@ -198,7 +198,7 @@ export function htMongooseFactory(mongoose: any) {
       if (context[propertyKeyOfDocument]) {
         return await context[propertyKeyOfDocument].set(readPath(context));
       } else {
-        throw Boom.badRequest('Resource not found');
+        throw new HipBadInputs('Resource not found');
       }
     });
   }
