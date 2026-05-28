@@ -8,15 +8,15 @@ import { hipExpressHandlerFactory, HTPipe, WithInputSlice } from '../src';
 import {
   AllAsyncStageKeys,
   AllStageKeys,
-  HasAllStagesOptionals,
-  HasAttachData,
-  HasDoWork,
+  AllStagesOptionalShape,
+  HasLoadResources,
+  HasExecute,
   HasExtractInputs,
   HasFinalAuthorize,
-  HasInitPreContext,
+  HasExtractAmbient,
   HasPreAuthorize,
   HasSanitizeInputs,
-  HasSanitizeResponse,
+  HasRedactResponse,
   PromiseResolveOrSync,
 } from '../src/types';
 
@@ -30,12 +30,12 @@ type ReturnTypeFromStage<
   : ReturnType<T>;
 
 async function HTPipeTest<
-  TPipe extends HasAllStagesOptionals,
+  TPipe extends AllStagesOptionalShape,
   TPipeIn,
   TPipeOut,
   TStage extends AllStageKeys,
-  TLifecycleStage extends TStage extends 'initPreContext'
-    ? TPipe extends HasInitPreContext<any, any>
+  TLifecycleStage extends TStage extends 'extractAmbient'
+    ? TPipe extends HasExtractAmbient<any, any>
       ? TPipe[TStage]
       : never
     : TStage extends 'extractInputs'
@@ -50,20 +50,20 @@ async function HTPipeTest<
     ? TPipe extends HasPreAuthorize<any, any>
       ? TPipe[TStage]
       : never
-    : TStage extends 'attachData'
-    ? TPipe extends HasAttachData<any, any>
+    : TStage extends 'loadResources'
+    ? TPipe extends HasLoadResources<any, any>
       ? TPipe[TStage]
       : never
     : TStage extends 'finalAuthorize'
     ? TPipe extends HasFinalAuthorize<any, any>
       ? TPipe[TStage]
       : never
-    : TStage extends 'doWork'
-    ? TPipe extends HasDoWork<any, any>
+    : TStage extends 'execute'
+    ? TPipe extends HasExecute<any, any>
       ? TPipe[TStage]
       : never
-    : TStage extends 'sanitizeResponse'
-    ? TPipe extends HasSanitizeResponse<any, any>
+    : TStage extends 'redactResponse'
+    ? TPipe extends HasRedactResponse<any, any>
       ? TPipe[TStage]
       : never
     : never,
@@ -91,8 +91,8 @@ async function HTPipeTest<
   expect(pipedLifecycleStage).to.not.be.eql({});
   if (pipedLifecycleStage) {
     const pipedLifecycleStageResult =
-      lifecycleStage === 'attachData' ||
-      lifecycleStage === 'doWork' ||
+      lifecycleStage === 'loadResources' ||
+      lifecycleStage === 'execute' ||
       lifecycleStage === 'finalAuthorize'
         ? await pipedLifecycleStage(pipeIn)
         : pipedLifecycleStage(pipeIn);
@@ -110,7 +110,7 @@ describe('HipThrusTS', () => {
 
         await HTPipeTest(
           {
-            attachData: (context: { a: string }) => {
+            loadResources: (context: { a: string }) => {
               return {
                 aOut: context.a,
                 c: cReturned,
@@ -118,7 +118,7 @@ describe('HipThrusTS', () => {
               };
             },
           },
-          'attachData',
+          'loadResources',
           { a: aPassedIn },
           { aOut: aPassedIn, b: bReturned, c: cReturned },
           true
@@ -129,19 +129,19 @@ describe('HipThrusTS', () => {
     describe('HTPipe', () => {
       it('works with three operators', () => {
         const left = {
-          attachData(context: { a: string }) {
+          loadResources(context: { a: string }) {
             return { b: 4 };
           },
         };
 
         const midNotCovered = {
-          attachData(context: { d: number }) {
+          loadResources(context: { d: number }) {
             return { e: 4 };
           },
         };
 
         const rightFullyCovered = {
-          attachData(context: { b: number }) {
+          loadResources(context: { b: number }) {
             return { c: 4 };
           },
         };
@@ -206,8 +206,8 @@ describe('HipThrusTS', () => {
           };
         }
 
-        it('initPreContext', async () => {
-          const lifecycleStage = 'initPreContext';
+        it('extractAmbient', async () => {
+          const lifecycleStage = 'extractAmbient';
           await HTPipeTest(
             HTPipe(caseFor(lifecycleStage).left, caseFor(lifecycleStage).right),
             lifecycleStage,
@@ -226,8 +226,8 @@ describe('HipThrusTS', () => {
             true
           );
         });
-        it('attachData sync', async () => {
-          const lifecycleStage = 'attachData';
+        it('loadResources sync', async () => {
+          const lifecycleStage = 'loadResources';
           await HTPipeTest(
             HTPipe(caseFor(lifecycleStage).left, caseFor(lifecycleStage).right),
             lifecycleStage,
@@ -271,13 +271,13 @@ describe('HipThrusTS', () => {
       });
     });
 
-    describe('sanitizeResponse filtration functionality', () => {
+    describe('redactResponse filtration functionality', () => {
       it('chained sanitizers filter as expected', async () => {
         const aPassedIn = 'some string';
         const bPassedIn = 'some other string';
 
         const left = {
-          sanitizeResponse: (context: {
+          redactResponse: (context: {
             someObj: { a: string; b: string };
           }) => {
             return context.someObj;
@@ -285,14 +285,14 @@ describe('HipThrusTS', () => {
         };
 
         const right = {
-          sanitizeResponse: (context: { a: string; b: string }) => {
+          redactResponse: (context: { a: string; b: string }) => {
             return { b: context.b };
           },
         };
 
         await HTPipeTest(
           HTPipe(left, right),
-          'sanitizeResponse',
+          'redactResponse',
           { someObj: { a: aPassedIn, b: bPassedIn } },
           { b: bPassedIn },
           true
@@ -344,7 +344,7 @@ describe('HipThrusTS', () => {
     describe('hipExpressHandlerFactory', () => {
       it('passes with all correct lifecycle stages present', () => {
         const handlingStrategy = {
-          initPreContext() {
+          extractAmbient() {
             return {};
           },
           sanitizeInputs(unsafe: {
@@ -361,16 +361,16 @@ describe('HipThrusTS', () => {
           }) {
             return { asdf: { ting: 4 } };
           },
-          attachData(context: { asdf: { ting: number } }) {
+          loadResources(context: { asdf: { ting: number } }) {
             return { adOut: 4, ddd: 'hi' };
           },
           finalAuthorize(context: { ddd: string }) {
             return {};
           },
-          doWork(context: {}) {
+          execute(context: {}) {
             return { result: 1 };
           },
-          sanitizeResponse(unsafe: { result: number }) {
+          redactResponse(unsafe: { result: number }) {
             return { result: unsafe.result };
           },
         };
@@ -382,16 +382,16 @@ describe('HipThrusTS', () => {
           preAuthorize(context: {}) {
             return { b: 5 };
           },
-          attachData(context: { b: number }) {
+          loadResources(context: { b: number }) {
             return { adOut: 4, ddd: 'hi' };
           },
           finalAuthorize(context: {}) {
             return true;
           },
-          doWork(context: {}) {
+          execute(context: {}) {
             return {};
           },
-          sanitizeResponse(unsafe: {}) {
+          redactResponse(unsafe: {}) {
             return {};
           },
         };
@@ -411,16 +411,16 @@ describe('HipThrusTS', () => {
           sanitizeInputs(unsafe: {}) {
             return {};
           },
-          attachData(context: {}) {
+          loadResources(context: {}) {
             return { adOut: 4, ddd: 'hi' };
           },
           finalAuthorize(context: { ddd: string }) {
             return {};
           },
-          doWork(context: {}) {
+          execute(context: {}) {
             return {};
           },
-          sanitizeResponse(unsafe: {}) {
+          redactResponse(unsafe: {}) {
             return {};
           },
         };
@@ -443,13 +443,13 @@ describe('HipThrusTS', () => {
           preAuthorize(context: {}) {
             return { b: 5 };
           },
-          attachData(context: { b: number }) {
+          loadResources(context: { b: number }) {
             return { adOut: 4, ddd: 'hi' };
           },
-          doWork(context: {}) {
+          execute(context: {}) {
             return {};
           },
-          sanitizeResponse(unsafe: {}) {
+          redactResponse(unsafe: {}) {
             return {};
           },
         };
@@ -464,7 +464,7 @@ describe('HipThrusTS', () => {
         expect(err).to.not.be.undefined;
       });
 
-      it('errors when doWork is missing', () => {
+      it('errors when execute is missing', () => {
         const handlingStrategy = {
           sanitizeInputs(unsafe: {}) {
             return {};
@@ -472,13 +472,13 @@ describe('HipThrusTS', () => {
           preAuthorize(context: {}) {
             return { b: 5 };
           },
-          attachData(context: { b: number }) {
+          loadResources(context: { b: number }) {
             return { adOut: 4, ddd: 'hi' };
           },
           finalAuthorize(context: {}) {
             return true;
           },
-          sanitizeResponse(unsafe: {}) {
+          redactResponse(unsafe: {}) {
             return {};
           },
         };
@@ -493,7 +493,7 @@ describe('HipThrusTS', () => {
         expect(err).to.not.be.undefined;
       });
 
-      it('errors when sanitizeResponse is missing', () => {
+      it('errors when redactResponse is missing', () => {
         const handlingStrategy = {
           sanitizeInputs(unsafe: {}) {
             return {};
@@ -501,13 +501,13 @@ describe('HipThrusTS', () => {
           preAuthorize(context: {}) {
             return { b: 5 };
           },
-          attachData(context: { b: number }) {
+          loadResources(context: { b: number }) {
             return { adOut: 4, ddd: 'hi' };
           },
           finalAuthorize(context: {}) {
             return true;
           },
-          doWork(context: {}) {
+          execute(context: {}) {
             return {};
           },
         };
@@ -530,18 +530,18 @@ describe('HipThrusTS', () => {
         const withDefaultImplementations = mod.withDefaultImplementations;
 
         const handler = withDefaultImplementations({
-          initPreContext: (raw: { who: string }) => ({ who: raw.who }),
+          extractAmbient: (raw: { who: string }) => ({ who: raw.who }),
           extractInputs: (raw: any) => raw,
           sanitizeInputs: (unsafe: { value: number }) => ({
             value: unsafe.value * 2,
           }),
           preAuthorize: () => true,
           finalAuthorize: () => true,
-          doWork: (ctx: {
+          execute: (ctx: {
             inputs: { value: number };
-            preContext: { who: string };
-          }) => ({ doubled: ctx.inputs.value, by: ctx.preContext.who }),
-          sanitizeResponse: (u: { doubled: number; by: string }) => ({
+            ambient: { who: string };
+          }) => ({ doubled: ctx.inputs.value, by: ctx.ambient.who }),
+          redactResponse: (u: { doubled: number; by: string }) => ({
             doubled: u.doubled,
             by: u.by,
           }),
@@ -568,10 +568,10 @@ describe('HipThrusTS', () => {
           }),
           preAuthorize: () => true,
           finalAuthorize: () => true,
-          doWork: (ctx: { inputs: { create: boolean } }) => ({
+          execute: (ctx: { inputs: { create: boolean } }) => ({
             created: ctx.inputs.create,
           }),
-          sanitizeResponse: (u: { created: boolean }) => ({
+          redactResponse: (u: { created: boolean }) => ({
             created: u.created,
           }),
           successStatus: (ctx: { response: { created: boolean } }) =>
@@ -602,8 +602,8 @@ describe('HipThrusTS', () => {
           sanitizeInputs: (unsafe: {}) => ({}),
           preAuthorize: () => true,
           finalAuthorize: () => true,
-          doWork: () => ({ ok: true }),
-          sanitizeResponse: (u: { ok: boolean }) => ({ ok: u.ok }),
+          execute: () => ({ ok: true }),
+          redactResponse: (u: { ok: boolean }) => ({ ok: u.ok }),
         });
 
         const result = await executeHipthrustable(handler, {}, 200);

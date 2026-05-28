@@ -5,13 +5,13 @@ import {
   withDefaultImplementations,
 } from './core';
 import {
-  AttachDataReqsSatisfiedOptional,
-  DoWorkReqsSatisfiedOptional,
-  FinalAuthReqsSatisfied,
-  HasAllNotRequireds,
-  HasAllRequireds,
-  PreAuthReqsSatisfied,
-  SanitizeResponseReqsSatisfied,
+  LoadResourcesDepsMet,
+  ExecuteDepsMet,
+  FinalAuthorizeDepsMet,
+  OptionalStagesShape,
+  HasRequiredStages,
+  PreAuthorizeDepsMet,
+  RedactResponseDepsMet,
 } from './types';
 
 // The raw envelope a tRPC procedure resolver receives: a context and a parsed input.
@@ -29,13 +29,13 @@ function trpcBaselineExtractInputs<TInput>(
 }
 
 export function hipTrpcProcedure<
-  TConf extends HasAllNotRequireds &
-    HasAllRequireds &
-    PreAuthReqsSatisfied<TConf> &
-    AttachDataReqsSatisfiedOptional<TConf> &
-    FinalAuthReqsSatisfied<TConf> &
-    DoWorkReqsSatisfiedOptional<TConf> &
-    SanitizeResponseReqsSatisfied<TConf> &
+  TConf extends OptionalStagesShape &
+    HasRequiredStages &
+    PreAuthorizeDepsMet<TConf> &
+    LoadResourcesDepsMet<TConf> &
+    FinalAuthorizeDepsMet<TConf> &
+    ExecuteDepsMet<TConf> &
+    RedactResponseDepsMet<TConf> &
     HasSuccessStatus
 >(handlingStrategy: TConf) {
   assertHipthrustable(handlingStrategy);

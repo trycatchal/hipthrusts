@@ -1,67 +1,67 @@
 import Boom from '@hapi/boom';
 import {
-  AttachDataReqsSatisfiedOptional,
-  DoWorkReqsSatisfiedOptional,
-  FinalAuthReqsSatisfied,
-  HasAllNotRequireds,
-  HasAllRequireds,
-  HasAllStagesNotOptionals,
-  HasAttachData,
-  HasDoWork,
+  LoadResourcesDepsMet,
+  ExecuteDepsMet,
+  FinalAuthorizeDepsMet,
+  OptionalStagesShape,
+  HasRequiredStages,
+  HasAllStagesDefined,
+  HasLoadResources,
+  HasExecute,
   HasExtractInputs,
   HasFinalAuthorize,
-  HasInitPreContext,
+  HasExtractAmbient,
   HasPreAuthorize,
   HasSanitizeInputs,
-  HasSanitizeResponse,
-  MightHaveFinalAuthorize,
-  MightHavePreAuthorize,
-  MightHaveSanitizeResponse,
-  OptionallyHasAttachData,
-  OptionallyHasDoWork,
+  HasRedactResponse,
+  OptionallyHasFinalAuthorize,
+  OptionallyHasPreAuthorize,
+  OptionallyHasRedactResponse,
+  OptionallyHasLoadResources,
+  OptionallyHasExecute,
   OptionallyHasExtractInputs,
-  OptionallyHasInitPreContext,
+  OptionallyHasExtractAmbient,
   OptionallyHasSanitizeInputs,
-  PreAuthReqsSatisfied,
+  PreAuthorizeDepsMet,
   PromiseOrSync,
   PromiseResolveOrSync,
-  SanitizeResponseReqsSatisfied,
+  RedactResponseDepsMet,
 } from './types';
 
 export function withDefaultImplementations<
-  TStrategy extends HasAllNotRequireds &
-    HasAllRequireds &
-    PreAuthReqsSatisfied<TStrategy> &
-    AttachDataReqsSatisfiedOptional<TStrategy> &
-    FinalAuthReqsSatisfied<TStrategy> &
-    DoWorkReqsSatisfiedOptional<TStrategy> &
-    SanitizeResponseReqsSatisfied<TStrategy>
->(strategy: TStrategy): HasAllStagesNotOptionals {
+  TStrategy extends OptionalStagesShape &
+    HasRequiredStages &
+    PreAuthorizeDepsMet<TStrategy> &
+    LoadResourcesDepsMet<TStrategy> &
+    FinalAuthorizeDepsMet<TStrategy> &
+    ExecuteDepsMet<TStrategy> &
+    RedactResponseDepsMet<TStrategy>
+>(strategy: TStrategy): HasAllStagesDefined {
   return {
     ...(strategy as any),
-    initPreContext:
-      strategy.initPreContext ||
+    extractAmbient:
+      strategy.extractAmbient ||
       (() => {
         return {};
       }),
     extractInputs: strategy.extractInputs || ((raw: any) => raw),
     sanitizeInputs: strategy.sanitizeInputs,
     preAuthorize: strategy.preAuthorize,
-    attachData:
-      strategy.attachData ||
+    loadResources:
+      strategy.loadResources ||
       (() => {
         return {};
       }),
     finalAuthorize: strategy.finalAuthorize,
-    doWork: strategy.doWork,
-    sanitizeResponse: strategy.sanitizeResponse,
+    execute: strategy.execute,
+    redactResponse: strategy.redactResponse,
   };
 }
 
-export function isHasInitPreContext<TContextIn, TContextOut>(
-  thing: OptionallyHasInitPreContext<TContextIn, TContextOut>
-): thing is HasInitPreContext<TContextIn, TContextOut> {
-  return !!(thing && thing.initPreContext);
+export function isHasExtractAmbient<TContextIn, TContextOut>(
+  thing: OptionallyHasExtractAmbient<TContextIn, TContextOut>
+): thing is HasExtractAmbient<TContextIn, TContextOut> {
+  return !!(thing && thing.extractAmbient);
 }
 
 export function isHasExtractInputs<TContextIn, TContextOut>(
@@ -77,33 +77,33 @@ export function isHasSanitizeInputs<TContextIn, TContextOut>(
 }
 
 export function isHasPreAuthorize<TContextIn, TContextOut>(
-  thing: MightHavePreAuthorize<TContextIn, TContextOut>
+  thing: OptionallyHasPreAuthorize<TContextIn, TContextOut>
 ): thing is HasPreAuthorize<TContextIn, TContextOut> {
   return !!(thing && thing.preAuthorize);
 }
 
-export function isHasAttachData<TContextIn, TContextOut>(
-  thing: OptionallyHasAttachData<TContextIn, TContextOut>
-): thing is HasAttachData<TContextIn, TContextOut> {
-  return !!(thing && thing.attachData);
+export function isHasLoadResources<TContextIn, TContextOut>(
+  thing: OptionallyHasLoadResources<TContextIn, TContextOut>
+): thing is HasLoadResources<TContextIn, TContextOut> {
+  return !!(thing && thing.loadResources);
 }
 
 export function isHasFinalAuthorize<TContextIn, TContextOut>(
-  thing: MightHaveFinalAuthorize<TContextIn, TContextOut>
+  thing: OptionallyHasFinalAuthorize<TContextIn, TContextOut>
 ): thing is HasFinalAuthorize<TContextIn, TContextOut> {
   return !!(thing && thing.finalAuthorize);
 }
 
-export function isHasDoWork<TContextIn, TContextOut>(
-  thing: OptionallyHasDoWork<TContextIn, TContextOut>
-): thing is HasDoWork<TContextIn, TContextOut> {
-  return !!(thing && thing.doWork);
+export function isHasExecute<TContextIn, TContextOut>(
+  thing: OptionallyHasExecute<TContextIn, TContextOut>
+): thing is HasExecute<TContextIn, TContextOut> {
+  return !!(thing && thing.execute);
 }
 
-export function isHasSanitizeResponse<TContextIn, TContextOut>(
-  thing: MightHaveSanitizeResponse<TContextIn, TContextOut>
-): thing is HasSanitizeResponse<TContextIn, TContextOut> {
-  return !!(thing && thing.sanitizeResponse);
+export function isHasRedactResponse<TContextIn, TContextOut>(
+  thing: OptionallyHasRedactResponse<TContextIn, TContextOut>
+): thing is HasRedactResponse<TContextIn, TContextOut> {
+  return !!(thing && thing.redactResponse);
 }
 
 export function authorizationPassed<TAuthOut extends boolean | object>(
@@ -175,29 +175,29 @@ function resolveSuccessStatus(
 }
 
 export async function executeHipthrustable<
-  TConf extends HasAllStagesNotOptionals &
-    PreAuthReqsSatisfied<TConf> &
-    AttachDataReqsSatisfiedOptional<TConf> &
-    FinalAuthReqsSatisfied<TConf> &
-    DoWorkReqsSatisfiedOptional<TConf> &
-    SanitizeResponseReqsSatisfied<TConf> &
+  TConf extends HasAllStagesDefined &
+    PreAuthorizeDepsMet<TConf> &
+    LoadResourcesDepsMet<TConf> &
+    FinalAuthorizeDepsMet<TConf> &
+    ExecuteDepsMet<TConf> &
+    RedactResponseDepsMet<TConf> &
     HasSuccessStatus,
   TRaw
 >(requestHandler: TConf, raw: TRaw, defaultStatus: number = 200) {
   const badDataThrow = Boom.badData('User input sanitization failure');
 
-  const safePreContext = transformThrowSync(
+  const safeAmbient = transformThrowSync(
     badDataThrow,
-    requestHandler.initPreContext,
+    requestHandler.extractAmbient,
     raw
   );
 
-  const preContextSlot = { preContext: safePreContext };
+  const ambientSlot = { ambient: safeAmbient };
 
   const unsafeInputs = transformThrowSync(
     badDataThrow,
     requestHandler.extractInputs,
-    { ...(raw as any), ...preContextSlot }
+    { ...(raw as any), ...ambientSlot }
   );
 
   const safeInputs = transformThrowSync(
@@ -207,7 +207,7 @@ export async function executeHipthrustable<
   );
 
   const inputsContext = {
-    preContext: safePreContext,
+    ambient: safeAmbient,
     inputs: safeInputs,
   };
 
@@ -239,7 +239,7 @@ export async function executeHipthrustable<
   const attachedDataContextOnly =
     (await transformThrowPossiblyAsync(
       notFoundThrow,
-      requestHandler.attachData,
+      requestHandler.loadResources,
       preAuthContext
     )) || {};
   const attachedDataContext = { ...preAuthContext, ...attachedDataContextOnly };
@@ -272,10 +272,10 @@ export async function executeHipthrustable<
 
   try {
     const unsafeResponse = await Promise.resolve(
-      requestHandler.doWork(finalAuthContext)
+      requestHandler.execute(finalAuthContext)
     );
 
-    const safeResponse = requestHandler.sanitizeResponse(unsafeResponse);
+    const safeResponse = requestHandler.redactResponse(unsafeResponse);
 
     const successCtx =
       unsafeResponse !== null && typeof unsafeResponse === 'object'
@@ -303,14 +303,14 @@ export async function executeHipthrustable<
 }
 
 export function assertHipthrustable(
-  requestHandler: HasAllRequireds & Record<string, any>
+  requestHandler: HasRequiredStages & Record<string, any>
 ) {
   const requiredMethods = [
     'sanitizeInputs',
     'preAuthorize',
     'finalAuthorize',
-    'doWork',
-    'sanitizeResponse',
+    'execute',
+    'redactResponse',
   ];
   requiredMethods.forEach(method => {
     if (

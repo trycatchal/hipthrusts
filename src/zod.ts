@@ -2,9 +2,9 @@ import Boom from '@hapi/boom';
 import { z } from 'zod';
 import { WithInputSlice } from './index';
 import {
-  AttachData,
+  LoadResources,
   SanitizeInputs,
-  SanitizeResponse,
+  RedactResponse,
 } from './lifecycle-functions';
 
 export function htZodFactory() {
@@ -50,11 +50,11 @@ export function htZodFactory() {
     );
   }
 
-  function SanitizeResponseWithZod<
+  function RedactResponseWithZod<
     TSafeResponse extends z.infer<TSchema>,
     TSchema extends z.ZodType<any, any, any>
   >(schema: TSchema) {
-    return SanitizeResponse((unsafeResponse: any) => {
+    return RedactResponse((unsafeResponse: any) => {
       const parseResult = schema.safeParse(unsafeResponse);
       if (!parseResult.success) {
         throw Boom.internal('Response validation failed', parseResult.error);
@@ -68,7 +68,7 @@ export function htZodFactory() {
     TSchema extends z.ZodType<any, any, any>,
     TContextIn extends { [key in TPojoKey]: any }
   >(pojoKey: TPojoKey, schema: TSchema, newValidatedKey: string) {
-    return AttachData((context: TContextIn) => {
+    return LoadResources((context: TContextIn) => {
       const parseResult = schema.safeParse(context[pojoKey]);
       if (!parseResult.success) {
         throw Boom.badRequest('Data validation failed', parseResult.error);
@@ -82,7 +82,7 @@ export function htZodFactory() {
   return {
     SanitizeInputsWithZod,
     SanitizeInputsSliceWithZod,
-    SanitizeResponseWithZod,
+    RedactResponseWithZod,
     PojoToValidated,
     stripIdTransform,
   };

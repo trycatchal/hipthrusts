@@ -1,43 +1,43 @@
 import {
   authorizationPassed,
-  isHasAttachData,
-  isHasDoWork,
+  isHasLoadResources,
+  isHasExecute,
   isHasExtractInputs,
   isHasFinalAuthorize,
-  isHasInitPreContext,
+  isHasExtractAmbient,
   isHasPreAuthorize,
   isHasSanitizeInputs,
-  isHasSanitizeResponse,
+  isHasRedactResponse,
 } from './core';
 import {
-  AttachData,
-  DoWork,
+  LoadResources,
+  Execute,
   ExtractInputs,
   FinalAuthorize,
-  InitPreContext,
+  ExtractAmbient,
   PreAuthorize,
   SanitizeInputs,
-  SanitizeResponse,
+  RedactResponse,
 } from './lifecycle-functions';
 import {
   AllStageKeys,
-  HasAllNotRequireds,
-  HasAllRequireds,
-  HasAttachData,
-  HasDoWork,
+  OptionalStagesShape,
+  HasRequiredStages,
+  HasLoadResources,
+  HasExecute,
   HasExtractInputs,
   HasFinalAuthorize,
-  HasInitPreContext,
+  HasExtractAmbient,
   HasPreAuthorize,
   HasSanitizeInputs,
-  HasSanitizeResponse,
-  MightHaveFinalAuthorize,
-  MightHavePreAuthorize,
-  MightHaveSanitizeResponse,
-  OptionallyHasAttachData,
-  OptionallyHasDoWork,
+  HasRedactResponse,
+  OptionallyHasFinalAuthorize,
+  OptionallyHasPreAuthorize,
+  OptionallyHasRedactResponse,
+  OptionallyHasLoadResources,
+  OptionallyHasExecute,
   OptionallyHasExtractInputs,
-  OptionallyHasInitPreContext,
+  OptionallyHasExtractAmbient,
   OptionallyHasSanitizeInputs,
   PromiseResolveOrSync,
 } from './types';
@@ -69,7 +69,7 @@ export function NoopFinalAuth() {
   return FinalAuthorize(() => true);
 }
 
-export function InitPreContextFrom<
+export function ExtractAmbientFrom<
   TWhereToLook extends string,
   TContextIn extends { [key in TWhereToLook]: TContextIn[TWhereToLook] },
   TContextOut extends object
@@ -77,20 +77,20 @@ export function InitPreContextFrom<
   whereToLook: TWhereToLook,
   projector: (htCtx: TContextIn[TWhereToLook]) => TContextOut
 ) {
-  return InitPreContext((htCtx: TContextIn) => projector(htCtx[whereToLook]));
+  return ExtractAmbient((htCtx: TContextIn) => projector(htCtx[whereToLook]));
 }
 
-export function InitPreContextTo<
+export function ExtractAmbientTo<
   TWhereToStore extends string,
   TContextIn extends object,
   TContextOut extends object
 >(projector: (htCtx: TContextIn) => TContextOut, whereToStore: TWhereToStore) {
-  return InitPreContext((htCtx: TContextIn) => {
+  return ExtractAmbient((htCtx: TContextIn) => {
     return { [whereToStore]: projector(htCtx) };
   });
 }
 
-export function InitPreContextFromTo<
+export function ExtractAmbientFromTo<
   TWhereToLook extends string,
   TWhereToStore extends string,
   TContextIn extends { [key in TWhereToLook]: TContextIn[TWhereToLook] },
@@ -100,7 +100,7 @@ export function InitPreContextFromTo<
   projector: (htCtx: TContextIn[TWhereToLook]) => TContextOut,
   whereToStore: TWhereToStore
 ) {
-  return InitPreContext((htCtx: TContextIn) => {
+  return ExtractAmbient((htCtx: TContextIn) => {
     return { [whereToStore]: projector(htCtx[whereToLook]) };
   });
 }
@@ -246,7 +246,7 @@ export function PreAuthorizeFromTo<
   });
 }
 
-export function AttachDataFrom<
+export function LoadResourcesFrom<
   TWhereToLook extends string,
   TContextIn extends { [key in TWhereToLook]: TContextIn[TWhereToLook] },
   TContextOut extends PromiseResolveOrSync<object>
@@ -254,22 +254,22 @@ export function AttachDataFrom<
   whereToLook: TWhereToLook,
   projector: (htCtx: TContextIn[TWhereToLook]) => TContextOut
 ) {
-  return AttachData((htCtx: TContextIn) => projector(htCtx[whereToLook]));
+  return LoadResources((htCtx: TContextIn) => projector(htCtx[whereToLook]));
 }
 
-export function AttachDataTo<
+export function LoadResourcesTo<
   TWhereToStore extends string,
   TContextIn extends object,
   TContextOut extends object
 >(projector: (htCtx: TContextIn) => TContextOut, whereToStore: TWhereToStore) {
-  return AttachData(async (htCtx: TContextIn) => {
+  return LoadResources(async (htCtx: TContextIn) => {
     return {
       [whereToStore]: await Promise.resolve(projector(htCtx)),
     };
   });
 }
 
-export function AttachDataFromTo<
+export function LoadResourcesFromTo<
   TWhereToLook extends string,
   TWhereToStore extends string,
   TContextIn extends { [key in TWhereToLook]: TContextIn[TWhereToLook] },
@@ -279,7 +279,7 @@ export function AttachDataFromTo<
   projector: (htCtx: TContextIn[TWhereToLook]) => TContextOut,
   whereToStore: TWhereToStore
 ) {
-  return AttachData(async (htCtx: TContextIn) => {
+  return LoadResources(async (htCtx: TContextIn) => {
     return {
       [whereToStore]: await Promise.resolve(projector(htCtx[whereToLook])),
     };
@@ -330,7 +330,7 @@ export function FinalAuthorizeFromTo<
   });
 }
 
-export function DoWorkFrom<
+export function ExecuteFrom<
   TWhereToLook extends string,
   TContextIn extends { [key in TWhereToLook]: TContextIn[TWhereToLook] },
   TUnsafeResponse
@@ -338,10 +338,10 @@ export function DoWorkFrom<
   whereToLook: TWhereToLook,
   projector: (htCtx: TContextIn[TWhereToLook]) => TUnsafeResponse
 ) {
-  return DoWork((htCtx: TContextIn) => projector(htCtx[whereToLook]));
+  return Execute((htCtx: TContextIn) => projector(htCtx[whereToLook]));
 }
 
-export function DoWorkTo<
+export function ExecuteTo<
   TWhereToStore extends string,
   TContextIn extends object,
   TUnsafeResponse
@@ -349,14 +349,14 @@ export function DoWorkTo<
   projector: (htCtx: TContextIn) => TUnsafeResponse,
   whereToStore: TWhereToStore
 ) {
-  return DoWork(async (htCtx: TContextIn) => {
+  return Execute(async (htCtx: TContextIn) => {
     return {
       [whereToStore]: await Promise.resolve(projector(htCtx)),
     };
   });
 }
 
-export function DoWorkFromTo<
+export function ExecuteFromTo<
   TWhereToLook extends string,
   TWhereToStore extends string,
   TContextIn extends { [key in TWhereToLook]: TContextIn[TWhereToLook] },
@@ -366,14 +366,14 @@ export function DoWorkFromTo<
   projector: (htCtx: TContextIn[TWhereToLook]) => TUnsafeResponse,
   whereToStore: TWhereToStore
 ) {
-  return DoWork(async (htCtx: TContextIn) => {
+  return Execute(async (htCtx: TContextIn) => {
     return {
       [whereToStore]: await Promise.resolve(projector(htCtx[whereToLook])),
     };
   });
 }
 
-export function SanitizeResponseFrom<
+export function RedactResponseFrom<
   TWhereToLook extends string,
   TContextIn extends { [key in TWhereToLook]: TContextIn[TWhereToLook] },
   TContextOut
@@ -381,22 +381,22 @@ export function SanitizeResponseFrom<
   whereToLook: TWhereToLook,
   projector: (htCtx: TContextIn[TWhereToLook]) => TContextOut
 ) {
-  return SanitizeResponse((htCtx: TContextIn) => projector(htCtx[whereToLook]));
+  return RedactResponse((htCtx: TContextIn) => projector(htCtx[whereToLook]));
 }
 
-export function SanitizeResponseTo<
+export function RedactResponseTo<
   TWhereToStore extends string,
   TContextIn,
   TContextOut
 >(projector: (htCtx: TContextIn) => TContextOut, whereToStore: TWhereToStore) {
-  return SanitizeResponse((htCtx: TContextIn) => {
+  return RedactResponse((htCtx: TContextIn) => {
     return {
       [whereToStore]: projector(htCtx),
     };
   });
 }
 
-export function SanitizeResponseFromTo<
+export function RedactResponseFromTo<
   TWhereToLook extends string,
   TWhereToStore extends string,
   TContextIn extends { [key in TWhereToLook]: TContextIn[TWhereToLook] },
@@ -406,18 +406,18 @@ export function SanitizeResponseFromTo<
   projector: (htCtx: TContextIn[TWhereToLook]) => TContextOut,
   whereToStore: TWhereToStore
 ) {
-  return SanitizeResponse((htCtx: TContextIn) => {
+  return RedactResponse((htCtx: TContextIn) => {
     return {
       [whereToStore]: projector(htCtx[whereToLook]),
     };
   });
 }
 
-type InitPreContextIn<T extends HasInitPreContext<any, any>> = Parameters<
-  T['initPreContext']
+type ExtractAmbientIn<T extends HasExtractAmbient<any, any>> = Parameters<
+  T['extractAmbient']
 >[0];
-type InitPreContextReturn<T extends HasInitPreContext<any, any>> = ReturnType<
-  T['initPreContext']
+type ExtractAmbientReturn<T extends HasExtractAmbient<any, any>> = ReturnType<
+  T['extractAmbient']
 >;
 
 type ExtractInputsContextIn<T extends HasExtractInputs<any, any>> = Parameters<
@@ -446,11 +446,11 @@ type PreAuthorizeContextOutFalseCase<
   T extends HasPreAuthorize<any, any>
 > = false & ReturnType<T['preAuthorize']>;
 
-type AttachDataIn<T extends HasAttachData<any, any>> = Parameters<
-  T['attachData']
+type LoadResourcesIn<T extends HasLoadResources<any, any>> = Parameters<
+  T['loadResources']
 >[0];
-type AttachDataReturn<T extends HasAttachData<any, any>> = PromiseResolveOrSync<
-  ReturnType<T['attachData']>
+type LoadResourcesReturn<T extends HasLoadResources<any, any>> = PromiseResolveOrSync<
+  ReturnType<T['loadResources']>
 >;
 
 type FinalAuthorizeContextIn<
@@ -465,35 +465,35 @@ type FinalAuthorizeContextOutFalseCase<
   T extends HasFinalAuthorize<any, any>
 > = false & PromiseResolveOrSync<ReturnType<T['finalAuthorize']>>;
 
-type DoWorkContextIn<T extends HasDoWork<any, any>> = Parameters<
-  T['doWork']
+type ExecuteContextIn<T extends HasExecute<any, any>> = Parameters<
+  T['execute']
 >[0];
-type DoWorkReturn<T extends HasDoWork<any, any>> = PromiseResolveOrSync<
-  ReturnType<T['doWork']>
+type ExecuteReturn<T extends HasExecute<any, any>> = PromiseResolveOrSync<
+  ReturnType<T['execute']>
 >;
 
-type SanitizeResponseContextIn<
-  T extends HasSanitizeResponse<any, any>
-> = Parameters<T['sanitizeResponse']>[0];
-type SanitizeResponseReturn<
-  T extends HasSanitizeResponse<any, any>
-> = ReturnType<T['sanitizeResponse']>;
+type RedactResponseContextIn<
+  T extends HasRedactResponse<any, any>
+> = Parameters<T['redactResponse']>[0];
+type RedactResponseReturn<
+  T extends HasRedactResponse<any, any>
+> = ReturnType<T['redactResponse']>;
 
 // @note must wrap types with arrays to avoid distribution over naked type conditionals blowing up exponentially - see
 // https://github.com/Microsoft/TypeScript/issues/29368#issuecomment-453529532
-type PipedPreContext<TLeft, TRight> = [TLeft] extends [
-  HasInitPreContext<any, any>
+type PipedExtractAmbient<TLeft, TRight> = [TLeft] extends [
+  HasExtractAmbient<any, any>
 ]
-  ? [TRight] extends [HasInitPreContext<any, any>]
-    ? HasInitPreContext<
-        InitPreContextIn<TLeft> &
-          Omit<InitPreContextIn<TRight>, keyof InitPreContextReturn<TLeft>>,
-        InitPreContextReturn<TRight> &
-          Omit<InitPreContextReturn<TLeft>, keyof InitPreContextReturn<TRight>>
+  ? [TRight] extends [HasExtractAmbient<any, any>]
+    ? HasExtractAmbient<
+        ExtractAmbientIn<TLeft> &
+          Omit<ExtractAmbientIn<TRight>, keyof ExtractAmbientReturn<TLeft>>,
+        ExtractAmbientReturn<TRight> &
+          Omit<ExtractAmbientReturn<TLeft>, keyof ExtractAmbientReturn<TRight>>
       >
-    : { initPreContext: TLeft['initPreContext'] }
-  : [TRight] extends [HasInitPreContext<any, any>]
-  ? { initPreContext: TRight['initPreContext'] }
+    : { extractAmbient: TLeft['extractAmbient'] }
+  : [TRight] extends [HasExtractAmbient<any, any>]
+  ? { extractAmbient: TRight['extractAmbient'] }
   : {};
 
 type PipedExtractInputs<TLeft, TRight> = [TLeft] extends [
@@ -565,17 +565,17 @@ type PipedPreAuthorize<TLeft, TRight> = [TLeft] extends [
   ? { preAuthorize: TRight['preAuthorize'] }
   : {};
 
-type PipedAttachData<TLeft, TRight> = [TLeft] extends [HasAttachData<any, any>]
-  ? [TRight] extends [HasAttachData<any, any>]
-    ? HasAttachData<
-        AttachDataIn<TLeft> &
-          Omit<AttachDataIn<TRight>, keyof AttachDataReturn<TLeft>>,
-        AttachDataReturn<TRight> &
-          Omit<AttachDataReturn<TLeft>, keyof AttachDataReturn<TRight>>
+type PipedLoadResources<TLeft, TRight> = [TLeft] extends [HasLoadResources<any, any>]
+  ? [TRight] extends [HasLoadResources<any, any>]
+    ? HasLoadResources<
+        LoadResourcesIn<TLeft> &
+          Omit<LoadResourcesIn<TRight>, keyof LoadResourcesReturn<TLeft>>,
+        LoadResourcesReturn<TRight> &
+          Omit<LoadResourcesReturn<TLeft>, keyof LoadResourcesReturn<TRight>>
       >
-    : { attachData: TLeft['attachData'] }
-  : [TRight] extends [HasAttachData<any, any>]
-  ? { attachData: TRight['attachData'] }
+    : { loadResources: TLeft['loadResources'] }
+  : [TRight] extends [HasLoadResources<any, any>]
+  ? { loadResources: TRight['loadResources'] }
   : {};
 
 type PipedFinalAuthorize<TLeft, TRight> = [TLeft] extends [
@@ -616,35 +616,35 @@ type PipedFinalAuthorize<TLeft, TRight> = [TLeft] extends [
   ? { finalAuthorize: TRight['finalAuthorize'] }
   : {};
 
-type PipedDoWork<TLeft, TRight> = [TLeft] extends [HasDoWork<any, any>]
-  ? [TRight] extends [HasDoWork<any, any>]
-    ? HasDoWork<DoWorkContextIn<TLeft>, DoWorkReturn<TRight>>
-    : { doWork: TLeft['doWork'] }
-  : [TRight] extends [HasDoWork<any, any>]
-  ? { doWork: TRight['doWork'] }
+type PipedExecute<TLeft, TRight> = [TLeft] extends [HasExecute<any, any>]
+  ? [TRight] extends [HasExecute<any, any>]
+    ? HasExecute<ExecuteContextIn<TLeft>, ExecuteReturn<TRight>>
+    : { execute: TLeft['execute'] }
+  : [TRight] extends [HasExecute<any, any>]
+  ? { execute: TRight['execute'] }
   : {};
 
-type PipedSanitizeResponse<TLeft, TRight> = [TLeft] extends [
-  HasSanitizeResponse<any, any>
+type PipedRedactResponse<TLeft, TRight> = [TLeft] extends [
+  HasRedactResponse<any, any>
 ]
-  ? [TRight] extends [HasSanitizeResponse<any, any>]
-    ? HasSanitizeResponse<
-        SanitizeResponseContextIn<TLeft>,
-        SanitizeResponseReturn<TRight>
+  ? [TRight] extends [HasRedactResponse<any, any>]
+    ? HasRedactResponse<
+        RedactResponseContextIn<TLeft>,
+        RedactResponseReturn<TRight>
       >
-    : { sanitizeResponse: TLeft['sanitizeResponse'] }
-  : [TRight] extends [HasSanitizeResponse<any, any>]
-  ? { sanitizeResponse: TRight['sanitizeResponse'] }
+    : { redactResponse: TLeft['redactResponse'] }
+  : [TRight] extends [HasRedactResponse<any, any>]
+  ? { redactResponse: TRight['redactResponse'] }
   : {};
 
-type ClashlessInitPreContext<TLeft, TRight> = OptionallyHasInitPreContext<
+type ClashlessExtractAmbient<TLeft, TRight> = OptionallyHasExtractAmbient<
   any,
-  TRight extends HasInitPreContext<any, any>
+  TRight extends HasExtractAmbient<any, any>
     ? Pick<
-        Parameters<TRight['initPreContext']>[0],
+        Parameters<TRight['extractAmbient']>[0],
         keyof ReturnType<
-          TLeft extends HasInitPreContext<any, any>
-            ? TLeft['initPreContext']
+          TLeft extends HasExtractAmbient<any, any>
+            ? TLeft['extractAmbient']
             : () => {}
         >
       >
@@ -672,7 +672,7 @@ type ClashlessSanitizeInputs<TLeft, TRight> = OptionallyHasSanitizeInputs<
     : any
 >;
 
-type ClashlessPreAuthorize<TLeft, TRight> = MightHavePreAuthorize<
+type ClashlessPreAuthorize<TLeft, TRight> = OptionallyHasPreAuthorize<
   any,
   | boolean
   | (TRight extends HasPreAuthorize<any, any>
@@ -687,15 +687,15 @@ type ClashlessPreAuthorize<TLeft, TRight> = MightHavePreAuthorize<
       : any)
 >;
 
-type ClashlessAttachData<TLeft, TRight> = OptionallyHasAttachData<
+type ClashlessLoadResources<TLeft, TRight> = OptionallyHasLoadResources<
   any,
-  TRight extends HasAttachData<any, any>
+  TRight extends HasLoadResources<any, any>
     ? Pick<
-        Parameters<TRight['attachData']>[0],
+        Parameters<TRight['loadResources']>[0],
         keyof PromiseResolveOrSync<
           ReturnType<
-            TLeft extends HasAttachData<any, any>
-              ? TLeft['attachData']
+            TLeft extends HasLoadResources<any, any>
+              ? TLeft['loadResources']
               : () => {}
           >
         >
@@ -703,7 +703,7 @@ type ClashlessAttachData<TLeft, TRight> = OptionallyHasAttachData<
     : any
 >;
 
-type ClashlessFinalAuthorize<TLeft, TRight> = MightHaveFinalAuthorize<
+type ClashlessFinalAuthorize<TLeft, TRight> = OptionallyHasFinalAuthorize<
   any,
   | boolean
   | (TRight extends HasFinalAuthorize<any, any>
@@ -720,15 +720,15 @@ type ClashlessFinalAuthorize<TLeft, TRight> = MightHaveFinalAuthorize<
       : any)
 >;
 
-type ClashlessDoWork<TLeft, TRight> = OptionallyHasDoWork<
+type ClashlessExecute<TLeft, TRight> = OptionallyHasExecute<
   any,
-  TRight extends HasDoWork<any, any> ? Parameters<TRight['doWork']>[0] : any
+  TRight extends HasExecute<any, any> ? Parameters<TRight['execute']>[0] : any
 >;
 
-type ClashlessSanitizeResponse<TLeft, TRight> = MightHaveSanitizeResponse<
+type ClashlessRedactResponse<TLeft, TRight> = OptionallyHasRedactResponse<
   any,
-  TRight extends HasSanitizeResponse<any, any>
-    ? Parameters<TRight['sanitizeResponse']>[0]
+  TRight extends HasRedactResponse<any, any>
+    ? Parameters<TRight['redactResponse']>[0]
     : any
 >;
 
@@ -737,28 +737,28 @@ export function HTPipe(): {};
 
 // one parameter - returns a new object with all the valid lifecycle stages of the parameter
 export function HTPipe<
-  T extends OptionallyHasInitPreContext<any, any> &
+  T extends OptionallyHasExtractAmbient<any, any> &
     OptionallyHasExtractInputs<any, any> &
     OptionallyHasSanitizeInputs<any, any> &
-    MightHavePreAuthorize<any, any> &
-    OptionallyHasAttachData<any, any> &
-    MightHaveFinalAuthorize<any, any> &
-    OptionallyHasDoWork<any, any> &
-    MightHaveSanitizeResponse<any, any>
+    OptionallyHasPreAuthorize<any, any> &
+    OptionallyHasLoadResources<any, any> &
+    OptionallyHasFinalAuthorize<any, any> &
+    OptionallyHasExecute<any, any> &
+    OptionallyHasRedactResponse<any, any>
 >(obj: T): Pick<T, AllStageKeys>;
 
 // two parameters with automatic type guessing of right - all or nothing!
 export function HTPipe<
-  TLeft extends OptionallyHasInitPreContext<any, any> &
+  TLeft extends OptionallyHasExtractAmbient<any, any> &
     OptionallyHasExtractInputs<any, any> &
     OptionallyHasSanitizeInputs<any, any> &
-    MightHavePreAuthorize<any, any> &
-    OptionallyHasAttachData<any, any> &
-    MightHaveFinalAuthorize<any, any> &
-    OptionallyHasDoWork<any, any> &
-    MightHaveSanitizeResponse<any, any>,
-  TRight extends (TLeft extends HasInitPreContext<any, any>
-    ? OptionallyHasInitPreContext<ReturnType<TLeft['initPreContext']>, any>
+    OptionallyHasPreAuthorize<any, any> &
+    OptionallyHasLoadResources<any, any> &
+    OptionallyHasFinalAuthorize<any, any> &
+    OptionallyHasExecute<any, any> &
+    OptionallyHasRedactResponse<any, any>,
+  TRight extends (TLeft extends HasExtractAmbient<any, any>
+    ? OptionallyHasExtractAmbient<ReturnType<TLeft['extractAmbient']>, any>
     : {}) &
     (TLeft extends HasExtractInputs<any, any>
       ? OptionallyHasExtractInputs<ReturnType<TLeft['extractInputs']>, any>
@@ -767,115 +767,115 @@ export function HTPipe<
       ? OptionallyHasSanitizeInputs<ReturnType<TLeft['sanitizeInputs']>, any>
       : {}) &
     (TLeft extends HasPreAuthorize<any, any>
-      ? MightHavePreAuthorize<ReturnType<TLeft['preAuthorize']>, any>
+      ? OptionallyHasPreAuthorize<ReturnType<TLeft['preAuthorize']>, any>
       : {}) &
-    (TLeft extends HasAttachData<any, any>
-      ? OptionallyHasAttachData<
-          PromiseResolveOrSync<ReturnType<TLeft['attachData']>>,
+    (TLeft extends HasLoadResources<any, any>
+      ? OptionallyHasLoadResources<
+          PromiseResolveOrSync<ReturnType<TLeft['loadResources']>>,
           any
         >
       : {}) &
     (TLeft extends HasFinalAuthorize<any, any>
-      ? MightHaveFinalAuthorize<
+      ? OptionallyHasFinalAuthorize<
           PromiseResolveOrSync<ReturnType<TLeft['finalAuthorize']>>,
           any
         >
       : {}) &
-    (TLeft extends HasDoWork<any, any>
-      ? OptionallyHasDoWork<
-          PromiseResolveOrSync<ReturnType<TLeft['doWork']>>,
+    (TLeft extends HasExecute<any, any>
+      ? OptionallyHasExecute<
+          PromiseResolveOrSync<ReturnType<TLeft['execute']>>,
           any
         >
       : {}) &
-    (TLeft extends HasSanitizeResponse<any, any>
-      ? MightHaveSanitizeResponse<ReturnType<TLeft['sanitizeResponse']>, any>
+    (TLeft extends HasRedactResponse<any, any>
+      ? OptionallyHasRedactResponse<ReturnType<TLeft['redactResponse']>, any>
       : {})
 >(
   left: TLeft,
   right: TRight
-): PipedPreContext<TLeft, TRight> &
+): PipedExtractAmbient<TLeft, TRight> &
   PipedExtractInputs<TLeft, TRight> &
   PipedSanitizeInputs<TLeft, TRight> &
   PipedPreAuthorize<TLeft, TRight> &
-  PipedAttachData<TLeft, TRight> &
+  PipedLoadResources<TLeft, TRight> &
   PipedFinalAuthorize<TLeft, TRight> &
-  PipedDoWork<TLeft, TRight> &
-  PipedSanitizeResponse<TLeft, TRight>;
+  PipedExecute<TLeft, TRight> &
+  PipedRedactResponse<TLeft, TRight>;
 
 // two parameters with possibly added inputs
 export function HTPipe<
-  TLeft extends ClashlessInitPreContext<TLeft, TRight> &
+  TLeft extends ClashlessExtractAmbient<TLeft, TRight> &
     ClashlessExtractInputs<TLeft, TRight> &
     ClashlessSanitizeInputs<TLeft, TRight> &
     ClashlessPreAuthorize<TLeft, TRight> &
-    ClashlessAttachData<TLeft, TRight> &
+    ClashlessLoadResources<TLeft, TRight> &
     ClashlessFinalAuthorize<TLeft, TRight> &
-    ClashlessDoWork<TLeft, TRight> &
-    ClashlessSanitizeResponse<TLeft, TRight>,
-  TRight extends OptionallyHasInitPreContext<any, any> &
+    ClashlessExecute<TLeft, TRight> &
+    ClashlessRedactResponse<TLeft, TRight>,
+  TRight extends OptionallyHasExtractAmbient<any, any> &
     OptionallyHasExtractInputs<any, any> &
     OptionallyHasSanitizeInputs<any, any> &
-    MightHavePreAuthorize<any, any> &
-    OptionallyHasAttachData<any, any> &
-    MightHaveFinalAuthorize<any, any> &
-    OptionallyHasDoWork<any, any> &
-    MightHaveSanitizeResponse<any, any>
+    OptionallyHasPreAuthorize<any, any> &
+    OptionallyHasLoadResources<any, any> &
+    OptionallyHasFinalAuthorize<any, any> &
+    OptionallyHasExecute<any, any> &
+    OptionallyHasRedactResponse<any, any>
 >(
   left: TLeft,
   right: TRight
-): PipedPreContext<TLeft, TRight> &
+): PipedExtractAmbient<TLeft, TRight> &
   PipedExtractInputs<TLeft, TRight> &
   PipedSanitizeInputs<TLeft, TRight> &
   PipedPreAuthorize<TLeft, TRight> &
-  PipedAttachData<TLeft, TRight> &
+  PipedLoadResources<TLeft, TRight> &
   PipedFinalAuthorize<TLeft, TRight> &
-  PipedDoWork<TLeft, TRight> &
-  PipedSanitizeResponse<TLeft, TRight>;
+  PipedExecute<TLeft, TRight> &
+  PipedRedactResponse<TLeft, TRight>;
 
 // three parameters with possibly added inputs
 export function HTPipe<
-  T3 extends ClashlessInitPreContext<T3, PipedPreContext<T2, T1>> &
+  T3 extends ClashlessExtractAmbient<T3, PipedExtractAmbient<T2, T1>> &
     ClashlessExtractInputs<T3, PipedExtractInputs<T2, T1>> &
     ClashlessSanitizeInputs<T3, PipedSanitizeInputs<T2, T1>> &
     ClashlessPreAuthorize<T3, PipedPreAuthorize<T2, T1>> &
-    ClashlessAttachData<T3, PipedAttachData<T2, T1>> &
+    ClashlessLoadResources<T3, PipedLoadResources<T2, T1>> &
     ClashlessFinalAuthorize<T3, PipedFinalAuthorize<T2, T1>> &
-    ClashlessDoWork<T3, PipedDoWork<T2, T1>> &
-    ClashlessSanitizeResponse<T3, PipedSanitizeResponse<T2, T1>>,
-  T2 extends ClashlessInitPreContext<T2, T1> &
+    ClashlessExecute<T3, PipedExecute<T2, T1>> &
+    ClashlessRedactResponse<T3, PipedRedactResponse<T2, T1>>,
+  T2 extends ClashlessExtractAmbient<T2, T1> &
     ClashlessExtractInputs<T2, T1> &
     ClashlessSanitizeInputs<T2, T1> &
     ClashlessPreAuthorize<T2, T1> &
-    ClashlessAttachData<T2, T1> &
+    ClashlessLoadResources<T2, T1> &
     ClashlessFinalAuthorize<T2, T1> &
-    ClashlessDoWork<T2, T1> &
-    ClashlessSanitizeResponse<T2, T1>,
-  T1 extends OptionallyHasInitPreContext<any, any> &
+    ClashlessExecute<T2, T1> &
+    ClashlessRedactResponse<T2, T1>,
+  T1 extends OptionallyHasExtractAmbient<any, any> &
     OptionallyHasExtractInputs<any, any> &
     OptionallyHasSanitizeInputs<any, any> &
-    MightHavePreAuthorize<any, any> &
-    OptionallyHasAttachData<any, any> &
-    MightHaveFinalAuthorize<any, any> &
-    OptionallyHasDoWork<any, any> &
-    MightHaveSanitizeResponse<any, any>
+    OptionallyHasPreAuthorize<any, any> &
+    OptionallyHasLoadResources<any, any> &
+    OptionallyHasFinalAuthorize<any, any> &
+    OptionallyHasExecute<any, any> &
+    OptionallyHasRedactResponse<any, any>
 >(
   obj3: T3,
   obj2: T2,
   obj1: T1
-): PipedPreContext<T3, PipedPreContext<T2, T1>> &
+): PipedExtractAmbient<T3, PipedExtractAmbient<T2, T1>> &
   PipedExtractInputs<T3, PipedExtractInputs<T2, T1>> &
   PipedSanitizeInputs<T3, PipedSanitizeInputs<T2, T1>> &
   PipedPreAuthorize<T3, PipedPreAuthorize<T2, T1>> &
-  PipedAttachData<T3, PipedAttachData<T2, T1>> &
+  PipedLoadResources<T3, PipedLoadResources<T2, T1>> &
   PipedFinalAuthorize<T3, PipedFinalAuthorize<T2, T1>> &
-  PipedDoWork<T3, PipedDoWork<T2, T1>> &
-  PipedSanitizeResponse<T3, PipedSanitizeResponse<T2, T1>>;
+  PipedExecute<T3, PipedExecute<T2, T1>> &
+  PipedRedactResponse<T3, PipedRedactResponse<T2, T1>>;
 
 // four parameters with possibly added inputs
 export function HTPipe<
-  T4 extends ClashlessInitPreContext<
+  T4 extends ClashlessExtractAmbient<
     T4,
-    PipedPreContext<T3, PipedPreContext<T2, T1>>
+    PipedExtractAmbient<T3, PipedExtractAmbient<T2, T1>>
   > &
     ClashlessExtractInputs<
       T4,
@@ -889,61 +889,61 @@ export function HTPipe<
       T4,
       PipedPreAuthorize<T3, PipedPreAuthorize<T2, T1>>
     > &
-    ClashlessAttachData<T4, PipedAttachData<T3, PipedAttachData<T2, T1>>> &
+    ClashlessLoadResources<T4, PipedLoadResources<T3, PipedLoadResources<T2, T1>>> &
     ClashlessFinalAuthorize<
       T4,
       PipedFinalAuthorize<T3, PipedFinalAuthorize<T2, T1>>
     > &
-    ClashlessDoWork<T4, PipedDoWork<T3, PipedDoWork<T2, T1>>> &
-    ClashlessSanitizeResponse<
+    ClashlessExecute<T4, PipedExecute<T3, PipedExecute<T2, T1>>> &
+    ClashlessRedactResponse<
       T4,
-      PipedSanitizeResponse<T3, PipedSanitizeResponse<T2, T1>>
+      PipedRedactResponse<T3, PipedRedactResponse<T2, T1>>
     >,
-  T3 extends ClashlessInitPreContext<T3, PipedPreContext<T2, T1>> &
+  T3 extends ClashlessExtractAmbient<T3, PipedExtractAmbient<T2, T1>> &
     ClashlessExtractInputs<T3, PipedExtractInputs<T2, T1>> &
     ClashlessSanitizeInputs<T3, PipedSanitizeInputs<T2, T1>> &
     ClashlessPreAuthorize<T3, PipedPreAuthorize<T2, T1>> &
-    ClashlessAttachData<T3, PipedAttachData<T2, T1>> &
+    ClashlessLoadResources<T3, PipedLoadResources<T2, T1>> &
     ClashlessFinalAuthorize<T3, PipedFinalAuthorize<T2, T1>> &
-    ClashlessDoWork<T3, PipedDoWork<T2, T1>> &
-    ClashlessSanitizeResponse<T3, PipedSanitizeResponse<T2, T1>>,
-  T2 extends ClashlessInitPreContext<T2, T1> &
+    ClashlessExecute<T3, PipedExecute<T2, T1>> &
+    ClashlessRedactResponse<T3, PipedRedactResponse<T2, T1>>,
+  T2 extends ClashlessExtractAmbient<T2, T1> &
     ClashlessExtractInputs<T2, T1> &
     ClashlessSanitizeInputs<T2, T1> &
     ClashlessPreAuthorize<T2, T1> &
-    ClashlessAttachData<T2, T1> &
+    ClashlessLoadResources<T2, T1> &
     ClashlessFinalAuthorize<T2, T1> &
-    ClashlessDoWork<T2, T1> &
-    ClashlessSanitizeResponse<T2, T1>,
-  T1 extends OptionallyHasInitPreContext<any, any> &
+    ClashlessExecute<T2, T1> &
+    ClashlessRedactResponse<T2, T1>,
+  T1 extends OptionallyHasExtractAmbient<any, any> &
     OptionallyHasExtractInputs<any, any> &
     OptionallyHasSanitizeInputs<any, any> &
-    MightHavePreAuthorize<any, any> &
-    OptionallyHasAttachData<any, any> &
-    MightHaveFinalAuthorize<any, any> &
-    OptionallyHasDoWork<any, any> &
-    MightHaveSanitizeResponse<any, any>
+    OptionallyHasPreAuthorize<any, any> &
+    OptionallyHasLoadResources<any, any> &
+    OptionallyHasFinalAuthorize<any, any> &
+    OptionallyHasExecute<any, any> &
+    OptionallyHasRedactResponse<any, any>
 >(
   obj4: T4,
   obj3: T3,
   obj2: T2,
   obj1: T1
-): PipedPreContext<T4, PipedPreContext<T3, PipedPreContext<T2, T1>>> &
+): PipedExtractAmbient<T4, PipedExtractAmbient<T3, PipedExtractAmbient<T2, T1>>> &
   PipedExtractInputs<T4, PipedExtractInputs<T3, PipedExtractInputs<T2, T1>>> &
   PipedSanitizeInputs<
     T4,
     PipedSanitizeInputs<T3, PipedSanitizeInputs<T2, T1>>
   > &
   PipedPreAuthorize<T4, PipedPreAuthorize<T3, PipedPreAuthorize<T2, T1>>> &
-  PipedAttachData<T4, PipedAttachData<T3, PipedAttachData<T2, T1>>> &
+  PipedLoadResources<T4, PipedLoadResources<T3, PipedLoadResources<T2, T1>>> &
   PipedFinalAuthorize<
     T4,
     PipedFinalAuthorize<T3, PipedFinalAuthorize<T2, T1>>
   > &
-  PipedDoWork<T4, PipedDoWork<T3, PipedDoWork<T2, T1>>> &
-  PipedSanitizeResponse<
+  PipedExecute<T4, PipedExecute<T3, PipedExecute<T2, T1>>> &
+  PipedRedactResponse<
     T4,
-    PipedSanitizeResponse<T3, PipedSanitizeResponse<T2, T1>>
+    PipedRedactResponse<T3, PipedRedactResponse<T2, T1>>
   >;
 
 export function HTPipe(...objs: any[]) {
@@ -957,26 +957,26 @@ export function HTPipe(...objs: any[]) {
     const left = objs[0];
     const right = objs[1];
     return {
-      ...((isHasInitPreContext(left) && isHasInitPreContext(right)
+      ...((isHasExtractAmbient(left) && isHasExtractAmbient(right)
         ? {
-            initPreContext: (context: any) => {
-              const leftOut = left.initPreContext(context) || {};
+            extractAmbient: (context: any) => {
+              const leftOut = left.extractAmbient(context) || {};
               const rightIn = {
                 ...context,
                 ...(leftOut as {}),
               };
-              const rightOut = right.initPreContext(rightIn) || {};
+              const rightOut = right.extractAmbient(rightIn) || {};
               return {
                 ...(leftOut as {}),
                 ...(rightOut as {}),
               };
             },
           }
-        : isHasInitPreContext(left)
-        ? { initPreContext: left.initPreContext }
-        : isHasInitPreContext(right)
-        ? { initPreContext: right.initPreContext }
-        : {}) as PipedPreContext<any, any>),
+        : isHasExtractAmbient(left)
+        ? { extractAmbient: left.extractAmbient }
+        : isHasExtractAmbient(right)
+        ? { extractAmbient: right.extractAmbient }
+        : {}) as PipedExtractAmbient<any, any>),
       ...((isHasExtractInputs(left) && isHasExtractInputs(right)
         ? {
             extractInputs: (context: any) => {
@@ -1050,28 +1050,28 @@ export function HTPipe(...objs: any[]) {
         : isHasPreAuthorize(right)
         ? { preAuthorize: right.preAuthorize }
         : {}) as PipedPreAuthorize<any, any>),
-      ...((isHasAttachData(left) && isHasAttachData(right)
+      ...((isHasLoadResources(left) && isHasLoadResources(right)
         ? {
-            attachData: async (context: any) => {
+            loadResources: async (context: any) => {
               const leftOut =
-                (await Promise.resolve(left.attachData(context))) || {};
+                (await Promise.resolve(left.loadResources(context))) || {};
               const rightIn = {
                 ...context,
                 ...(leftOut as {}),
               };
               const rightOut =
-                (await Promise.resolve(right.attachData(rightIn))) || {};
+                (await Promise.resolve(right.loadResources(rightIn))) || {};
               return {
                 ...(leftOut as {}),
                 ...(rightOut as {}),
               };
             },
           }
-        : isHasAttachData(left)
-        ? { attachData: left.attachData }
-        : isHasAttachData(right)
-        ? { attachData: right.attachData }
-        : {}) as PipedAttachData<any, any>),
+        : isHasLoadResources(left)
+        ? { loadResources: left.loadResources }
+        : isHasLoadResources(right)
+        ? { loadResources: right.loadResources }
+        : {}) as PipedLoadResources<any, any>),
       ...((isHasFinalAuthorize(left) && isHasFinalAuthorize(right)
         ? {
             finalAuthorize: async (context: any) => {
@@ -1115,31 +1115,31 @@ export function HTPipe(...objs: any[]) {
         : isHasFinalAuthorize(right)
         ? { finalAuthorize: right.finalAuthorize }
         : {}) as PipedFinalAuthorize<any, any>),
-      ...((isHasDoWork(left) && isHasDoWork(right)
+      ...((isHasExecute(left) && isHasExecute(right)
         ? {
-            doWork: async (context: any) => {
-              await Promise.resolve(left.doWork(context));
-              return await Promise.resolve(right.doWork(context));
+            execute: async (context: any) => {
+              await Promise.resolve(left.execute(context));
+              return await Promise.resolve(right.execute(context));
             },
           }
-        : isHasDoWork(left)
-        ? { doWork: left.doWork }
-        : isHasDoWork(right)
-        ? { doWork: right.doWork }
-        : {}) as PipedDoWork<any, any>),
-      ...((isHasSanitizeResponse(left) && isHasSanitizeResponse(right)
+        : isHasExecute(left)
+        ? { execute: left.execute }
+        : isHasExecute(right)
+        ? { execute: right.execute }
+        : {}) as PipedExecute<any, any>),
+      ...((isHasRedactResponse(left) && isHasRedactResponse(right)
         ? {
-            sanitizeResponse: (context: any) => {
-              const leftOut = left.sanitizeResponse(context) || {};
-              const rightOut = right.sanitizeResponse(leftOut) || {};
+            redactResponse: (context: any) => {
+              const leftOut = left.redactResponse(context) || {};
+              const rightOut = right.redactResponse(leftOut) || {};
               return rightOut;
             },
           }
-        : isHasSanitizeResponse(left)
-        ? { sanitizeResponse: left.sanitizeResponse }
-        : isHasSanitizeResponse(right)
-        ? { sanitizeResponse: right.sanitizeResponse }
-        : {}) as PipedSanitizeResponse<any, any>),
+        : isHasRedactResponse(left)
+        ? { redactResponse: left.redactResponse }
+        : isHasRedactResponse(right)
+        ? { redactResponse: right.redactResponse }
+        : {}) as PipedRedactResponse<any, any>),
     };
   }
 
@@ -1150,156 +1150,156 @@ export function HTPipe(...objs: any[]) {
  * A pipeable object is any object that has one or more lifecycle stage functions.
  * This type represents the union of all possible stage configurations.
  */
-type Pipeable = OptionallyHasInitPreContext<any, any> &
+type Pipeable = OptionallyHasExtractAmbient<any, any> &
   OptionallyHasExtractInputs<any, any> &
   OptionallyHasSanitizeInputs<any, any> &
-  MightHavePreAuthorize<any, any> &
-  OptionallyHasAttachData<any, any> &
-  MightHaveFinalAuthorize<any, any> &
-  OptionallyHasDoWork<any, any> &
-  MightHaveSanitizeResponse<any, any>;
+  OptionallyHasPreAuthorize<any, any> &
+  OptionallyHasLoadResources<any, any> &
+  OptionallyHasFinalAuthorize<any, any> &
+  OptionallyHasExecute<any, any> &
+  OptionallyHasRedactResponse<any, any>;
 
 export function composePipes(
   ...pipes: Pipeable[]
-): HasAllNotRequireds & HasAllRequireds {
+): OptionalStagesShape & HasRequiredStages {
   return pipes.reduce(
     (prev, curr) => HTPipe(prev, curr),
     {} as Pipeable
-  ) as HasAllNotRequireds & HasAllRequireds;
+  ) as OptionalStagesShape & HasRequiredStages;
 }
 
-// left has attachData AND right has attachData AND left's return keys that exist in right's parameters are assignable to right's correspondingly
-export function HTPipeAttachData<
-  TLeft extends HasAttachData<
+// left has loadResources AND right has loadResources AND left's return keys that exist in right's parameters are assignable to right's correspondingly
+export function HTPipeLoadResources<
+  TLeft extends HasLoadResources<
     any,
-    TRight extends HasAttachData<any, any>
+    TRight extends HasLoadResources<any, any>
       ? Pick<
-          Parameters<TRight['attachData']>[0],
+          Parameters<TRight['loadResources']>[0],
           keyof PromiseResolveOrSync<
             ReturnType<
-              TLeft extends HasAttachData<any, any>
-                ? TLeft['attachData']
+              TLeft extends HasLoadResources<any, any>
+                ? TLeft['loadResources']
                 : () => {}
             >
           >
         >
       : any
   >,
-  TRight extends HasAttachData<any, any>,
-  TContextInLeft extends Parameters<TLeft['attachData']>[0],
-  TContextInRight extends Parameters<TRight['attachData']>[0],
-  TContextOutLeft extends PromiseResolveOrSync<ReturnType<TLeft['attachData']>>,
+  TRight extends HasLoadResources<any, any>,
+  TContextInLeft extends Parameters<TLeft['loadResources']>[0],
+  TContextInRight extends Parameters<TRight['loadResources']>[0],
+  TContextOutLeft extends PromiseResolveOrSync<ReturnType<TLeft['loadResources']>>,
   TContextOutRight extends PromiseResolveOrSync<
-    ReturnType<TRight['attachData']>
+    ReturnType<TRight['loadResources']>
   >
 >(
   left: TLeft,
   right: TRight
-): HasAttachData<
+): HasLoadResources<
   TContextInLeft & Omit<TContextInRight, keyof TContextOutLeft>,
   TContextOutRight & Omit<TContextOutLeft, keyof TContextOutRight>
 >;
 
-export function HTPipeAttachData<
-  TLeft extends HasAttachData<
+export function HTPipeLoadResources<
+  TLeft extends HasLoadResources<
     any,
-    TRight extends HasAttachData<any, any>
+    TRight extends HasLoadResources<any, any>
       ? Pick<
-          Parameters<TRight['attachData']>[0],
+          Parameters<TRight['loadResources']>[0],
           keyof PromiseResolveOrSync<
             ReturnType<
-              TLeft extends HasAttachData<any, any>
-                ? TLeft['attachData']
+              TLeft extends HasLoadResources<any, any>
+                ? TLeft['loadResources']
                 : () => {}
             >
           >
         >
       : any
   >,
-  TRight extends OptionallyHasAttachData<any, any>,
-  TContextInLeft extends Parameters<TLeft['attachData']>[0],
-  TContextOutLeft extends PromiseResolveOrSync<ReturnType<TLeft['attachData']>>
->(left: TLeft, right: TRight): HasAttachData<TContextInLeft, TContextOutLeft>;
+  TRight extends OptionallyHasLoadResources<any, any>,
+  TContextInLeft extends Parameters<TLeft['loadResources']>[0],
+  TContextOutLeft extends PromiseResolveOrSync<ReturnType<TLeft['loadResources']>>
+>(left: TLeft, right: TRight): HasLoadResources<TContextInLeft, TContextOutLeft>;
 
-export function HTPipeAttachData<
-  TLeft extends OptionallyHasAttachData<
+export function HTPipeLoadResources<
+  TLeft extends OptionallyHasLoadResources<
     any,
-    TRight extends HasAttachData<any, any>
+    TRight extends HasLoadResources<any, any>
       ? Pick<
-          Parameters<TRight['attachData']>[0],
+          Parameters<TRight['loadResources']>[0],
           keyof PromiseResolveOrSync<
             ReturnType<
-              TLeft extends HasAttachData<any, any>
-                ? TLeft['attachData']
+              TLeft extends HasLoadResources<any, any>
+                ? TLeft['loadResources']
                 : () => {}
             >
           >
         >
       : any
   >,
-  TRight extends HasAttachData<any, any>,
-  TContextInRight extends Parameters<TRight['attachData']>[0],
+  TRight extends HasLoadResources<any, any>,
+  TContextInRight extends Parameters<TRight['loadResources']>[0],
   TContextOutRight extends PromiseResolveOrSync<
-    ReturnType<TRight['attachData']>
+    ReturnType<TRight['loadResources']>
   >
->(left: TLeft, right: TRight): HasAttachData<TContextInRight, TContextOutRight>;
+>(left: TLeft, right: TRight): HasLoadResources<TContextInRight, TContextOutRight>;
 
-export function HTPipeAttachData<
-  TLeft extends OptionallyHasAttachData<
+export function HTPipeLoadResources<
+  TLeft extends OptionallyHasLoadResources<
     any,
-    TRight extends HasAttachData<any, any>
+    TRight extends HasLoadResources<any, any>
       ? Pick<
-          Parameters<TRight['attachData']>[0],
+          Parameters<TRight['loadResources']>[0],
           keyof PromiseResolveOrSync<
             ReturnType<
-              TLeft extends HasAttachData<any, any>
-                ? TLeft['attachData']
+              TLeft extends HasLoadResources<any, any>
+                ? TLeft['loadResources']
                 : () => {}
             >
           >
         >
       : any
   >,
-  TRight extends OptionallyHasAttachData<any, any>
+  TRight extends OptionallyHasLoadResources<any, any>
 >(left: TLeft, right: TRight): {};
 
-export function HTPipeAttachData<
-  TLeft extends OptionallyHasAttachData<any, any>,
-  TRight extends OptionallyHasAttachData<any, any>,
-  TContextInLeft extends TLeft extends HasAttachData<any, any>
-    ? Parameters<TLeft['attachData']>[0]
+export function HTPipeLoadResources<
+  TLeft extends OptionallyHasLoadResources<any, any>,
+  TRight extends OptionallyHasLoadResources<any, any>,
+  TContextInLeft extends TLeft extends HasLoadResources<any, any>
+    ? Parameters<TLeft['loadResources']>[0]
     : never,
-  TContextInRight extends TRight extends HasAttachData<any, any>
-    ? Parameters<TRight['attachData']>[0]
+  TContextInRight extends TRight extends HasLoadResources<any, any>
+    ? Parameters<TRight['loadResources']>[0]
     : never,
-  TContextOutLeft extends TLeft extends HasAttachData<any, any>
-    ? PromiseResolveOrSync<ReturnType<TLeft['attachData']>>
+  TContextOutLeft extends TLeft extends HasLoadResources<any, any>
+    ? PromiseResolveOrSync<ReturnType<TLeft['loadResources']>>
     : never,
-  TContextOutRight extends TRight extends HasAttachData<any, any>
-    ? PromiseResolveOrSync<ReturnType<TRight['attachData']>>
+  TContextOutRight extends TRight extends HasLoadResources<any, any>
+    ? PromiseResolveOrSync<ReturnType<TRight['loadResources']>>
     : never
 >(left: TLeft, right: TRight) {
-  if (isHasAttachData(left) && isHasAttachData(right)) {
+  if (isHasLoadResources(left) && isHasLoadResources(right)) {
     return {
-      attachData: async (
+      loadResources: async (
         context: TContextOutLeft extends TContextInRight
           ? TContextInLeft
           : TContextInRight & TContextInLeft
       ) => {
-        const leftOut = (await Promise.resolve(left.attachData(context))) || {};
+        const leftOut = (await Promise.resolve(left.loadResources(context))) || {};
         const rightIn = {
           ...context,
           ...leftOut,
         };
         const rightOut =
-          (await Promise.resolve(right.attachData(rightIn))) || {};
+          (await Promise.resolve(right.loadResources(rightIn))) || {};
         return { ...leftOut, ...rightOut };
       },
     };
-  } else if (isHasAttachData(left)) {
-    return { attachData: left.attachData };
-  } else if (isHasAttachData(right)) {
-    return { attachData: right.attachData };
+  } else if (isHasLoadResources(left)) {
+    return { loadResources: left.loadResources };
+  } else if (isHasLoadResources(right)) {
+    return { loadResources: right.loadResources };
   } else {
     return {};
   }
@@ -1356,13 +1356,13 @@ export function HTPipePreAuthorize<
           >
         : any)
   >,
-  TRight extends MightHavePreAuthorize<any, any>,
+  TRight extends OptionallyHasPreAuthorize<any, any>,
   TContextInLeft extends Parameters<TLeft['preAuthorize']>[0],
   TContextOutLeft extends ReturnType<TLeft['preAuthorize']>
 >(left: TLeft, right: TRight): HasPreAuthorize<TContextInLeft, TContextOutLeft>;
 
 export function HTPipePreAuthorize<
-  TLeft extends MightHavePreAuthorize<
+  TLeft extends OptionallyHasPreAuthorize<
     any,
     | boolean
     | (TRight extends HasPreAuthorize<any, any>
@@ -1385,7 +1385,7 @@ export function HTPipePreAuthorize<
 ): HasPreAuthorize<TContextInRight, TContextOutRight>;
 
 export function HTPipePreAuthorize<
-  TLeft extends MightHavePreAuthorize<
+  TLeft extends OptionallyHasPreAuthorize<
     any,
     | boolean
     | (TRight extends HasPreAuthorize<any, any>
@@ -1399,12 +1399,12 @@ export function HTPipePreAuthorize<
           >
         : any)
   >,
-  TRight extends MightHavePreAuthorize<any, any>
+  TRight extends OptionallyHasPreAuthorize<any, any>
 >(left: TLeft, right: TRight): {};
 
 export function HTPipePreAuthorize<
-  TLeft extends MightHavePreAuthorize<any, any>,
-  TRight extends MightHavePreAuthorize<any, any>,
+  TLeft extends OptionallyHasPreAuthorize<any, any>,
+  TRight extends OptionallyHasPreAuthorize<any, any>,
   TContextInLeft extends TLeft extends HasPreAuthorize<any, any>
     ? Parameters<TLeft['preAuthorize']>[0]
     : never,
@@ -1522,7 +1522,7 @@ export function HTPipeFinalAuthorize<
           >
         : any)
   >,
-  TRight extends MightHaveFinalAuthorize<any, any>,
+  TRight extends OptionallyHasFinalAuthorize<any, any>,
   TContextInLeft extends Parameters<TLeft['finalAuthorize']>[0],
   TContextOutLeft extends PromiseResolveOrSync<
     ReturnType<TLeft['finalAuthorize']>
@@ -1533,7 +1533,7 @@ export function HTPipeFinalAuthorize<
 ): HasFinalAuthorize<TContextInLeft, TContextOutLeft>;
 
 export function HTPipeFinalAuthorize<
-  TLeft extends MightHaveFinalAuthorize<
+  TLeft extends OptionallyHasFinalAuthorize<
     any,
     | boolean
     | (TRight extends HasFinalAuthorize<any, any>
@@ -1560,7 +1560,7 @@ export function HTPipeFinalAuthorize<
 ): HasFinalAuthorize<TContextInRight, TContextOutRight>;
 
 export function HTPipeFinalAuthorize<
-  TLeft extends MightHaveFinalAuthorize<
+  TLeft extends OptionallyHasFinalAuthorize<
     any,
     | boolean
     | (TRight extends HasFinalAuthorize<any, any>
@@ -1576,12 +1576,12 @@ export function HTPipeFinalAuthorize<
           >
         : any)
   >,
-  TRight extends MightHaveFinalAuthorize<any, any>
+  TRight extends OptionallyHasFinalAuthorize<any, any>
 >(left: TLeft, right: TRight): {};
 
 export function HTPipeFinalAuthorize<
-  TLeft extends MightHaveFinalAuthorize<any, any>,
-  TRight extends MightHaveFinalAuthorize<any, any>,
+  TLeft extends OptionallyHasFinalAuthorize<any, any>,
+  TRight extends OptionallyHasFinalAuthorize<any, any>,
   TContextInLeft extends TLeft extends HasFinalAuthorize<any, any>
     ? Parameters<TLeft['finalAuthorize']>[0]
     : never,
@@ -1636,133 +1636,133 @@ export function HTPipeFinalAuthorize<
   }
 }
 
-export function HTPipeInitPreContext<
-  TLeft extends HasInitPreContext<
+export function HTPipeExtractAmbient<
+  TLeft extends HasExtractAmbient<
     any,
-    TRight extends HasInitPreContext<any, any>
+    TRight extends HasExtractAmbient<any, any>
       ? Pick<
-          Parameters<TRight['initPreContext']>[0],
+          Parameters<TRight['extractAmbient']>[0],
           keyof ReturnType<
-            TLeft extends HasInitPreContext<any, any>
-              ? TLeft['initPreContext']
+            TLeft extends HasExtractAmbient<any, any>
+              ? TLeft['extractAmbient']
               : () => {}
           >
         >
       : any
   >,
-  TRight extends HasInitPreContext<any, any>,
-  TContextInLeft extends Parameters<TLeft['initPreContext']>[0],
-  TContextInRight extends Parameters<TRight['initPreContext']>[0],
-  TContextOutLeft extends ReturnType<TLeft['initPreContext']>,
-  TContextOutRight extends ReturnType<TRight['initPreContext']>
+  TRight extends HasExtractAmbient<any, any>,
+  TContextInLeft extends Parameters<TLeft['extractAmbient']>[0],
+  TContextInRight extends Parameters<TRight['extractAmbient']>[0],
+  TContextOutLeft extends ReturnType<TLeft['extractAmbient']>,
+  TContextOutRight extends ReturnType<TRight['extractAmbient']>
 >(
   left: TLeft,
   right: TRight
-): HasInitPreContext<
+): HasExtractAmbient<
   TContextInLeft & Omit<TContextInRight, keyof TContextOutLeft>,
   TContextOutRight & Omit<TContextOutLeft, keyof TContextOutRight>
 >;
 
-export function HTPipeInitPreContext<
-  TLeft extends HasInitPreContext<
+export function HTPipeExtractAmbient<
+  TLeft extends HasExtractAmbient<
     any,
-    TRight extends HasInitPreContext<any, any>
+    TRight extends HasExtractAmbient<any, any>
       ? Pick<
-          Parameters<TRight['initPreContext']>[0],
+          Parameters<TRight['extractAmbient']>[0],
           keyof ReturnType<
-            TLeft extends HasInitPreContext<any, any>
-              ? TLeft['initPreContext']
+            TLeft extends HasExtractAmbient<any, any>
+              ? TLeft['extractAmbient']
               : () => {}
           >
         >
       : any
   >,
-  TRight extends OptionallyHasInitPreContext<any, any>,
-  TContextInLeft extends Parameters<TLeft['initPreContext']>[0],
-  TContextOutLeft extends ReturnType<TLeft['initPreContext']>
+  TRight extends OptionallyHasExtractAmbient<any, any>,
+  TContextInLeft extends Parameters<TLeft['extractAmbient']>[0],
+  TContextOutLeft extends ReturnType<TLeft['extractAmbient']>
 >(
   left: TLeft,
   right: TRight
-): HasInitPreContext<TContextInLeft, TContextOutLeft>;
+): HasExtractAmbient<TContextInLeft, TContextOutLeft>;
 
-export function HTPipeInitPreContext<
-  TLeft extends OptionallyHasInitPreContext<
+export function HTPipeExtractAmbient<
+  TLeft extends OptionallyHasExtractAmbient<
     any,
-    TRight extends HasInitPreContext<any, any>
+    TRight extends HasExtractAmbient<any, any>
       ? Pick<
-          Parameters<TRight['initPreContext']>[0],
+          Parameters<TRight['extractAmbient']>[0],
           keyof ReturnType<
-            TLeft extends HasInitPreContext<any, any>
-              ? TLeft['initPreContext']
+            TLeft extends HasExtractAmbient<any, any>
+              ? TLeft['extractAmbient']
               : () => {}
           >
         >
       : any
   >,
-  TRight extends HasInitPreContext<any, any>,
-  TContextInRight extends Parameters<TRight['initPreContext']>[0],
-  TContextOutRight extends ReturnType<TRight['initPreContext']>
+  TRight extends HasExtractAmbient<any, any>,
+  TContextInRight extends Parameters<TRight['extractAmbient']>[0],
+  TContextOutRight extends ReturnType<TRight['extractAmbient']>
 >(
   left: TLeft,
   right: TRight
-): HasInitPreContext<TContextInRight, TContextOutRight>;
+): HasExtractAmbient<TContextInRight, TContextOutRight>;
 
-export function HTPipeInitPreContext<
-  TLeft extends OptionallyHasInitPreContext<
+export function HTPipeExtractAmbient<
+  TLeft extends OptionallyHasExtractAmbient<
     any,
-    TRight extends HasInitPreContext<any, any>
+    TRight extends HasExtractAmbient<any, any>
       ? Pick<
-          Parameters<TRight['initPreContext']>[0],
+          Parameters<TRight['extractAmbient']>[0],
           keyof ReturnType<
-            TLeft extends HasInitPreContext<any, any>
-              ? TLeft['initPreContext']
+            TLeft extends HasExtractAmbient<any, any>
+              ? TLeft['extractAmbient']
               : () => {}
           >
         >
       : any
   >,
-  TRight extends OptionallyHasInitPreContext<any, any>
+  TRight extends OptionallyHasExtractAmbient<any, any>
 >(left: TLeft, right: TRight): {};
 
-export function HTPipeInitPreContext<
-  TLeft extends OptionallyHasInitPreContext<any, any>,
-  TRight extends OptionallyHasInitPreContext<any, any>,
-  TContextInLeft extends TLeft extends HasInitPreContext<any, any>
-    ? Parameters<TLeft['initPreContext']>[0]
+export function HTPipeExtractAmbient<
+  TLeft extends OptionallyHasExtractAmbient<any, any>,
+  TRight extends OptionallyHasExtractAmbient<any, any>,
+  TContextInLeft extends TLeft extends HasExtractAmbient<any, any>
+    ? Parameters<TLeft['extractAmbient']>[0]
     : never,
-  TContextInRight extends TRight extends HasInitPreContext<any, any>
-    ? Parameters<TRight['initPreContext']>[0]
+  TContextInRight extends TRight extends HasExtractAmbient<any, any>
+    ? Parameters<TRight['extractAmbient']>[0]
     : never,
-  TContextOutLeft extends TLeft extends HasInitPreContext<any, any>
-    ? ReturnType<TLeft['initPreContext']>
+  TContextOutLeft extends TLeft extends HasExtractAmbient<any, any>
+    ? ReturnType<TLeft['extractAmbient']>
     : never,
-  TContextOutRight extends TRight extends HasInitPreContext<any, any>
-    ? ReturnType<TRight['initPreContext']>
+  TContextOutRight extends TRight extends HasExtractAmbient<any, any>
+    ? ReturnType<TRight['extractAmbient']>
     : never
 >(left: TLeft, right: TRight) {
-  if (isHasInitPreContext(left) && isHasInitPreContext(right)) {
+  if (isHasExtractAmbient(left) && isHasExtractAmbient(right)) {
     return {
-      initPreContext: (
+      extractAmbient: (
         context: TContextOutLeft extends TContextInRight
           ? TContextInLeft
           : TContextInRight & TContextInLeft
       ) => {
-        const leftOut = left.initPreContext(context) || {};
+        const leftOut = left.extractAmbient(context) || {};
         const rightIn = {
           ...context,
           ...leftOut,
         };
-        const rightOut = right.initPreContext(rightIn) || {};
+        const rightOut = right.extractAmbient(rightIn) || {};
         return {
           ...leftOut,
           ...rightOut,
         };
       },
     };
-  } else if (isHasInitPreContext(left)) {
-    return { initPreContext: left.initPreContext };
-  } else if (isHasInitPreContext(right)) {
-    return { initPreContext: right.initPreContext };
+  } else if (isHasExtractAmbient(left)) {
+    return { extractAmbient: left.extractAmbient };
+  } else if (isHasExtractAmbient(right)) {
+    return { extractAmbient: right.extractAmbient };
   } else {
     return {};
   }
@@ -1796,21 +1796,21 @@ export function HTPipeExtractInputs<
   }
 }
 
-export function HTPipeDoWork<
-  TLeft extends OptionallyHasDoWork<any, any>,
-  TRight extends OptionallyHasDoWork<any, any>
+export function HTPipeExecute<
+  TLeft extends OptionallyHasExecute<any, any>,
+  TRight extends OptionallyHasExecute<any, any>
 >(left: TLeft, right: TRight) {
-  if (isHasDoWork(left) && isHasDoWork(right)) {
+  if (isHasExecute(left) && isHasExecute(right)) {
     return {
-      doWork: async (context: any) => {
-        await Promise.resolve(left.doWork(context));
-        return await Promise.resolve(right.doWork(context));
+      execute: async (context: any) => {
+        await Promise.resolve(left.execute(context));
+        return await Promise.resolve(right.execute(context));
       },
     };
-  } else if (isHasDoWork(left)) {
-    return { doWork: left.doWork };
-  } else if (isHasDoWork(right)) {
-    return { doWork: right.doWork };
+  } else if (isHasExecute(left)) {
+    return { execute: left.execute };
+  } else if (isHasExecute(right)) {
+    return { execute: right.execute };
   } else {
     return {};
   }
@@ -1837,22 +1837,22 @@ export function HTPipeSanitizeInputs<
   }
 }
 
-export function HTPipeSanitizeResponse<
-  TLeft extends MightHaveSanitizeResponse<any, any>,
-  TRight extends MightHaveSanitizeResponse<any, any>
+export function HTPipeRedactResponse<
+  TLeft extends OptionallyHasRedactResponse<any, any>,
+  TRight extends OptionallyHasRedactResponse<any, any>
 >(left: TLeft, right: TRight) {
-  if (isHasSanitizeResponse(left) && isHasSanitizeResponse(right)) {
+  if (isHasRedactResponse(left) && isHasRedactResponse(right)) {
     return {
-      sanitizeResponse: (context: any) => {
-        const leftOut = left.sanitizeResponse(context) || {};
-        const rightOut = right.sanitizeResponse(leftOut) || {};
+      redactResponse: (context: any) => {
+        const leftOut = left.redactResponse(context) || {};
+        const rightOut = right.redactResponse(leftOut) || {};
         return rightOut;
       },
     };
-  } else if (isHasSanitizeResponse(left)) {
-    return { sanitizeResponse: left.sanitizeResponse };
-  } else if (isHasSanitizeResponse(right)) {
-    return { sanitizeResponse: right.sanitizeResponse };
+  } else if (isHasRedactResponse(left)) {
+    return { redactResponse: left.redactResponse };
+  } else if (isHasRedactResponse(right)) {
+    return { redactResponse: right.redactResponse };
   } else {
     return {};
   }

@@ -1,9 +1,9 @@
-export function InitPreContext<
+export function ExtractAmbient<
   TContextIn extends object,
   TContextOut extends object
 >(projector: (htCtx: TContextIn) => TContextOut) {
   return {
-    initPreContext: projector,
+    extractAmbient: projector,
   };
 }
 
@@ -34,12 +34,12 @@ export function PreAuthorize<
   };
 }
 
-export function AttachData<
+export function LoadResources<
   TContextIn extends object,
   TContextOut extends object
 >(projector: (htCtx: TContextIn) => TContextOut) {
   return {
-    attachData: projector,
+    loadResources: projector,
   };
 }
 
@@ -52,18 +52,18 @@ export function FinalAuthorize<
   };
 }
 
-export function DoWork<TContextIn extends object, TUnsafeResponse>(
+export function Execute<TContextIn extends object, TUnsafeResponse>(
   projector: (htCtx: TContextIn) => TUnsafeResponse
 ) {
   return {
-    doWork: projector,
+    execute: projector,
   };
 }
 
-export function SanitizeResponse<TUnsafeResponse, TResponse>(
+export function RedactResponse<TUnsafeResponse, TResponse>(
   projector: (unsafe: TUnsafeResponse) => TResponse
 ) {
   return {
-    sanitizeResponse: projector,
+    redactResponse: projector,
   };
 }
