@@ -1147,6 +1147,7 @@ export function HTPipe(...objs: any[]) {
 }
 
 export * from './core';
+export * from './errors';
 export * from './express';
 export * from './trpc';
 export * from './mongoose';
