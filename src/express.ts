@@ -126,7 +126,7 @@ function expressBaselineExtractInputs(raw: ExpressRaw): ExpressRawInputs {
   };
 }
 
-export function hipExpressHandlerFactory<
+export function toExpressHandler<
   TConf extends OptionalStagesShape &
     HasRequiredStages &
     PreAuthorizeDepsMet<TConf> &
