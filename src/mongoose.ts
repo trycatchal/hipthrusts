@@ -1,10 +1,10 @@
 import Boom from '@hapi/boom';
 import { WithInputSlice } from './index';
 import {
-  AttachData,
-  DoWork,
+  LoadResources,
+  Execute,
   SanitizeInputs,
-  SanitizeResponse,
+  RedactResponse,
 } from './lifecycle-functions';
 import { Constructor } from './types';
 
@@ -165,7 +165,7 @@ export function htMongooseFactory(mongoose: any) {
   }
 
   function SaveOnDocumentFrom(propertyKeyOfDocument: string) {
-    return DoWork(async (context: any) => {
+    return Execute(async (context: any) => {
       if (context[propertyKeyOfDocument]) {
         try {
           return await context[propertyKeyOfDocument].save();
@@ -194,7 +194,7 @@ export function htMongooseFactory(mongoose: any) {
         ctx
       );
     }
-    return DoWork(async (context: any) => {
+    return Execute(async (context: any) => {
       if (context[propertyKeyOfDocument]) {
         return await context[propertyKeyOfDocument].set(readPath(context));
       } else {
@@ -203,12 +203,12 @@ export function htMongooseFactory(mongoose: any) {
     });
   }
 
-  function SanitizeResponseWithMongoose<
+  function RedactResponseWithMongoose<
     TSafeResponse extends ReturnType<TInstance['toObject']>,
     TDocFactory extends DocumentFactory<any>,
     TInstance extends ReturnType<TDocFactory>
   >(DocFactory: TDocFactory) {
-    return SanitizeResponse((unsafeResponse: any) => {
+    return RedactResponse((unsafeResponse: any) => {
       const doc = DocFactory(unsafeResponse);
       return doc.toObject() as TSafeResponse;
     });
@@ -219,7 +219,7 @@ export function htMongooseFactory(mongoose: any) {
     TMongooseModel extends Constructor<any>,
     TContextIn extends { [key in TPojoKey]: any }
   >(pojoKey: TPojoKey, modelClass: TMongooseModel, newDocKey: string) {
-    return AttachData((context: TContextIn) => {
+    return LoadResources((context: TContextIn) => {
       return {
         [newDocKey]: new modelClass(context[pojoKey]),
       };
@@ -230,7 +230,7 @@ export function htMongooseFactory(mongoose: any) {
     SanitizeInputsWithMongoose,
     SanitizeInputsSliceWithMongoose,
     PojoToDocument,
-    SanitizeResponseWithMongoose,
+    RedactResponseWithMongoose,
     UpdateDocumentFromTo,
     SaveOnDocumentFrom,
     documentFactoryFromForRequest,

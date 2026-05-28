@@ -8,15 +8,15 @@ import {
   withDefaultImplementations,
 } from './core';
 import {
-  AttachDataReqsSatisfiedOptional,
-  DoWorkReqsSatisfiedOptional,
-  FinalAuthReqsSatisfied,
-  HasAllNotRequireds,
-  HasAllRequireds,
-  PreAuthReqsSatisfied,
+  LoadResourcesDepsMet,
+  ExecuteDepsMet,
+  FinalAuthorizeDepsMet,
+  OptionalStagesShape,
+  HasRequiredStages,
+  PreAuthorizeDepsMet,
   PromiseOrSync,
   PromiseResolveOrSync,
-  SanitizeResponseReqsSatisfied,
+  RedactResponseDepsMet,
 } from './types';
 
 // Canonical input shape produced by the express adapter baseline extractInputs.
@@ -39,67 +39,67 @@ export interface ExpressRaw {
 type ExpressHandlerConfig<
   TInputs = ExpressRawInputs,
   TSafeInputs = any,
-  TPreContext = never,
+  TAmbient = never,
   TPreAuthOut = unknown,
-  TAttachDataOut = unknown,
+  TLoadResourcesOut = unknown,
   TFinalAuthOut = unknown,
   TUnsafeResponse = unknown,
   TResponse = unknown
 > = {
-  initPreContext?: (raw: ExpressRaw) => TPreContext;
+  extractAmbient?: (raw: ExpressRaw) => TAmbient;
   extractInputs?: (canonical: ExpressRawInputs) => TInputs;
   sanitizeInputs: (unsafe: TInputs) => TSafeInputs;
   preAuthorize: (
     context: { inputs: PromiseResolveOrSync<TSafeInputs> } & ([
-      TPreContext
+      TAmbient
     ] extends [never]
       ? {}
-      : { preContext: TPreContext })
+      : { ambient: TAmbient })
   ) => TPreAuthOut;
-  attachData?: (
+  loadResources?: (
     context: { inputs: PromiseResolveOrSync<TSafeInputs> } & ([
-      TPreContext
+      TAmbient
     ] extends [never]
       ? {}
-      : { preContext: TPreContext }) &
+      : { ambient: TAmbient }) &
       PromiseResolveOrSync<TPreAuthOut>
-  ) => PromiseOrSync<TAttachDataOut>;
+  ) => PromiseOrSync<TLoadResourcesOut>;
   finalAuthorize: (
     context: { inputs: PromiseResolveOrSync<TSafeInputs> } & ([
-      TPreContext
+      TAmbient
     ] extends [never]
       ? {}
-      : { preContext: TPreContext }) &
+      : { ambient: TAmbient }) &
       PromiseResolveOrSync<TPreAuthOut> &
-      PromiseResolveOrSync<TAttachDataOut>
+      PromiseResolveOrSync<TLoadResourcesOut>
   ) => PromiseOrSync<TFinalAuthOut>;
-  doWork: (
+  execute: (
     context: { inputs: PromiseResolveOrSync<TSafeInputs> } & ([
-      TPreContext
+      TAmbient
     ] extends [never]
       ? {}
-      : { preContext: TPreContext }) &
+      : { ambient: TAmbient }) &
       PromiseResolveOrSync<TPreAuthOut> &
-      PromiseResolveOrSync<TAttachDataOut> &
+      PromiseResolveOrSync<TLoadResourcesOut> &
       PromiseResolveOrSync<TFinalAuthOut>
   ) => PromiseOrSync<TUnsafeResponse>;
-  sanitizeResponse: (
+  redactResponse: (
     unsafe: PromiseResolveOrSync<TUnsafeResponse>
   ) => TResponse;
   successStatus?: SuccessStatus;
 };
 
-type InferredHandlerConfig = HasAllNotRequireds &
-  HasAllRequireds &
+type InferredHandlerConfig = OptionalStagesShape &
+  HasRequiredStages &
   HasSuccessStatus;
 
 // Identity function for inference-friendly config authoring.
 export const defineExpressHandler = <
   TInputs = ExpressRawInputs,
   TSafeInputs = any,
-  TPreContext = never,
+  TAmbient = never,
   TPreAuthOut = unknown,
-  TAttachDataOut = unknown,
+  TLoadResourcesOut = unknown,
   TFinalAuthOut = unknown,
   TUnsafeResponse = unknown,
   TResponse = unknown
@@ -107,9 +107,9 @@ export const defineExpressHandler = <
   config: ExpressHandlerConfig<
     TInputs,
     TSafeInputs,
-    TPreContext,
+    TAmbient,
     TPreAuthOut,
-    TAttachDataOut,
+    TLoadResourcesOut,
     TFinalAuthOut,
     TUnsafeResponse,
     TResponse
@@ -127,13 +127,13 @@ function expressBaselineExtractInputs(raw: ExpressRaw): ExpressRawInputs {
 }
 
 export function hipExpressHandlerFactory<
-  TConf extends HasAllNotRequireds &
-    HasAllRequireds &
-    PreAuthReqsSatisfied<TConf> &
-    AttachDataReqsSatisfiedOptional<TConf> &
-    FinalAuthReqsSatisfied<TConf> &
-    DoWorkReqsSatisfiedOptional<TConf> &
-    SanitizeResponseReqsSatisfied<TConf> &
+  TConf extends OptionalStagesShape &
+    HasRequiredStages &
+    PreAuthorizeDepsMet<TConf> &
+    LoadResourcesDepsMet<TConf> &
+    FinalAuthorizeDepsMet<TConf> &
+    ExecuteDepsMet<TConf> &
+    RedactResponseDepsMet<TConf> &
     HasSuccessStatus
 >(handlingStrategy: TConf) {
   assertHipthrustable(handlingStrategy);

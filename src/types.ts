@@ -3,21 +3,21 @@ export type Constructor<T = {}> = new (...args: any[]) => T;
 export type PromiseOrSync<T> = Promise<T> | T;
 export type PromiseResolveOrSync<T> = T extends Promise<infer U> ? U : T;
 
-export type AllAsyncStageKeys = 'attachData' | 'finalAuthorize' | 'doWork';
+export type AllAsyncStageKeys = 'loadResources' | 'finalAuthorize' | 'execute';
 export type AllSyncStageKeys =
-  | 'initPreContext'
+  | 'extractAmbient'
   | 'extractInputs'
   | 'sanitizeInputs'
   | 'preAuthorize'
-  | 'sanitizeResponse';
+  | 'redactResponse';
 export type AllStageKeys = AllAsyncStageKeys | AllSyncStageKeys;
 
-export interface OptionallyHasInitPreContext<TUnsafe, TContextInit> {
-  initPreContext?: (unsafe: TUnsafe) => TContextInit;
+export interface OptionallyHasExtractAmbient<TUnsafe, TContextInit> {
+  extractAmbient?: (unsafe: TUnsafe) => TContextInit;
 }
 
-export interface HasInitPreContext<TUnsafe, TContextInit> {
-  initPreContext: (unsafe: TUnsafe) => TContextInit;
+export interface HasExtractAmbient<TUnsafe, TContextInit> {
+  extractAmbient: (unsafe: TUnsafe) => TContextInit;
 }
 
 export interface OptionallyHasExtractInputs<TContextIn, TUnsafeInputs> {
@@ -40,19 +40,19 @@ export interface HasPreAuthorize<TContextIn, TContextOut> {
   preAuthorize: (context: TContextIn) => TContextOut;
 }
 
-export interface MightHavePreAuthorize<TContextIn, TContextOut> {
+export interface OptionallyHasPreAuthorize<TContextIn, TContextOut> {
   preAuthorize?: (context: TContextIn) => TContextOut;
 }
 
-export interface OptionallyHasAttachData<TContextIn, TContextOut> {
-  attachData?: (context: TContextIn) => PromiseOrSync<TContextOut>;
+export interface OptionallyHasLoadResources<TContextIn, TContextOut> {
+  loadResources?: (context: TContextIn) => PromiseOrSync<TContextOut>;
 }
 
-export interface HasAttachData<TContextIn, TContextOut> {
-  attachData: (context: TContextIn) => PromiseOrSync<TContextOut>;
+export interface HasLoadResources<TContextIn, TContextOut> {
+  loadResources: (context: TContextIn) => PromiseOrSync<TContextOut>;
 }
 
-export interface MightHaveFinalAuthorize<TContextIn, TContextOut> {
+export interface OptionallyHasFinalAuthorize<TContextIn, TContextOut> {
   finalAuthorize?: (context: TContextIn) => PromiseOrSync<TContextOut>;
 }
 
@@ -60,49 +60,49 @@ export interface HasFinalAuthorize<TContextIn, TContextOut> {
   finalAuthorize: (context: TContextIn) => PromiseOrSync<TContextOut>;
 }
 
-export interface OptionallyHasDoWork<TContextIn, TUnsafeResponse> {
-  doWork?: (context: TContextIn) => PromiseOrSync<TUnsafeResponse>;
+export interface OptionallyHasExecute<TContextIn, TUnsafeResponse> {
+  execute?: (context: TContextIn) => PromiseOrSync<TUnsafeResponse>;
 }
 
-export interface HasDoWork<TContextIn, TUnsafeResponse> {
-  doWork: (context: TContextIn) => PromiseOrSync<TUnsafeResponse>;
+export interface HasExecute<TContextIn, TUnsafeResponse> {
+  execute: (context: TContextIn) => PromiseOrSync<TUnsafeResponse>;
 }
 
-export interface MightHaveSanitizeResponse<TUnsafeResponse, TResponse> {
-  sanitizeResponse?: (unsafe: TUnsafeResponse) => TResponse;
+export interface OptionallyHasRedactResponse<TUnsafeResponse, TResponse> {
+  redactResponse?: (unsafe: TUnsafeResponse) => TResponse;
 }
 
-export interface HasSanitizeResponse<TUnsafeResponse, TResponse> {
-  sanitizeResponse: (unsafe: TUnsafeResponse) => TResponse;
+export interface HasRedactResponse<TUnsafeResponse, TResponse> {
+  redactResponse: (unsafe: TUnsafeResponse) => TResponse;
 }
 
-export type HasAllRequireds = HasSanitizeInputs<any, any> &
+export type HasRequiredStages = HasSanitizeInputs<any, any> &
   HasPreAuthorize<any, any> &
   HasFinalAuthorize<any, any> &
-  HasDoWork<any, any> &
-  HasSanitizeResponse<any, any>;
+  HasExecute<any, any> &
+  HasRedactResponse<any, any>;
 
-export type HasAllNotRequireds = OptionallyHasInitPreContext<any, any> &
+export type OptionalStagesShape = OptionallyHasExtractAmbient<any, any> &
   OptionallyHasExtractInputs<any, any> &
-  OptionallyHasAttachData<any, any>;
+  OptionallyHasLoadResources<any, any>;
 
-export type HasAllStagesNotOptionals = HasInitPreContext<any, any> &
+export type HasAllStagesDefined = HasExtractAmbient<any, any> &
   HasExtractInputs<any, any> &
   HasSanitizeInputs<any, any> &
   HasPreAuthorize<any, any> &
-  HasAttachData<any, any> &
+  HasLoadResources<any, any> &
   HasFinalAuthorize<any, any> &
-  HasDoWork<any, any> &
-  HasSanitizeResponse<any, any>;
+  HasExecute<any, any> &
+  HasRedactResponse<any, any>;
 
-export type HasAllStagesOptionals = OptionallyHasInitPreContext<any, any> &
+export type AllStagesOptionalShape = OptionallyHasExtractAmbient<any, any> &
   OptionallyHasExtractInputs<any, any> &
   OptionallyHasSanitizeInputs<any, any> &
-  MightHavePreAuthorize<any, any> &
-  OptionallyHasAttachData<any, any> &
-  MightHaveFinalAuthorize<any, any> &
-  OptionallyHasDoWork<any, any> &
-  MightHaveSanitizeResponse<any, any>;
+  OptionallyHasPreAuthorize<any, any> &
+  OptionallyHasLoadResources<any, any> &
+  OptionallyHasFinalAuthorize<any, any> &
+  OptionallyHasExecute<any, any> &
+  OptionallyHasRedactResponse<any, any>;
 
 /*
 type Funcs = {
@@ -127,11 +127,11 @@ type IntersectProperties<T extends object> = keyof T extends never
 
 type ReturnedTypeUpToPreAuthorize<TValue, TKey> = TKey extends 'inputs'
   ? HasSanitizeInputs<any, TValue>
-  : TKey extends 'preContext'
-  ? HasInitPreContext<any, TValue>
+  : TKey extends 'ambient'
+  ? HasExtractAmbient<any, TValue>
   : {};
 
-export type PreAuthReqsSatisfied<
+export type PreAuthorizeDepsMet<
   T extends HasPreAuthorize<any, any>
 > = IntersectProperties<
   {
@@ -142,11 +142,11 @@ export type PreAuthReqsSatisfied<
   }
 >;
 
-type OptionalAttachDataParams<T> = [T] extends [HasAttachData<any, any>]
-  ? Parameters<T['attachData']>[0]
+type OptionalLoadResourcesParams<T> = [T] extends [HasLoadResources<any, any>]
+  ? Parameters<T['loadResources']>[0]
   : {};
 
-type ReturnedSomewhereUpToAttachData<
+type ReturnedSomewhereUpToLoadResources<
   TOut,
   TValue,
   TKey extends string | symbol | number
@@ -154,13 +154,13 @@ type ReturnedSomewhereUpToAttachData<
   ? HasPreAuthorize<any, Record<TKey, TValue>>
   : never;
 
-type AllInitKeys = 'preContext' | 'inputs';
+type AllInitKeys = 'ambient' | 'inputs';
 
-export type AttachDataReqsSatisfiedOptional<T> = IntersectProperties<
+export type LoadResourcesDepsMet<T> = IntersectProperties<
   {
-    [P in keyof OptionalAttachDataParams<T>]: [P] extends [AllInitKeys]
-      ? ReturnedTypeUpToPreAuthorize<OptionalAttachDataParams<T>[P], P>
-      : ReturnedSomewhereUpToAttachData<T, OptionalAttachDataParams<T>[P], P>;
+    [P in keyof OptionalLoadResourcesParams<T>]: [P] extends [AllInitKeys]
+      ? ReturnedTypeUpToPreAuthorize<OptionalLoadResourcesParams<T>[P], P>
+      : ReturnedSomewhereUpToLoadResources<T, OptionalLoadResourcesParams<T>[P], P>;
   }
 >;
 
@@ -168,13 +168,13 @@ type ReturnedSomewhereUpToFinalAuthorize<
   TOut,
   TValue,
   TKey extends string | symbol | number
-> = [TOut] extends [HasAttachData<any, Record<TKey, TValue>>]
-  ? HasAttachData<any, Record<TKey, TValue>>
+> = [TOut] extends [HasLoadResources<any, Record<TKey, TValue>>]
+  ? HasLoadResources<any, Record<TKey, TValue>>
   : [TOut] extends [HasPreAuthorize<any, Record<TKey, TValue>>]
   ? HasPreAuthorize<any, Record<TKey, TValue>>
   : never;
 
-export type FinalAuthReqsSatisfied<
+export type FinalAuthorizeDepsMet<
   T extends HasFinalAuthorize<any, any>
 > = IntersectProperties<
   {
@@ -188,45 +188,45 @@ export type FinalAuthReqsSatisfied<
   }
 >;
 
-type OptionalDoWorkParams<T> = [T] extends [HasDoWork<any, any>]
-  ? Parameters<T['doWork']>[0]
+type OptionalExecuteParams<T> = [T] extends [HasExecute<any, any>]
+  ? Parameters<T['execute']>[0]
   : {};
 
-type ReturnedSomewhereUpToDoWork<
+type ReturnedSomewhereUpToExecute<
   TOut,
   TValue,
   TKey extends string | symbol | number
 > = [TOut] extends [HasFinalAuthorize<any, Record<TKey, TValue>>]
   ? HasFinalAuthorize<any, Record<TKey, TValue>>
-  : [TOut] extends [HasAttachData<any, Record<TKey, TValue>>]
-  ? HasAttachData<any, Record<TKey, TValue>>
+  : [TOut] extends [HasLoadResources<any, Record<TKey, TValue>>]
+  ? HasLoadResources<any, Record<TKey, TValue>>
   : [TOut] extends [HasPreAuthorize<any, Record<TKey, TValue>>]
   ? HasPreAuthorize<any, Record<TKey, TValue>>
   : never;
 
-export type DoWorkReqsSatisfiedOptional<T> = IntersectProperties<
+export type ExecuteDepsMet<T> = IntersectProperties<
   {
-    [P in keyof OptionalDoWorkParams<T>]: [P] extends [AllInitKeys]
-      ? ReturnedTypeUpToPreAuthorize<OptionalDoWorkParams<T>[P], P>
-      : ReturnedSomewhereUpToDoWork<T, OptionalDoWorkParams<T>[P], P>;
+    [P in keyof OptionalExecuteParams<T>]: [P] extends [AllInitKeys]
+      ? ReturnedTypeUpToPreAuthorize<OptionalExecuteParams<T>[P], P>
+      : ReturnedSomewhereUpToExecute<T, OptionalExecuteParams<T>[P], P>;
   }
 >;
 
-type ReturnedSomewhereUpToSanitizeResponse<TOut, TValue> = [TOut] extends [
-  HasDoWork<any, TValue>
+type ReturnedSomewhereUpToRedactResponse<TOut, TValue> = [TOut] extends [
+  HasExecute<any, TValue>
 ]
-  ? HasDoWork<any, TValue>
+  ? HasExecute<any, TValue>
   : never;
 
-export type SanitizeResponseReqsSatisfied<
-  T extends HasSanitizeResponse<any, any>
+export type RedactResponseDepsMet<
+  T extends HasRedactResponse<any, any>
 > = IntersectProperties<
   {
     [P in keyof Parameters<
-      T['sanitizeResponse']
-    >[0]]: ReturnedSomewhereUpToSanitizeResponse<
+      T['redactResponse']
+    >[0]]: ReturnedSomewhereUpToRedactResponse<
       T,
-      Record<P, Parameters<T['sanitizeResponse']>[0][P]>
+      Record<P, Parameters<T['redactResponse']>[0][P]>
     >;
   }
 >;
