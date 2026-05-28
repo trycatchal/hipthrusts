@@ -18,7 +18,7 @@
     "build": "tsc -p tsconfig.json",
     "buildtests": "tsc -p tsconfig.test.json",
     "lint": "tslint --project tsconfig.base.json",
-    "mocha": "nyc mocha \"./test/index.test.ts\" --timeout 15000",
+    "mocha": "TS_NODE_TRANSPILE_ONLY=1 nyc mocha \"./test/index.test.ts\" --timeout 15000",
     "coverage": "nyc report --reporter=text-lcov | coveralls",
     "tsc": "tsc",
     "tslint-check": "tslint-config-prettier-check ./tslint.json",
