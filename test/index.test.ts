@@ -4,7 +4,7 @@ import chaiAsPromised from 'chai-as-promised';
 // tslint:disable-next-line:no-var-requires
 const { describe, it } = require('mocha');
 
-import { hipExpressHandlerFactory, HTPipe, WithInputSlice } from '../src';
+import { toExpressHandler, HTPipe, WithInputSlice } from '../src';
 import {
   AllAsyncStageKeys,
   AllStageKeys,
@@ -341,7 +341,7 @@ describe('HipThrusTS', () => {
       });
     });
 
-    describe('hipExpressHandlerFactory', () => {
+    describe('toExpressHandler', () => {
       it('passes with all correct lifecycle stages present', () => {
         const handlingStrategy = {
           extractAmbient() {
@@ -374,7 +374,7 @@ describe('HipThrusTS', () => {
             return { result: unsafe.result };
           },
         };
-        hipExpressHandlerFactory(handlingStrategy);
+        toExpressHandler(handlingStrategy);
       });
 
       it('errors when sanitizeInputs is missing at type level', () => {
@@ -398,7 +398,7 @@ describe('HipThrusTS', () => {
         let err: any;
         try {
           // @ts-expect-error
-          hipExpressHandlerFactory(handlingStrategy);
+          toExpressHandler(handlingStrategy);
         } catch (e) {
           err = e;
         }
@@ -427,7 +427,7 @@ describe('HipThrusTS', () => {
         let err: any;
         try {
           // @ts-expect-error
-          hipExpressHandlerFactory(handlingStrategy);
+          toExpressHandler(handlingStrategy);
         } catch (e) {
           err = e;
         }
@@ -456,7 +456,7 @@ describe('HipThrusTS', () => {
         let err: any;
         try {
           // @ts-expect-error
-          hipExpressHandlerFactory(handlingStrategy);
+          toExpressHandler(handlingStrategy);
         } catch (e) {
           err = e;
         }
@@ -485,7 +485,7 @@ describe('HipThrusTS', () => {
         let err: any;
         try {
           // @ts-expect-error
-          hipExpressHandlerFactory(handlingStrategy);
+          toExpressHandler(handlingStrategy);
         } catch (e) {
           err = e;
         }
@@ -514,7 +514,7 @@ describe('HipThrusTS', () => {
         let err: any;
         try {
           // @ts-expect-error
-          hipExpressHandlerFactory(handlingStrategy);
+          toExpressHandler(handlingStrategy);
         } catch (e) {
           err = e;
         }

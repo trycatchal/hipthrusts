@@ -11,6 +11,7 @@ import {
   OptionalStagesShape,
   HasRequiredStages,
   PreAuthorizeDepsMet,
+  PromiseOrSync,
   RedactResponseDepsMet,
 } from './types';
 
@@ -28,7 +29,86 @@ function trpcBaselineExtractInputs<TInput>(
   return raw.input;
 }
 
-export function hipTrpcProcedure<
+// Handler config the dev writes for a tRPC procedure. `extractInputs` chains
+// AFTER the adapter baseline (which hands through the parsed `input`); if
+// omitted, the parsed input flows directly to sanitizeInputs. There is no
+// responseMeta/status here — tRPC procedures return their value directly.
+// tslint:disable-next-line:interface-over-type-literal
+type TrpcHandlerConfig<
+  TCtx = unknown,
+  TInput = unknown,
+  TInputs = TInput,
+  TSafeInputs = any,
+  TAmbient = never,
+  TPreAuthOut = unknown,
+  TLoadResourcesOut = unknown,
+  TFinalAuthOut = unknown,
+  TUnsafeResponse = unknown,
+  TResponse = unknown
+> = {
+  extractAmbient?: (raw: TrpcRaw<TCtx, TInput>) => TAmbient;
+  extractInputs?: (canonical: TInput) => TInputs;
+  sanitizeInputs: (unsafe: TInputs) => TSafeInputs;
+  preAuthorize: (
+    context: { inputs: Awaited<TSafeInputs> } & ([TAmbient] extends [never]
+      ? {}
+      : { ambient: TAmbient })
+  ) => TPreAuthOut;
+  loadResources?: (
+    context: { inputs: Awaited<TSafeInputs> } & ([TAmbient] extends [never]
+      ? {}
+      : { ambient: TAmbient }) &
+      Awaited<TPreAuthOut>
+  ) => PromiseOrSync<TLoadResourcesOut>;
+  finalAuthorize: (
+    context: { inputs: Awaited<TSafeInputs> } & ([TAmbient] extends [never]
+      ? {}
+      : { ambient: TAmbient }) &
+      Awaited<TPreAuthOut> &
+      Awaited<TLoadResourcesOut>
+  ) => PromiseOrSync<TFinalAuthOut>;
+  execute: (
+    context: { inputs: Awaited<TSafeInputs> } & ([TAmbient] extends [never]
+      ? {}
+      : { ambient: TAmbient }) &
+      Awaited<TPreAuthOut> &
+      Awaited<TLoadResourcesOut> &
+      Awaited<TFinalAuthOut>
+  ) => PromiseOrSync<TUnsafeResponse>;
+  redactResponse: (unsafe: Awaited<TUnsafeResponse>) => TResponse;
+};
+
+type InferredTrpcConfig = OptionalStagesShape & HasRequiredStages;
+
+// Identity function for inference-friendly tRPC config authoring. Mirrors
+// defineExpressHandler; pass the result to toTrpcProcedure.
+export const defineTrpcProcedure = <
+  TCtx = unknown,
+  TInput = unknown,
+  TInputs = TInput,
+  TSafeInputs = any,
+  TAmbient = never,
+  TPreAuthOut = unknown,
+  TLoadResourcesOut = unknown,
+  TFinalAuthOut = unknown,
+  TUnsafeResponse = unknown,
+  TResponse = unknown
+>(
+  config: TrpcHandlerConfig<
+    TCtx,
+    TInput,
+    TInputs,
+    TSafeInputs,
+    TAmbient,
+    TPreAuthOut,
+    TLoadResourcesOut,
+    TFinalAuthOut,
+    TUnsafeResponse,
+    TResponse
+  >
+): InferredTrpcConfig => (config as unknown) as InferredTrpcConfig;
+
+export function toTrpcProcedure<
   TConf extends OptionalStagesShape &
     HasRequiredStages &
     PreAuthorizeDepsMet<TConf> &
