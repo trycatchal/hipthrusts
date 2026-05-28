@@ -523,8 +523,108 @@ describe('HipThrusTS', () => {
       });
     });
 
+    describe('toExpressHandler responseMeta + error translation', () => {
+      function fakeRes(): any {
+        return {
+          statusCode: 200,
+          headers: {} as Record<string, string>,
+          body: undefined as any,
+          redirectedTo: undefined as string | undefined,
+          status(code: number) {
+            this.statusCode = code;
+            return this;
+          },
+          json(b: any) {
+            this.body = b;
+            return this;
+          },
+          setHeader(k: string, v: string) {
+            this.headers[k] = v;
+          },
+          redirect(code: number, url: string) {
+            this.statusCode = code;
+            this.redirectedTo = url;
+          },
+        };
+      }
+      const rawReq = { params: {}, query: {}, body: {}, headers: {} };
+
+      it('applies static responseMeta status and headers', async () => {
+        const { toExpressHandler } = require('../src');
+        const handler = toExpressHandler({
+          sanitizeInputs: (i: any) => i,
+          preAuthorize: () => true,
+          finalAuthorize: () => true,
+          execute: () => ({ id: '1' }),
+          redactResponse: (u: { id: string }) => ({ id: u.id }),
+          responseMeta: { status: 201, headers: { Location: '/things/1' } },
+        });
+        const res = fakeRes();
+        await handler(rawReq as any, res, (() => undefined) as any);
+        expect(res.statusCode).to.equal(201);
+        expect(res.headers.Location).to.equal('/things/1');
+        expect(res.body).to.deep.equal({ id: '1' });
+      });
+
+      it('computes responseMeta status from the final context', async () => {
+        const { toExpressHandler } = require('../src');
+        const handler = toExpressHandler({
+          sanitizeInputs: (i: { body: { created: boolean } }) => ({
+            created: i.body.created,
+          }),
+          preAuthorize: () => true,
+          finalAuthorize: () => true,
+          execute: (ctx: { inputs: { created: boolean } }) => ({
+            created: ctx.inputs.created,
+          }),
+          redactResponse: (u: { created: boolean }) => ({ created: u.created }),
+          responseMeta: (ctx: { response: { created: boolean } }) => ({
+            status: ctx.response.created ? 201 : 200,
+          }),
+        });
+
+        const resCreated = fakeRes();
+        await handler(
+          { ...rawReq, body: { created: true } } as any,
+          resCreated,
+          (() => undefined) as any
+        );
+        expect(resCreated.statusCode).to.equal(201);
+
+        const resUpdated = fakeRes();
+        await handler(
+          { ...rawReq, body: { created: false } } as any,
+          resUpdated,
+          (() => undefined) as any
+        );
+        expect(resUpdated.statusCode).to.equal(200);
+      });
+
+      it('translates a denied authorization to a Boom 403 via next', async () => {
+        const { toExpressHandler } = require('../src');
+        // tslint:disable-next-line:no-var-requires
+        const Boom = require('@hapi/boom');
+        const handler = toExpressHandler({
+          sanitizeInputs: (i: any) => i,
+          preAuthorize: () => false,
+          finalAuthorize: () => true,
+          execute: () => ({}),
+          redactResponse: (u: any) => u,
+        });
+        let nextErr: any;
+        const res = fakeRes();
+        await handler(rawReq as any, res, ((e: any) => {
+          nextErr = e;
+        }) as any);
+        expect(nextErr).to.not.be.undefined;
+        // tslint:disable-next-line:no-unused-expression
+        expect(Boom.isBoom(nextErr)).to.be.true;
+        expect(nextErr.output.statusCode).to.equal(403);
+      });
+    });
+
     describe('executeHipthrustable end-to-end', () => {
-      it('runs the new lifecycle and resolves successStatus', async () => {
+      it('runs the lifecycle and returns the response plus final context', async () => {
         const mod = require('../src/core');
         const executeHipthrustable = mod.executeHipthrustable;
         const withDefaultImplementations = mod.withDefaultImplementations;
@@ -545,69 +645,55 @@ describe('HipThrusTS', () => {
             doubled: u.doubled,
             by: u.by,
           }),
-          successStatus: 201,
         });
 
-        const result = await executeHipthrustable(
-          handler,
-          { who: 'alice', value: 7 },
-          200
-        );
+        const result = await executeHipthrustable(handler, {
+          who: 'alice',
+          value: 7,
+        });
         expect(result.response).to.deep.equal({ doubled: 14, by: 'alice' });
-        expect(result.status).to.equal(201);
-      });
-
-      it('honors successStatus as a function reading the final context', async () => {
-        const mod = require('../src/core');
-        const executeHipthrustable = mod.executeHipthrustable;
-        const withDefaultImplementations = mod.withDefaultImplementations;
-
-        const handler = withDefaultImplementations({
-          sanitizeInputs: (unsafe: { create: boolean }) => ({
-            create: unsafe.create,
-          }),
-          preAuthorize: () => true,
-          finalAuthorize: () => true,
-          execute: (ctx: { inputs: { create: boolean } }) => ({
-            created: ctx.inputs.create,
-          }),
-          redactResponse: (u: { created: boolean }) => ({
-            created: u.created,
-          }),
-          successStatus: (ctx: { response: { created: boolean } }) =>
-            ctx.response.created ? 201 : 200,
+        // The final context is returned for adapters (status/headers, etc.).
+        expect(result.context.response).to.deep.equal({
+          doubled: 14,
+          by: 'alice',
         });
-
-        const created = await executeHipthrustable(
-          handler,
-          { create: true },
-          200
-        );
-        expect(created.status).to.equal(201);
-
-        const updated = await executeHipthrustable(
-          handler,
-          { create: false },
-          200
-        );
-        expect(updated.status).to.equal(200);
+        expect(result.context.ambient).to.deep.equal({ who: 'alice' });
       });
 
-      it('falls back to adapter default status when successStatus is absent', async () => {
+      it('treats an empty object from finalAuthorize as a pass', async () => {
         const mod = require('../src/core');
         const executeHipthrustable = mod.executeHipthrustable;
         const withDefaultImplementations = mod.withDefaultImplementations;
 
         const handler = withDefaultImplementations({
           sanitizeInputs: (unsafe: {}) => ({}),
-          preAuthorize: () => true,
-          finalAuthorize: () => true,
+          preAuthorize: () => ({}),
+          finalAuthorize: () => ({}),
           execute: () => ({ ok: true }),
           redactResponse: (u: { ok: boolean }) => ({ ok: u.ok }),
         });
 
-        const result = await executeHipthrustable(handler, {}, 200);
-        expect(result.status).to.equal(200);
+        const result = await executeHipthrustable(handler, {});
+        expect(result.response).to.deep.equal({ ok: true });
+      });
+
+      it('throws a HipForbidden when finalAuthorize denies', async () => {
+        const mod = require('../src/core');
+        const errors = require('../src/errors');
+        const executeHipthrustable = mod.executeHipthrustable;
+        const withDefaultImplementations = mod.withDefaultImplementations;
+
+        const handler = withDefaultImplementations({
+          sanitizeInputs: (unsafe: {}) => ({}),
+          preAuthorize: () => true,
+          finalAuthorize: () => false,
+          execute: () => ({ ok: true }),
+          redactResponse: (u: { ok: boolean }) => ({ ok: u.ok }),
+        });
+
+        await expect(
+          executeHipthrustable(handler, {})
+        ).to.be.rejectedWith(errors.HipForbidden);
       });
     });
   });

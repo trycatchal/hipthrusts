@@ -1,4 +1,12 @@
-import Boom from '@hapi/boom';
+import {
+  HipBadInputs,
+  HipError,
+  HipForbidden,
+  HipInternal,
+  HipNotFound,
+  HipRedirect,
+  isHipError,
+} from './errors';
 import {
   LoadResourcesDepsMet,
   ExecuteDepsMet,
@@ -106,31 +114,24 @@ export function isHasRedactResponse<TContextIn, TContextOut>(
   return !!(thing && thing.redactResponse);
 }
 
+// An authorization stage passes by returning `true` or ANY object (an object
+// also contributes its keys to the shared context). Only `false` (or a falsy
+// non-object) denies. An empty object `{}` PASSES — it just contributes nothing.
 export function authorizationPassed<TAuthOut extends boolean | object>(
   authOut: TAuthOut
 ) {
-  return (
-    authOut === true ||
-    (authOut && typeof authOut === 'object' && Object.keys(authOut).length > 0)
-  );
-}
-
-export class HipRedirectException {
-  constructor(
-    public readonly redirectUrl: string,
-    public readonly redirectCode = 302
-  ) {}
+  return authOut === true || (!!authOut && typeof authOut === 'object');
 }
 
 function transformThrowSync<TOrigFn extends (param: any) => any>(
-  toThrow: any,
+  toThrow: HipError,
   origFn: TOrigFn,
   origParam: Parameters<TOrigFn>[0]
 ): ReturnType<TOrigFn> {
   try {
     return origFn(origParam);
   } catch (exception) {
-    if (exception instanceof HipRedirectException || Boom.isBoom(exception)) {
+    if (exception instanceof HipRedirect || isHipError(exception)) {
       throw exception;
     } else {
       throw toThrow;
@@ -141,12 +142,12 @@ function transformThrowSync<TOrigFn extends (param: any) => any>(
 function transformThrowPossiblyAsync<
   TOrigFn extends (param: any) => PromiseOrSync<any>
 >(
-  toThrow: any,
+  toThrow: HipError,
   origFn: TOrigFn,
   origParam: Parameters<TOrigFn>[0]
 ): Promise<PromiseResolveOrSync<ReturnType<TOrigFn>>> {
   return Promise.resolve(origFn(origParam)).catch(exception => {
-    if (exception instanceof HipRedirectException || Boom.isBoom(exception)) {
+    if (exception instanceof HipRedirect || isHipError(exception)) {
       throw exception;
     } else {
       throw toThrow;
@@ -154,37 +155,20 @@ function transformThrowPossiblyAsync<
   });
 }
 
-export type SuccessStatus<TCtx = any> = number | ((ctx: TCtx) => number);
-
-export interface HasSuccessStatus<TCtx = any> {
-  successStatus?: SuccessStatus<TCtx>;
-}
-
-function resolveSuccessStatus(
-  successStatus: SuccessStatus | undefined,
-  ctx: any,
-  fallback: number
-): number {
-  if (typeof successStatus === 'number') {
-    return successStatus;
-  }
-  if (typeof successStatus === 'function') {
-    return successStatus(ctx);
-  }
-  return fallback;
-}
-
+// Runs the full lifecycle and returns the safe response plus the final context
+// (inputs/ambient/loaded resources/auth output/execute output/response). The
+// context is transport-agnostic; adapters use it to derive their own response
+// metadata (e.g. HTTP status/headers via `responseMeta`).
 export async function executeHipthrustable<
   TConf extends HasAllStagesDefined &
     PreAuthorizeDepsMet<TConf> &
     LoadResourcesDepsMet<TConf> &
     FinalAuthorizeDepsMet<TConf> &
     ExecuteDepsMet<TConf> &
-    RedactResponseDepsMet<TConf> &
-    HasSuccessStatus,
+    RedactResponseDepsMet<TConf>,
   TRaw
->(requestHandler: TConf, raw: TRaw, defaultStatus: number = 200) {
-  const badDataThrow = Boom.badData('User input sanitization failure');
+>(requestHandler: TConf, raw: TRaw) {
+  const badDataThrow = new HipBadInputs('User input sanitization failure');
 
   const safeAmbient = transformThrowSync(
     badDataThrow,
@@ -211,7 +195,7 @@ export async function executeHipthrustable<
     inputs: safeInputs,
   };
 
-  const forbiddenPreAuthThrow = Boom.forbidden(
+  const forbiddenPreAuthThrow = new HipForbidden(
     'General pre-authorization lacking for this resource'
   );
 
@@ -235,7 +219,7 @@ export async function executeHipthrustable<
     ...preAuthorizeContextOut,
   };
 
-  const notFoundThrow = Boom.notFound('Resource not found');
+  const notFoundThrow = new HipNotFound('Resource not found');
   const attachedDataContextOnly =
     (await transformThrowPossiblyAsync(
       notFoundThrow,
@@ -244,7 +228,7 @@ export async function executeHipthrustable<
     )) || {};
   const attachedDataContext = { ...preAuthContext, ...attachedDataContextOnly };
 
-  const forbiddenFinalAuthThrow = Boom.forbidden(
+  const forbiddenFinalAuthThrow = new HipForbidden(
     'General authorization lacking for this resource'
   );
 
@@ -259,7 +243,7 @@ export async function executeHipthrustable<
   );
 
   if (!finalAuthorizePassed) {
-    throw forbiddenPreAuthThrow;
+    throw forbiddenFinalAuthThrow;
   }
 
   const finalAuthorizeContextOut =
@@ -277,7 +261,7 @@ export async function executeHipthrustable<
 
     const safeResponse = requestHandler.redactResponse(unsafeResponse);
 
-    const successCtx =
+    const context =
       unsafeResponse !== null && typeof unsafeResponse === 'object'
         ? {
             ...finalAuthContext,
@@ -286,18 +270,12 @@ export async function executeHipthrustable<
           }
         : { ...finalAuthContext, response: safeResponse };
 
-    const status = resolveSuccessStatus(
-      (requestHandler as HasSuccessStatus).successStatus,
-      successCtx,
-      defaultStatus
-    );
-
-    return { response: safeResponse, status };
+    return { response: safeResponse, context };
   } catch (exception) {
-    if (exception instanceof HipRedirectException || Boom.isBoom(exception)) {
+    if (exception instanceof HipRedirect || isHipError(exception)) {
       throw exception;
     } else {
-      throw Boom.badImplementation('Uncaught exception');
+      throw new HipInternal('Uncaught exception');
     }
   }
 }
