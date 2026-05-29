@@ -1,10 +1,9 @@
-import { expect, use } from 'chai';
-import chaiAsPromised from 'chai-as-promised';
-
-// tslint:disable-next-line:no-var-requires
-const { describe, it } = require('mocha');
+import Boom from '@hapi/boom';
+import { describe, expect, it } from 'vitest';
 
 import { toExpressHandler, HTPipe, WithInputSlice } from '../src';
+import { executeHipthrustable, withDefaultImplementations } from '../src/core';
+import { HipForbidden } from '../src/errors';
 import {
   AllAsyncStageKeys,
   AllStageKeys,
@@ -19,8 +18,6 @@ import {
   HasRedactResponse,
   PromiseResolveOrSync,
 } from '../src/types';
-
-use(chaiAsPromised);
 
 type ReturnTypeFromStage<
   T extends (context: any) => any,
@@ -87,8 +84,7 @@ async function HTPipeTest<
 ) {
   const pipedLifecycleStage = pipe[lifecycleStage];
 
-  // tslint:disable-next-line:no-unused-expression
-  expect(pipedLifecycleStage).to.not.be.eql({});
+  expect(pipedLifecycleStage).not.toEqual({});
   if (pipedLifecycleStage) {
     const pipedLifecycleStageResult =
       lifecycleStage === 'loadResources' ||
@@ -96,7 +92,7 @@ async function HTPipeTest<
       lifecycleStage === 'finalAuthorize'
         ? await pipedLifecycleStage(pipeIn)
         : pipedLifecycleStage(pipeIn);
-    expect(pipedLifecycleStageResult).to.deep.equal(pipeOut);
+    expect(pipedLifecycleStageResult).toEqual(pipeOut);
   }
 }
 
@@ -163,7 +159,7 @@ describe('HipThrusTS', () => {
             ? true
             : false;
 
-          expect(pipedWithEmptyObjectsOnly).to.be.eql({});
+          expect(pipedWithEmptyObjectsOnly).toEqual({});
         });
       });
 
@@ -176,12 +172,12 @@ describe('HipThrusTS', () => {
           };
 
           const leftProjector = (htCtx: { a: string }) => {
-            expect(htCtx.a).to.be.equal(testConstants.aPassedIn);
+            expect(htCtx.a).toBe(testConstants.aPassedIn);
             return { b: testConstants.bPassedIn };
           };
 
           const rightProjector = (htCtx: { b: number }) => {
-            expect(htCtx.b).to.be.equal(testConstants.bPassedIn);
+            expect(htCtx.b).toBe(testConstants.bPassedIn);
             return { c: testConstants.cReturned };
           };
 
@@ -246,7 +242,7 @@ describe('HipThrusTS', () => {
 
         const left = {
           sanitizeInputs: (context: { someObj: { a: string; b: string } }) => {
-            expect(context).to.deep.equal({
+            expect(context).toEqual({
               someObj: { a: aPassedIn, b: bPassedIn },
             });
             return context.someObj;
@@ -255,8 +251,8 @@ describe('HipThrusTS', () => {
 
         const right = {
           sanitizeInputs: (context: { a: string; b: string }) => {
-            expect(context).to.not.has.property('someObj');
-            expect(context).to.deep.equal({ a: aPassedIn, b: bPassedIn });
+            expect(context).not.toHaveProperty('someObj');
+            expect(context).toEqual({ a: aPassedIn, b: bPassedIn });
             return { b: context.b };
           },
         };
@@ -311,7 +307,7 @@ describe('HipThrusTS', () => {
           query: {},
           headers: {},
         });
-        expect(out).to.deep.equal({
+        expect(out).toEqual({
           params: { id: 'abc' },
           body: { keep: true },
           query: {},
@@ -332,7 +328,7 @@ describe('HipThrusTS', () => {
           query: { ignored: true },
           headers: {},
         });
-        expect(out).to.deep.equal({
+        expect(out).toEqual({
           params: { id: '42' },
           body: { name: 'FOO' },
           query: { ignored: true },
@@ -402,8 +398,7 @@ describe('HipThrusTS', () => {
         } catch (e) {
           err = e;
         }
-        // tslint:disable-next-line:no-unused-expression
-        expect(err).to.not.be.undefined;
+        expect(err).toBeDefined();
       });
 
       it('errors when preAuthorize is missing', () => {
@@ -431,8 +426,7 @@ describe('HipThrusTS', () => {
         } catch (e) {
           err = e;
         }
-        // tslint:disable-next-line:no-unused-expression
-        expect(err).to.not.be.undefined;
+        expect(err).toBeDefined();
       });
 
       it('errors when finalAuthorize is missing', () => {
@@ -460,8 +454,7 @@ describe('HipThrusTS', () => {
         } catch (e) {
           err = e;
         }
-        // tslint:disable-next-line:no-unused-expression
-        expect(err).to.not.be.undefined;
+        expect(err).toBeDefined();
       });
 
       it('errors when execute is missing', () => {
@@ -489,8 +482,7 @@ describe('HipThrusTS', () => {
         } catch (e) {
           err = e;
         }
-        // tslint:disable-next-line:no-unused-expression
-        expect(err).to.not.be.undefined;
+        expect(err).toBeDefined();
       });
 
       it('errors when redactResponse is missing', () => {
@@ -518,8 +510,7 @@ describe('HipThrusTS', () => {
         } catch (e) {
           err = e;
         }
-        // tslint:disable-next-line:no-unused-expression
-        expect(err).to.not.be.undefined;
+        expect(err).toBeDefined();
       });
     });
 
@@ -550,7 +541,6 @@ describe('HipThrusTS', () => {
       const rawReq = { params: {}, query: {}, body: {}, headers: {} };
 
       it('applies static responseMeta status and headers', async () => {
-        const { toExpressHandler } = require('../src');
         const handler = toExpressHandler({
           sanitizeInputs: (i: any) => i,
           preAuthorize: () => true,
@@ -561,13 +551,12 @@ describe('HipThrusTS', () => {
         });
         const res = fakeRes();
         await handler(rawReq as any, res, (() => undefined) as any);
-        expect(res.statusCode).to.equal(201);
-        expect(res.headers.Location).to.equal('/things/1');
-        expect(res.body).to.deep.equal({ id: '1' });
+        expect(res.statusCode).toBe(201);
+        expect(res.headers.Location).toBe('/things/1');
+        expect(res.body).toEqual({ id: '1' });
       });
 
       it('computes responseMeta status from the final context', async () => {
-        const { toExpressHandler } = require('../src');
         const handler = toExpressHandler({
           sanitizeInputs: (i: { body: { created: boolean } }) => ({
             created: i.body.created,
@@ -589,7 +578,7 @@ describe('HipThrusTS', () => {
           resCreated,
           (() => undefined) as any
         );
-        expect(resCreated.statusCode).to.equal(201);
+        expect(resCreated.statusCode).toBe(201);
 
         const resUpdated = fakeRes();
         await handler(
@@ -597,13 +586,10 @@ describe('HipThrusTS', () => {
           resUpdated,
           (() => undefined) as any
         );
-        expect(resUpdated.statusCode).to.equal(200);
+        expect(resUpdated.statusCode).toBe(200);
       });
 
       it('translates a denied authorization to a Boom 403 via next', async () => {
-        const { toExpressHandler } = require('../src');
-        // tslint:disable-next-line:no-var-requires
-        const Boom = require('@hapi/boom');
         const handler = toExpressHandler({
           sanitizeInputs: (i: any) => i,
           preAuthorize: () => false,
@@ -616,19 +602,14 @@ describe('HipThrusTS', () => {
         await handler(rawReq as any, res, ((e: any) => {
           nextErr = e;
         }) as any);
-        expect(nextErr).to.not.be.undefined;
-        // tslint:disable-next-line:no-unused-expression
-        expect(Boom.isBoom(nextErr)).to.be.true;
-        expect(nextErr.output.statusCode).to.equal(403);
+        expect(nextErr).toBeDefined();
+        expect(Boom.isBoom(nextErr)).toBe(true);
+        expect(nextErr.output.statusCode).toBe(403);
       });
     });
 
     describe('executeHipthrustable end-to-end', () => {
       it('runs the lifecycle and returns the response plus final context', async () => {
-        const mod = require('../src/core');
-        const executeHipthrustable = mod.executeHipthrustable;
-        const withDefaultImplementations = mod.withDefaultImplementations;
-
         const handler = withDefaultImplementations({
           extractAmbient: (raw: { who: string }) => ({ who: raw.who }),
           extractInputs: (raw: any) => raw,
@@ -651,20 +632,16 @@ describe('HipThrusTS', () => {
           who: 'alice',
           value: 7,
         });
-        expect(result.response).to.deep.equal({ doubled: 14, by: 'alice' });
+        expect(result.response).toEqual({ doubled: 14, by: 'alice' });
         // The final context is returned for adapters (status/headers, etc.).
-        expect(result.context.response).to.deep.equal({
+        expect(result.context.response).toEqual({
           doubled: 14,
           by: 'alice',
         });
-        expect(result.context.ambient).to.deep.equal({ who: 'alice' });
+        expect(result.context.ambient).toEqual({ who: 'alice' });
       });
 
       it('treats an empty object from finalAuthorize as a pass', async () => {
-        const mod = require('../src/core');
-        const executeHipthrustable = mod.executeHipthrustable;
-        const withDefaultImplementations = mod.withDefaultImplementations;
-
         const handler = withDefaultImplementations({
           sanitizeInputs: (unsafe: {}) => ({}),
           preAuthorize: () => ({}),
@@ -674,15 +651,10 @@ describe('HipThrusTS', () => {
         });
 
         const result = await executeHipthrustable(handler, {});
-        expect(result.response).to.deep.equal({ ok: true });
+        expect(result.response).toEqual({ ok: true });
       });
 
       it('throws a HipForbidden when finalAuthorize denies', async () => {
-        const mod = require('../src/core');
-        const errors = require('../src/errors');
-        const executeHipthrustable = mod.executeHipthrustable;
-        const withDefaultImplementations = mod.withDefaultImplementations;
-
         const handler = withDefaultImplementations({
           sanitizeInputs: (unsafe: {}) => ({}),
           preAuthorize: () => true,
@@ -693,7 +665,7 @@ describe('HipThrusTS', () => {
 
         await expect(
           executeHipthrustable(handler, {})
-        ).to.be.rejectedWith(errors.HipForbidden);
+        ).rejects.toThrow(HipForbidden);
       });
     });
   });

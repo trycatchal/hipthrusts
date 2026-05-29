@@ -6,6 +6,7 @@ import {
   withDefaultImplementations,
 } from './core';
 import { HipError, HipRedirect, isHipError } from './errors';
+import { HasResponseMeta, ResponseMeta } from './http-adapter';
 import {
   LoadResourcesDepsMet,
   ExecuteDepsMet,
@@ -29,18 +30,6 @@ export interface ExpressRawInputs {
 export interface ExpressRaw {
   req: Request;
   res: Response;
-}
-
-// HTTP response metadata an express handler may emit. Lives only on the
-// express adapter — non-HTTP adapters (tRPC, ...) have no equivalent. May be a
-// static object or a function of the final lifecycle context.
-export interface ResponseMeta {
-  status?: number;
-  headers?: Record<string, string>;
-}
-
-export interface HasResponseMeta<TCtx = any> {
-  responseMeta?: ResponseMeta | ((ctx: TCtx) => ResponseMeta);
 }
 
 // Maps a transport-agnostic HipError to its Boom equivalent so existing express

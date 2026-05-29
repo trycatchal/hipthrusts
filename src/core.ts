@@ -139,20 +139,22 @@ function transformThrowSync<TOrigFn extends (param: any) => any>(
   }
 }
 
-function transformThrowPossiblyAsync<
+async function transformThrowPossiblyAsync<
   TOrigFn extends (param: any) => PromiseOrSync<any>
 >(
   toThrow: HipError,
   origFn: TOrigFn,
   origParam: Parameters<TOrigFn>[0]
 ): Promise<PromiseResolveOrSync<ReturnType<TOrigFn>>> {
-  return Promise.resolve(origFn(origParam)).catch(exception => {
+  try {
+    return await Promise.resolve(origFn(origParam));
+  } catch (exception) {
     if (exception instanceof HipRedirect || isHipError(exception)) {
       throw exception;
     } else {
       throw toThrow;
     }
-  });
+  }
 }
 
 // Runs the full lifecycle and returns the safe response plus the final context
