@@ -64,17 +64,21 @@ HipThrusTS makes the five stages **the unit of work**:
   `Boom.forbidden()` from auth, `Boom.notFound()` from `attachData` —
   HipThrusTS catches the rest and returns `500 Internal Server Error`
   with no stack-trace leak.
-- **Adapter-thin.** Express today, tRPC today, anything else in a
-  ~100-line file tomorrow. The lifecycle is framework-agnostic.
+- **Adapter-thin.** Express, tRPC, Hono, Fastify, and Next.js (App Router)
+  today; anything else in a ~100-line file tomorrow. The lifecycle is
+  framework-agnostic.
 
 ## Install
 
 ```sh
-npm install hipthrusts
+pnpm add hipthrusts
 # peer-installs depending on what you'll use:
-npm install express @hapi/boom
-npm install zod          # if you want Zod-based validation helpers
-npm install mongoose     # if you want the mongoose helpers
+pnpm add express @hapi/boom   # Express adapter
+pnpm add hono                 # Hono adapter
+pnpm add fastify              # Fastify adapter
+pnpm add next                 # Next.js (App Router) adapter
+pnpm add zod                  # if you want Zod-based validation helpers
+pnpm add mongoose             # if you want the mongoose helpers
 ```
 
 ## The lifecycle, in detail

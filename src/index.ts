@@ -1149,6 +1149,10 @@ export function HTPipe(...objs: any[]) {
 export * from './core';
 export * from './errors';
 export * from './express';
+export * from './http-adapter';
+export * from './hono';
+export * from './fastify';
+export * from './next';
 export * from './trpc';
 export * from './mongoose';
 export * from './zod';

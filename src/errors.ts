@@ -57,6 +57,26 @@ export function isHipError(thing: unknown): thing is HipError {
   return thing instanceof HipError;
 }
 
+// Maps a transport-agnostic HipError to an HTTP status code. Used by adapters
+// that respond with a raw status + JSON body (Hono, Fastify, Next.js). The
+// express adapter maps to Boom instead and does not use this.
+export function hipErrorToStatus(error: HipError): number {
+  switch (error.kind) {
+    case 'badInputs':
+      return 422;
+    case 'unauthorized':
+      return 401;
+    case 'forbidden':
+      return 403;
+    case 'notFound':
+      return 404;
+    case 'conflict':
+      return 409;
+    default:
+      return 500;
+  }
+}
+
 // Control-flow signal, not an error: instructs HTTP-style adapters to issue a
 // redirect. Non-HTTP adapters treat it as an internal error.
 export class HipRedirect {
