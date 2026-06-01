@@ -4,11 +4,11 @@ import {
   withDefaultImplementations,
 } from './core';
 import {
-  LoadResourcesDepsMet,
   ExecuteDepsMet,
   FinalAuthorizeDepsMet,
-  OptionalStagesShape,
   HasRequiredStages,
+  LoadResourcesDepsMet,
+  OptionalStagesShape,
   PreAuthorizeDepsMet,
   PromiseOrSync,
   RedactResponseDepsMet,

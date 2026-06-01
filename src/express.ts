@@ -8,11 +8,11 @@ import {
 import { HipError, HipRedirect, isHipError } from './errors';
 import { HasResponseMeta, ResponseMeta } from './http-adapter';
 import {
-  LoadResourcesDepsMet,
   ExecuteDepsMet,
   FinalAuthorizeDepsMet,
-  OptionalStagesShape,
   HasRequiredStages,
+  LoadResourcesDepsMet,
+  OptionalStagesShape,
   PreAuthorizeDepsMet,
   PromiseOrSync,
   PromiseResolveOrSync,

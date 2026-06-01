@@ -1,21 +1,22 @@
 import Boom from '@hapi/boom';
 import { describe, expect, it } from 'vitest';
 
-import { toExpressHandler, HTPipe, WithInputSlice } from '../src';
+import { HTPipe, WithInputSlice } from '../src';
 import { executeHipthrustable, withDefaultImplementations } from '../src/core';
 import { HipForbidden } from '../src/errors';
+import { toExpressHandler } from '../src/express';
 import {
   AllAsyncStageKeys,
   AllStageKeys,
   AllStagesOptionalShape,
-  HasLoadResources,
   HasExecute,
+  HasExtractAmbient,
   HasExtractInputs,
   HasFinalAuthorize,
-  HasExtractAmbient,
+  HasLoadResources,
   HasPreAuthorize,
-  HasSanitizeInputs,
   HasRedactResponse,
+  HasSanitizeInputs,
   PromiseResolveOrSync,
 } from '../src/types';
 

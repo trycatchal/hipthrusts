@@ -26,51 +26,65 @@
   "license": "MIT",
   "packageManager": "pnpm@10.33.0",
   "peerDependencies": {
-    "@hapi/boom": "^9.1.4",
+    "@hapi/boom": "^10.0.0",
     "express": "^5.1.0",
-    "fastify": "^5",
-    "hono": "^4",
-    "json-mask": "^0.3.8",
-    "mongoose": "^5.9.4",
-    "next": ">=14",
-    "zod": "^4.2.1"
+    "fastify": "^5.0.0",
+    "hono": "^4.0.0",
+    "json-mask": "^2.0.0",
+    "mongoose": ">=5 <10",
+    "next": ">=14 <17",
+    "zod": "^4.0.0"
   },
   "peerDependenciesMeta": {
-    "@hapi/boom": { "optional": true },
-    "express": { "optional": true },
-    "fastify": { "optional": true },
-    "hono": { "optional": true },
-    "json-mask": { "optional": true },
-    "mongoose": { "optional": true },
-    "next": { "optional": true },
-    "zod": { "optional": true }
+    "@hapi/boom": {
+      "optional": true
+    },
+    "express": {
+      "optional": true
+    },
+    "fastify": {
+      "optional": true
+    },
+    "hono": {
+      "optional": true
+    },
+    "json-mask": {
+      "optional": true
+    },
+    "mongoose": {
+      "optional": true
+    },
+    "next": {
+      "optional": true
+    },
+    "zod": {
+      "optional": true
+    }
   },
   "devDependencies": {
-    "@hapi/boom": "^9.1.4",
-    "@hono/node-server": "^2.0.1",
-    "@types/boom": "^7.3.5",
+    "@hapi/boom": "^10.0.1",
+    "@hono/node-server": "^2.0.4",
     "@types/express": "^5.0.6",
-    "@types/mongoose": "^5.5.23",
-    "@types/node": "^22.19.17",
-    "coveralls": "^3.0.6",
-    "express": "^5.1.0",
+    "@types/node": "^25.9.1",
+    "coveralls": "^3.1.1",
+    "express": "^5.2.1",
     "fastify": "^5.8.5",
-    "hono": "^4.12.17",
-    "husky": "^1.3.1",
-    "json-mask": "^0.3.8",
-    "mongoose": "^5.9.4",
-    "next": "^15.5.4",
-    "prettier": "^1.18.2",
-    "pretty-quick": "^1.10.0",
-    "rimraf": "3.0.0",
-    "ts-node": "^8.4.1",
-    "tslint": "5.20.0",
+    "hono": "^4.12.23",
+    "husky": "^9.1.7",
+    "json-mask": "^2.0.0",
+    "mongoose": "^8.24.0",
+    "next": "^16.2.6",
+    "prettier": "^3.8.3",
+    "pretty-quick": "^4.2.2",
+    "rimraf": "^6.1.3",
+    "ts-node": "^10.9.2",
+    "tslint": "^6.1.3",
     "tslint-config-prettier": "^1.18.0",
-    "tslint-eslint-rules": "*5.4.0",
-    "tsx": "^4.21.0",
-    "typescript": "^5.9.3",
-    "vitest": "^4.1.5",
-    "zod": "^4.2.1"
+    "tslint-eslint-rules": "^5.4.0",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.7",
+    "zod": "^4.4.3"
   },
   "prettier": {
     "trailingComma": "es5",
@@ -81,5 +95,64 @@
       "pre-commit": "pretty-quick --staged && pnpm lint && pnpm test"
     }
   },
-  "author": "Captain Caius"
+  "author": "Captain Caius",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./core": {
+      "types": "./lib/core.d.ts",
+      "default": "./lib/core.js"
+    },
+    "./errors": {
+      "types": "./lib/errors.d.ts",
+      "default": "./lib/errors.js"
+    },
+    "./http-adapter": {
+      "types": "./lib/http-adapter.d.ts",
+      "default": "./lib/http-adapter.js"
+    },
+    "./lifecycle-functions": {
+      "types": "./lib/lifecycle-functions.d.ts",
+      "default": "./lib/lifecycle-functions.js"
+    },
+    "./types": {
+      "types": "./lib/types.d.ts",
+      "default": "./lib/types.js"
+    },
+    "./user": {
+      "types": "./lib/user.d.ts",
+      "default": "./lib/user.js"
+    },
+    "./express": {
+      "types": "./lib/express.d.ts",
+      "default": "./lib/express.js"
+    },
+    "./fastify": {
+      "types": "./lib/fastify.d.ts",
+      "default": "./lib/fastify.js"
+    },
+    "./hono": {
+      "types": "./lib/hono.d.ts",
+      "default": "./lib/hono.js"
+    },
+    "./next": {
+      "types": "./lib/next.d.ts",
+      "default": "./lib/next.js"
+    },
+    "./mongoose": {
+      "types": "./lib/mongoose.d.ts",
+      "default": "./lib/mongoose.js"
+    },
+    "./zod": {
+      "types": "./lib/zod.d.ts",
+      "default": "./lib/zod.js"
+    },
+    "./trpc": {
+      "types": "./lib/trpc.d.ts",
+      "default": "./lib/trpc.js"
+    },
+    "./package.json": "./package.json"
+  }
 }

@@ -1,10 +1,10 @@
 import { HipBadInputs, HipNotFound } from './errors';
 import { WithInputSlice } from './index';
 import {
-  LoadResources,
   Execute,
-  SanitizeInputs,
+  LoadResources,
   RedactResponse,
+  SanitizeInputs,
 } from './lifecycle-functions';
 import { Constructor } from './types';
 

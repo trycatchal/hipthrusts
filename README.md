@@ -21,7 +21,7 @@ Fastify, or Next.js (App Router). It doesn't replace your router, your ORM,
 or your auth layer — it gives the per-request handler a backbone.
 
 ```ts
-import { toExpressHandler } from 'hipthrusts';
+import { toExpressHandler } from 'hipthrusts/express';
 
 app.get('/things/:id', toExpressHandler({
   extractAmbient:  (raw)   => ({ user: raw.req.user }),
@@ -158,7 +158,8 @@ export const RequireThingOwner = HTPipe(
 Then use it in every handler that needs it:
 
 ```ts
-import { toExpressHandler, HTPipe, WithInputSlice } from 'hipthrusts';
+import { HTPipe, WithInputSlice } from 'hipthrusts';
+import { toExpressHandler } from 'hipthrusts/express';
 
 app.put('/things/:id', toExpressHandler(HTPipe(
   WithUserFromReq,                                       // ambient.user
@@ -185,7 +186,8 @@ and intersecting types so an `execute` written here knows it can reach
 The same shared fragments power every endpoint in a router:
 
 ```ts
-import { toExpressHandler, HTPipe, WithInputSlice } from 'hipthrusts';
+import { HTPipe, WithInputSlice } from 'hipthrusts';
+import { toExpressHandler } from 'hipthrusts/express';
 import { WithUserFromReq, RequireThingOwner } from './shared';
 
 // GET /things — public list, no resource load
@@ -285,7 +287,9 @@ values, not HTTP responses.
 
 ```ts
 import { z } from 'zod';
-import { toExpressHandler, htZodFactory, HTPipe } from 'hipthrusts';
+import { HTPipe } from 'hipthrusts';
+import { toExpressHandler } from 'hipthrusts/express';
+import { htZodFactory } from 'hipthrusts/zod';
 
 const { SanitizeInputsSliceWithZod, RedactResponseWithZod } = htZodFactory();
 
@@ -316,7 +320,7 @@ A Zod parse failure throws `HipBadInputs` (with the issue list as
 
 ```ts
 import mongoose from 'mongoose';
-import { htMongooseFactory } from 'hipthrusts';
+import { htMongooseFactory } from 'hipthrusts/mongoose';
 
 const {
   findByIdRequired,           // throws 404 if missing
@@ -333,7 +337,7 @@ These compose with `HTPipe` like everything else.
 The same handler config works with tRPC; only the adapter changes:
 
 ```ts
-import { toTrpcProcedure } from 'hipthrusts';
+import { toTrpcProcedure } from 'hipthrusts/trpc';
 
 export const updateThing = t.procedure
   .input(z.object({ id: z.string(), name: z.string() }))
@@ -356,7 +360,7 @@ ownership checks, response shapers) works across both.
 
 ```ts
 import { Hono } from 'hono';
-import { toHonoHandler } from 'hipthrusts';
+import { toHonoHandler } from 'hipthrusts/hono';
 
 const app = new Hono();
 
@@ -382,7 +386,7 @@ if you need it (e.g. cookies, session middleware values).
 
 ```ts
 import Fastify from 'fastify';
-import { toFastifyHandler } from 'hipthrusts';
+import { toFastifyHandler } from 'hipthrusts/fastify';
 
 const app = Fastify();
 
@@ -407,7 +411,7 @@ adapter just hands them through.
 
 ```ts
 // app/things/[id]/route.ts
-import { toNextHandler } from 'hipthrusts';
+import { toNextHandler } from 'hipthrusts/next';
 import { readSession } from '@/lib/session';
 
 export const GET = toNextHandler(
@@ -449,7 +453,8 @@ Here's the opening example written longhand, with nothing but built-in
 TypeScript:
 
 ```ts
-import { toExpressHandler, HipBadInputs, HipNotFound, HipForbidden } from 'hipthrusts';
+import { HipBadInputs, HipForbidden, HipNotFound } from 'hipthrusts';
+import { toExpressHandler } from 'hipthrusts/express';
 
 app.get('/things/:id', toExpressHandler({
   extractAmbient: (raw) => ({ user: raw.req.user }),
