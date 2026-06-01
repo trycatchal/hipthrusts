@@ -3,8 +3,8 @@ import { HipBadInputs, HipInternal } from './errors';
 import { WithInputSlice } from './index';
 import {
   LoadResources,
-  SanitizeInputs,
   RedactResponse,
+  SanitizeInputs,
 } from './lifecycle-functions';
 
 export function htZodFactory() {
