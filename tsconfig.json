@@ -1,8 +1,8 @@
 {
-  "include": ["src/**/*.ts"],
   "extends": "./tsconfig.base.json",
-  "exclude": ["test/**/*.ts"],
+  "include": ["src/**/*.ts"],
   "compilerOptions": {
-    "outDir": "lib"
+    "module": "nodenext",
+    "moduleResolution": "nodenext"
   }
 }

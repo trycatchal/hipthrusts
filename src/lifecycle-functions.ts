@@ -1,6 +1,6 @@
 export function ExtractAmbient<
   TContextIn extends object,
-  TContextOut extends object
+  TContextOut extends object,
 >(projector: (htCtx: TContextIn) => TContextOut) {
   return {
     extractAmbient: projector,
@@ -9,7 +9,7 @@ export function ExtractAmbient<
 
 export function ExtractInputs<
   TContextIn extends object,
-  TContextOut extends object
+  TContextOut extends object,
 >(projector: (htCtx: TContextIn) => TContextOut) {
   return {
     extractInputs: projector,
@@ -18,7 +18,7 @@ export function ExtractInputs<
 
 export function SanitizeInputs<
   TContextIn extends object,
-  TContextOut extends object
+  TContextOut extends object,
 >(projector: (htCtx: TContextIn) => TContextOut) {
   return {
     sanitizeInputs: projector,
@@ -27,7 +27,7 @@ export function SanitizeInputs<
 
 export function PreAuthorize<
   TContextIn extends object,
-  TContextOut extends object | boolean
+  TContextOut extends object | boolean,
 >(projector: (htCtx: TContextIn) => TContextOut) {
   return {
     preAuthorize: projector,
@@ -36,7 +36,7 @@ export function PreAuthorize<
 
 export function LoadResources<
   TContextIn extends object,
-  TContextOut extends object
+  TContextOut extends object,
 >(projector: (htCtx: TContextIn) => TContextOut) {
   return {
     loadResources: projector,
@@ -45,7 +45,7 @@ export function LoadResources<
 
 export function FinalAuthorize<
   TContextIn extends object,
-  TContextOut extends object | boolean
+  TContextOut extends object | boolean,
 >(projector: (htCtx: TContextIn) => TContextOut) {
   return {
     finalAuthorize: projector,

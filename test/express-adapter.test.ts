@@ -51,10 +51,10 @@ describe('defineExpressHandler', () => {
 describe('toExpressHandler', () => {
   it('threads params/query/body into the lifecycle and responds with JSON', async () => {
     const handler = toExpressHandler({
-      sanitizeInputs: (i: {
-        params: { id: string };
-        body: { n: number };
-      }) => ({ id: i.params.id, n: i.body.n }),
+      sanitizeInputs: (i: { params: { id: string }; body: { n: number } }) => ({
+        id: i.params.id,
+        n: i.body.n,
+      }),
       preAuthorize: () => true,
       finalAuthorize: () => true,
       execute: (ctx: { inputs: { id: string; n: number } }) => ({

@@ -6,7 +6,7 @@ import {
   HipNotFound,
   HipRedirect,
   isHipError,
-} from './errors';
+} from './errors.js';
 import {
   ExecuteDepsMet,
   FinalAuthorizeDepsMet,
@@ -34,7 +34,7 @@ import {
   PromiseOrSync,
   PromiseResolveOrSync,
   RedactResponseDepsMet,
-} from './types';
+} from './types.js';
 
 export function withDefaultImplementations<
   TStrategy extends OptionalStagesShape &
@@ -43,7 +43,7 @@ export function withDefaultImplementations<
     LoadResourcesDepsMet<TStrategy> &
     FinalAuthorizeDepsMet<TStrategy> &
     ExecuteDepsMet<TStrategy> &
-    RedactResponseDepsMet<TStrategy>
+    RedactResponseDepsMet<TStrategy>,
 >(strategy: TStrategy): HasAllStagesDefined {
   return {
     ...(strategy as any),
@@ -140,7 +140,7 @@ function transformThrowSync<TOrigFn extends (param: any) => any>(
 }
 
 async function transformThrowPossiblyAsync<
-  TOrigFn extends (param: any) => PromiseOrSync<any>
+  TOrigFn extends (param: any) => PromiseOrSync<any>,
 >(
   toThrow: HipError,
   origFn: TOrigFn,
@@ -168,7 +168,7 @@ export async function executeHipthrustable<
     FinalAuthorizeDepsMet<TConf> &
     ExecuteDepsMet<TConf> &
     RedactResponseDepsMet<TConf>,
-  TRaw
+  TRaw,
 >(requestHandler: TConf, raw: TRaw) {
   const badDataThrow = new HipBadInputs('User input sanitization failure');
 
@@ -292,7 +292,7 @@ export function assertHipthrustable(
     'execute',
     'redactResponse',
   ];
-  requiredMethods.forEach(method => {
+  requiredMethods.forEach((method) => {
     if (
       !requestHandler[method] ||
       typeof requestHandler[method] !== 'function'

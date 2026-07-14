@@ -2,14 +2,8 @@
 // all share the canonical { params, query, body, headers } input shape and
 // respond with a raw HTTP status + JSON body. This module has NO framework
 // imports so importing one adapter never drags in another framework's runtime.
-import {
-  assertHipthrustable,
-  withDefaultImplementations,
-} from './core';
-import {
-  PromiseOrSync,
-  PromiseResolveOrSync,
-} from './types';
+import { assertHipthrustable, withDefaultImplementations } from './core.js';
+import { PromiseOrSync, PromiseResolveOrSync } from './types.js';
 
 // Canonical input shape produced by every HTTP adapter baseline.
 export interface HttpRawInputs {
@@ -32,7 +26,6 @@ export interface HasResponseMeta<TCtx = any> {
 // Generic HTTP handler config, parameterized by the framework raw type so each
 // adapter supplies its own shape for extractAmbient/extractInputs. Everything
 // from sanitizeInputs onward is framework-independent.
-// tslint:disable-next-line:interface-over-type-literal
 export type HttpHandlerConfig<
   TRaw,
   TInputs = HttpRawInputs,
@@ -42,21 +35,21 @@ export type HttpHandlerConfig<
   TLoadResourcesOut = unknown,
   TFinalAuthOut = unknown,
   TUnsafeResponse = unknown,
-  TResponse = unknown
+  TResponse = unknown,
 > = {
   extractAmbient?: (raw: TRaw) => TAmbient;
   extractInputs?: (canonical: HttpRawInputs) => TInputs;
   sanitizeInputs: (unsafe: TInputs) => TSafeInputs;
   preAuthorize: (
     context: { inputs: PromiseResolveOrSync<TSafeInputs> } & ([
-      TAmbient
+      TAmbient,
     ] extends [never]
       ? {}
       : { ambient: TAmbient })
   ) => TPreAuthOut;
   loadResources?: (
     context: { inputs: PromiseResolveOrSync<TSafeInputs> } & ([
-      TAmbient
+      TAmbient,
     ] extends [never]
       ? {}
       : { ambient: TAmbient }) &
@@ -64,7 +57,7 @@ export type HttpHandlerConfig<
   ) => PromiseOrSync<TLoadResourcesOut>;
   finalAuthorize: (
     context: { inputs: PromiseResolveOrSync<TSafeInputs> } & ([
-      TAmbient
+      TAmbient,
     ] extends [never]
       ? {}
       : { ambient: TAmbient }) &
@@ -73,7 +66,7 @@ export type HttpHandlerConfig<
   ) => PromiseOrSync<TFinalAuthOut>;
   execute: (
     context: { inputs: PromiseResolveOrSync<TSafeInputs> } & ([
-      TAmbient
+      TAmbient,
     ] extends [never]
       ? {}
       : { ambient: TAmbient }) &
@@ -81,9 +74,7 @@ export type HttpHandlerConfig<
       PromiseResolveOrSync<TLoadResourcesOut> &
       PromiseResolveOrSync<TFinalAuthOut>
   ) => PromiseOrSync<TUnsafeResponse>;
-  redactResponse: (
-    unsafe: PromiseResolveOrSync<TUnsafeResponse>
-  ) => TResponse;
+  redactResponse: (unsafe: PromiseResolveOrSync<TUnsafeResponse>) => TResponse;
   responseMeta?: ResponseMeta | ((ctx: any) => ResponseMeta);
 };
 

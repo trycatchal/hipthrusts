@@ -1,13 +1,13 @@
 import { Context } from 'hono';
-import { executeHipthrustable } from './core';
-import { hipErrorToStatus, HipRedirect, isHipError } from './errors';
+import { executeHipthrustable } from './core.js';
+import { hipErrorToStatus, HipRedirect, isHipError } from './errors.js';
 import {
   composeHttpHipthrustable,
   HasResponseMeta,
   HttpHandlerConfig,
   HttpRawInputs,
   resolveResponseMeta,
-} from './http-adapter';
+} from './http-adapter.js';
 import {
   ExecuteDepsMet,
   FinalAuthorizeDepsMet,
@@ -16,7 +16,7 @@ import {
   OptionalStagesShape,
   PreAuthorizeDepsMet,
   RedactResponseDepsMet,
-} from './types';
+} from './types.js';
 
 // The raw envelope a hono handler receives: the hono Context plus the values
 // pre-extracted from the request (hono body parsing is async, so it happens in
@@ -50,7 +50,7 @@ export const defineHonoHandler = <
   TLoadResourcesOut = unknown,
   TFinalAuthOut = unknown,
   TUnsafeResponse = unknown,
-  TResponse = unknown
+  TResponse = unknown,
 >(
   config: HttpHandlerConfig<
     HonoRaw,
@@ -63,7 +63,7 @@ export const defineHonoHandler = <
     TUnsafeResponse,
     TResponse
   >
-): InferredHandlerConfig => (config as unknown) as InferredHandlerConfig;
+): InferredHandlerConfig => config as unknown as InferredHandlerConfig;
 
 export function toHonoHandler<
   TConf extends OptionalStagesShape &
@@ -73,7 +73,7 @@ export function toHonoHandler<
     FinalAuthorizeDepsMet<TConf> &
     ExecuteDepsMet<TConf> &
     RedactResponseDepsMet<TConf> &
-    HasResponseMeta
+    HasResponseMeta,
 >(handlingStrategy: TConf) {
   const fullHipthrustable = composeHttpHipthrustable<HonoRaw>(
     handlingStrategy,
@@ -111,10 +111,7 @@ export function toHonoHandler<
       return c.json(response, (meta.status || 200) as any);
     } catch (exception) {
       if (exception instanceof HipRedirect) {
-        return c.redirect(
-          exception.redirectUrl,
-          exception.redirectCode as any
-        );
+        return c.redirect(exception.redirectUrl, exception.redirectCode as any);
       } else if (isHipError(exception)) {
         return c.json(
           { error: exception.message },

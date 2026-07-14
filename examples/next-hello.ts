@@ -1,6 +1,7 @@
 // Reference shape for a Next.js App Router route handler. In a real app this
 // would live at e.g. `app/api/greet/[name]/route.ts` and you'd export the
 // verb handlers directly. It is not meant to be run standalone with tsx.
+// (In your own project, import from 'hipthrusts/...' instead of '../src/...'.)
 import { NextRequest } from 'next/server';
 import { HipBadInputs } from '../src/errors';
 import { toNextHandler } from '../src/next';
@@ -31,7 +32,7 @@ const greet = toNextHandler(
   },
   {
     // e.g. read the signed-in user from Clerk/your auth before the lifecycle.
-    gatherContext: async (req: NextRequest) => ({
+    gatherContext: async (_req: NextRequest) => ({
       principal: 'user-from-auth',
     }),
   }

@@ -1,5 +1,6 @@
 // Run with: pnpm exec tsx examples/fastify-hello.ts
 // Then:     curl -X POST localhost:3002/greet/world
+// (In your own project, import from 'hipthrusts/...' instead of '../src/...'.)
 import Fastify from 'fastify';
 import { HipBadInputs, HipForbidden } from '../src/errors';
 import { toFastifyHandler } from '../src/fastify';
@@ -32,6 +33,5 @@ app.listen({ port: PORT }, (err, address) => {
   if (err) {
     throw err;
   }
-  // tslint:disable-next-line:no-console
   console.log(`fastify-hello listening on ${address}`);
 });

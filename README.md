@@ -1,5 +1,9 @@
 # HipThrusTS
 
+[![CI](https://github.com/trycatchal/hipthrusts/actions/workflows/ci.yml/badge.svg)](https://github.com/trycatchal/hipthrusts/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/hipthrusts.svg)](https://www.npmjs.com/package/hipthrusts)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
+
 **Secure-by-default request handlers for Node.js APIs.**
 
 You'll like HipThrusTS if you're building a Node.js API with a data model,
@@ -24,8 +28,8 @@ or your auth layer — it gives the per-request handler a backbone.
 import { toExpressHandler } from 'hipthrusts/express';
 
 app.get('/things/:id', toExpressHandler({
-  extractAmbient:  (raw)   => ({ user: raw.req.user }),
-  sanitizeInputs:  (raw)   => ({ id: String(raw.params.id) }),
+  extractAmbient:  (raw)    => ({ user: raw.req.user }),
+  sanitizeInputs:  (inputs) => ({ id: String(inputs.params.id) }),
   preAuthorize:    (ctx)   => ctx.ambient.user?.role === 'reader',
   loadResources:   async (ctx) => ({
     thing: await ThingModel.findById(ctx.inputs.id).exec(),
@@ -90,8 +94,12 @@ pnpm add hono                 # Hono adapter
 pnpm add fastify              # Fastify adapter
 pnpm add next                 # Next.js (App Router) adapter
 pnpm add zod                  # Zod-based validation helpers
-pnpm add mongoose             # Mongoose helpers
+pnpm add mongoose json-mask   # Mongoose helpers
 ```
+
+The package ships both ESM and CommonJS builds — `import` and `require`
+both work, for the root and for every subpath (`hipthrusts/express`,
+`hipthrusts/zod`, …). Node.js >= 20.
 
 ## The lifecycle, in detail
 
@@ -313,8 +321,9 @@ app.put('/things/:id', toExpressHandler(HTPipe(
 )));
 ```
 
-A Zod parse failure throws `HipBadInputs` (with the issue list as
-`.detail`); the adapter turns that into a 422.
+A Zod parse failure throws `HipBadInputs` carrying the `ZodError` as
+`.detail` (so the issues are at `.detail.issues`); the adapter turns
+that into a 422.
 
 ### Mongoose
 
@@ -365,8 +374,8 @@ import { toHonoHandler } from 'hipthrusts/hono';
 const app = new Hono();
 
 app.get('/things/:id', toHonoHandler({
-  extractAmbient:  (raw) => ({ user: raw.c.get('user') }),
-  sanitizeInputs:  (raw) => ({ id: String(raw.params.id) }),
+  extractAmbient:  (raw)    => ({ user: raw.c.get('user') }),
+  sanitizeInputs:  (inputs) => ({ id: String(inputs.params.id) }),
   preAuthorize:    (ctx) => !!ctx.ambient.user,
   loadResources:   async (ctx) => ({
     thing: await ThingModel.findById(ctx.inputs.id).exec(),
@@ -391,10 +400,10 @@ import { toFastifyHandler } from 'hipthrusts/fastify';
 const app = Fastify();
 
 app.put('/things/:id', toFastifyHandler({
-  extractAmbient:  (raw) => ({ user: (raw.req as any).user }),
-  sanitizeInputs:  (raw) => ({
-    id:   String(raw.params.id),
-    name: String((raw.body as any).name),
+  extractAmbient:  (raw)    => ({ user: (raw.req as any).user }),
+  sanitizeInputs:  (inputs) => ({
+    id:   String(inputs.params.id),
+    name: String((inputs.body as any).name),
   }),
   preAuthorize:    (ctx) => !!ctx.ambient.user,
   finalAuthorize:  () => true,
@@ -416,8 +425,8 @@ import { readSession } from '@/lib/session';
 
 export const GET = toNextHandler(
   {
-    extractAmbient:  (raw) => ({ user: raw.user }),
-    sanitizeInputs:  (raw) => ({ id: String(raw.params.id) }),
+    extractAmbient:  (raw)    => ({ user: raw.user }),
+    sanitizeInputs:  (inputs) => ({ id: String(inputs.params.id) }),
     preAuthorize:    (ctx) => !!ctx.ambient.user,
     loadResources:   async (ctx) => ({
       thing: await ThingModel.findById(ctx.inputs.id).exec(),
@@ -440,6 +449,29 @@ that needs to happen *before* the synchronous lifecycle (most often:
 read the session). `options.afterResponse` is a callback you can pass
 that the adapter schedules via Next's `after()`.
 
+## Defining handlers away from the route
+
+Each adapter also exports an inference-friendly identity helper —
+`defineExpressHandler`, `defineHonoHandler`, `defineFastifyHandler`,
+`defineNextHandler`, and `defineTrpcProcedure` — for authoring a config
+separately from where it's mounted, without losing type checking:
+
+```ts
+import { defineExpressHandler, toExpressHandler } from 'hipthrusts/express';
+
+export const getThing = defineExpressHandler({
+  extractAmbient:  (raw)    => ({ user: raw.req.user }),
+  sanitizeInputs:  (inputs) => ({ id: String(inputs.params.id) }),
+  preAuthorize:    (ctx)    => !!ctx.ambient.user,
+  finalAuthorize:  ()       => true,
+  execute:         (ctx)    => ({ id: ctx.inputs.id }),
+  redactResponse:  (t)      => t,
+});
+
+// elsewhere:
+app.get('/things/:id', toExpressHandler(getThing));
+```
+
 All four HTTP-style adapters share a single baseline in
 [`src/http-adapter.ts`](./src/http-adapter.ts) — `responseMeta`, the
 HipError-to-status mapping, and the canonical `{ params, query, body,
@@ -458,11 +490,11 @@ import { toExpressHandler } from 'hipthrusts/express';
 
 app.get('/things/:id', toExpressHandler({
   extractAmbient: (raw) => ({ user: raw.req.user }),
-  sanitizeInputs: (raw) => {
-    if (typeof raw.params?.id !== 'string') {
+  sanitizeInputs: (inputs) => {
+    if (typeof inputs.params?.id !== 'string') {
       throw new HipBadInputs('id must be a string');
     }
-    return { id: raw.params.id };
+    return { id: inputs.params.id };
   },
   preAuthorize: (ctx) => ctx.ambient.user?.role === 'reader',
   loadResources: async (ctx) => {
@@ -550,6 +582,19 @@ Throw a `HipError` subclass — `HipNotFound`, `HipBadInputs`,
 `HipForbidden`, etc. Each adapter translates the error to the right
 framework-native response. For a redirect, throw `new HipRedirect(url)`.
 
+## Runnable examples
+
+The [`examples/`](./examples) directory has a hello-world per adapter.
+Run them straight from the repo (they import from `../src`; in your own
+project you'd import from `hipthrusts/<adapter>`):
+
+```sh
+pnpm exec tsx examples/express-hello.ts
+pnpm exec tsx examples/hono-hello.ts
+pnpm exec tsx examples/fastify-hello.ts
+# examples/next-hello.ts is a reference route file for a Next.js app
+```
+
 ## Roadmap
 
 - More adapters (Koa, others people ask for)
@@ -558,7 +603,8 @@ framework-native response. For a redirect, throw `new HipRedirect(url)`.
   handler set from `{ resource, principals, operations }`
 - A starter template
 
-PRs welcome.
+See [ROADMAP.md](./ROADMAP.md) for the path to 1.0. PRs welcome —
+see [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## License
 

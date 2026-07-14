@@ -1,15 +1,14 @@
-import { HipBadInputs, HipNotFound } from './errors';
-import { WithInputSlice } from './index';
+import { HipBadInputs, HipNotFound } from './errors.js';
+import { WithInputSlice } from './index.js';
 import {
   Execute,
   LoadResources,
   RedactResponse,
   SanitizeInputs,
-} from './lifecycle-functions';
-import { Constructor } from './types';
+} from './lifecycle-functions.js';
+import { Constructor } from './types.js';
 
-// tslint:disable-next-line:no-var-requires
-const mask = require('json-mask');
+import mask from 'json-mask';
 
 interface ModelWithFindById<TInstance = any> {
   findById(id: string): { exec(): Promise<TInstance> };
@@ -28,8 +27,7 @@ interface HasToObject<T> {
 
 export function htMongooseFactory(mongoose: any) {
   function findByIdRequired(Model: ModelWithFindById) {
-    // tslint:disable-next-line:only-arrow-functions
-    return async function(id: string) {
+    return async function (id: string) {
       if (!id || !id.toString()) {
         throw new HipBadInputs('Missing dependent resource ID');
       }
@@ -42,8 +40,7 @@ export function htMongooseFactory(mongoose: any) {
   }
 
   function findOneByRequired(Model: ModelWithFindOne, fieldName: string) {
-    // tslint:disable-next-line:only-arrow-functions
-    return async function(fieldValue: any) {
+    return async function (fieldValue: any) {
       if (!fieldValue || !fieldValue.toString()) {
         throw new HipBadInputs('Missing dependent resource value');
       }
@@ -59,14 +56,14 @@ export function htMongooseFactory(mongoose: any) {
     };
   }
 
-  function stripIdTransform(doc: any, ret: { _id: any }, options: any) {
+  function stripIdTransform(doc: any, ret: { _id: any }, _options: any) {
     delete ret._id;
     return ret;
   }
 
   function deepWipeDefault(obj: any): any {
     if (Array.isArray(obj)) {
-      return obj.map(elm => deepWipeDefault(elm));
+      return obj.map((elm) => deepWipeDefault(elm));
     } else if (typeof obj === 'object' && !obj.instanceOfSchema) {
       return Object.keys(obj).reduce((acc, key) => {
         return {
@@ -116,7 +113,7 @@ export function htMongooseFactory(mongoose: any) {
     TSafe extends ReturnType<TInstance['toObject']>,
     TDocFactory extends DocumentFactory<any>,
     TInstance extends ReturnType<TDocFactory>,
-    TUnsafe extends object
+    TUnsafe extends object,
   >(DocFactory: TDocFactory, options?: { validateModifiedOnly?: boolean }) {
     return SanitizeInputs((unsafeInputs: TUnsafe) => {
       const doc = DocFactory(unsafeInputs);
@@ -140,7 +137,7 @@ export function htMongooseFactory(mongoose: any) {
     TSafeSlice extends ReturnType<TInstance['toObject']>,
     TDocFactory extends DocumentFactory<any>,
     TInstance extends ReturnType<TDocFactory>,
-    TUnsafeSlice extends object
+    TUnsafeSlice extends object,
   >(
     sliceName: TSliceName,
     DocFactory: TDocFactory,
@@ -169,7 +166,7 @@ export function htMongooseFactory(mongoose: any) {
       if (context[propertyKeyOfDocument]) {
         try {
           return await context[propertyKeyOfDocument].save();
-        } catch (err) {
+        } catch {
           throw new HipBadInputs(
             'Unable to save. Please check if data sent was valid.'
           );
@@ -206,7 +203,7 @@ export function htMongooseFactory(mongoose: any) {
   function RedactResponseWithMongoose<
     TSafeResponse extends ReturnType<TInstance['toObject']>,
     TDocFactory extends DocumentFactory<any>,
-    TInstance extends ReturnType<TDocFactory>
+    TInstance extends ReturnType<TDocFactory>,
   >(DocFactory: TDocFactory) {
     return RedactResponse((unsafeResponse: any) => {
       const doc = DocFactory(unsafeResponse);
@@ -217,7 +214,7 @@ export function htMongooseFactory(mongoose: any) {
   function PojoToDocument<
     TPojoKey extends string,
     TMongooseModel extends Constructor<any>,
-    TContextIn extends { [key in TPojoKey]: any }
+    TContextIn extends { [key in TPojoKey]: any },
   >(pojoKey: TPojoKey, modelClass: TMongooseModel, newDocKey: string) {
     return LoadResources((context: TContextIn) => {
       return {

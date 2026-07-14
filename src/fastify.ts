@@ -1,13 +1,13 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
-import { executeHipthrustable } from './core';
-import { hipErrorToStatus, HipRedirect, isHipError } from './errors';
+import { executeHipthrustable } from './core.js';
+import { hipErrorToStatus, HipRedirect, isHipError } from './errors.js';
 import {
   composeHttpHipthrustable,
   HasResponseMeta,
   HttpHandlerConfig,
   HttpRawInputs,
   resolveResponseMeta,
-} from './http-adapter';
+} from './http-adapter.js';
 import {
   ExecuteDepsMet,
   FinalAuthorizeDepsMet,
@@ -16,7 +16,7 @@ import {
   OptionalStagesShape,
   PreAuthorizeDepsMet,
   RedactResponseDepsMet,
-} from './types';
+} from './types.js';
 
 // The raw envelope a fastify handler receives. Fastify parses params/query/body
 // for us, so the baseline reads them straight off the request.
@@ -48,7 +48,7 @@ export const defineFastifyHandler = <
   TLoadResourcesOut = unknown,
   TFinalAuthOut = unknown,
   TUnsafeResponse = unknown,
-  TResponse = unknown
+  TResponse = unknown,
 >(
   config: HttpHandlerConfig<
     FastifyRaw,
@@ -61,7 +61,7 @@ export const defineFastifyHandler = <
     TUnsafeResponse,
     TResponse
   >
-): InferredHandlerConfig => (config as unknown) as InferredHandlerConfig;
+): InferredHandlerConfig => config as unknown as InferredHandlerConfig;
 
 export function toFastifyHandler<
   TConf extends OptionalStagesShape &
@@ -71,7 +71,7 @@ export function toFastifyHandler<
     FinalAuthorizeDepsMet<TConf> &
     ExecuteDepsMet<TConf> &
     RedactResponseDepsMet<TConf> &
-    HasResponseMeta
+    HasResponseMeta,
 >(handlingStrategy: TConf) {
   const fullHipthrustable = composeHttpHipthrustable<FastifyRaw>(
     handlingStrategy,

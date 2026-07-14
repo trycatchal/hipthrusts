@@ -1,5 +1,6 @@
 // Run with: pnpm exec tsx examples/hono-hello.ts
 // Then:     curl -X POST localhost:3001/greet/world
+// (In your own project, import from 'hipthrusts/...' instead of '../src/...'.)
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { HipBadInputs } from '../src/errors';
@@ -21,10 +22,9 @@ const greet = toHonoHandler({
 });
 
 const app = new Hono();
-app.post('/greet/:name', c => greet(c));
+app.post('/greet/:name', (c) => greet(c));
 
 const PORT = 3001;
 serve({ fetch: app.fetch, port: PORT }, () => {
-  // tslint:disable-next-line:no-console
   console.log(`hono-hello listening on http://localhost:${PORT}`);
 });

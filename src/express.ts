@@ -4,9 +4,9 @@ import {
   assertHipthrustable,
   executeHipthrustable,
   withDefaultImplementations,
-} from './core';
-import { HipError, HipRedirect, isHipError } from './errors';
-import { HasResponseMeta, ResponseMeta } from './http-adapter';
+} from './core.js';
+import { HipError, HipRedirect, isHipError } from './errors.js';
+import { HasResponseMeta, ResponseMeta } from './http-adapter.js';
 import {
   ExecuteDepsMet,
   FinalAuthorizeDepsMet,
@@ -17,7 +17,7 @@ import {
   PromiseOrSync,
   PromiseResolveOrSync,
   RedactResponseDepsMet,
-} from './types';
+} from './types.js';
 
 // Canonical input shape produced by the express adapter baseline extractInputs.
 export interface ExpressRawInputs {
@@ -54,7 +54,6 @@ function hipErrorToBoom(error: HipError): Error {
 // Handler config the dev writes for an express endpoint.
 // `extractInputs` chains AFTER the adapter baseline; if omitted, the canonical
 // {params, query, body, headers} shape flows directly to sanitizeInputs.
-// tslint:disable-next-line:interface-over-type-literal
 type ExpressHandlerConfig<
   TInputs = ExpressRawInputs,
   TSafeInputs = any,
@@ -63,21 +62,21 @@ type ExpressHandlerConfig<
   TLoadResourcesOut = unknown,
   TFinalAuthOut = unknown,
   TUnsafeResponse = unknown,
-  TResponse = unknown
+  TResponse = unknown,
 > = {
   extractAmbient?: (raw: ExpressRaw) => TAmbient;
   extractInputs?: (canonical: ExpressRawInputs) => TInputs;
   sanitizeInputs: (unsafe: TInputs) => TSafeInputs;
   preAuthorize: (
     context: { inputs: PromiseResolveOrSync<TSafeInputs> } & ([
-      TAmbient
+      TAmbient,
     ] extends [never]
       ? {}
       : { ambient: TAmbient })
   ) => TPreAuthOut;
   loadResources?: (
     context: { inputs: PromiseResolveOrSync<TSafeInputs> } & ([
-      TAmbient
+      TAmbient,
     ] extends [never]
       ? {}
       : { ambient: TAmbient }) &
@@ -85,7 +84,7 @@ type ExpressHandlerConfig<
   ) => PromiseOrSync<TLoadResourcesOut>;
   finalAuthorize: (
     context: { inputs: PromiseResolveOrSync<TSafeInputs> } & ([
-      TAmbient
+      TAmbient,
     ] extends [never]
       ? {}
       : { ambient: TAmbient }) &
@@ -94,7 +93,7 @@ type ExpressHandlerConfig<
   ) => PromiseOrSync<TFinalAuthOut>;
   execute: (
     context: { inputs: PromiseResolveOrSync<TSafeInputs> } & ([
-      TAmbient
+      TAmbient,
     ] extends [never]
       ? {}
       : { ambient: TAmbient }) &
@@ -102,9 +101,7 @@ type ExpressHandlerConfig<
       PromiseResolveOrSync<TLoadResourcesOut> &
       PromiseResolveOrSync<TFinalAuthOut>
   ) => PromiseOrSync<TUnsafeResponse>;
-  redactResponse: (
-    unsafe: PromiseResolveOrSync<TUnsafeResponse>
-  ) => TResponse;
+  redactResponse: (unsafe: PromiseResolveOrSync<TUnsafeResponse>) => TResponse;
   responseMeta?: ResponseMeta | ((ctx: any) => ResponseMeta);
 };
 
@@ -121,7 +118,7 @@ export const defineExpressHandler = <
   TLoadResourcesOut = unknown,
   TFinalAuthOut = unknown,
   TUnsafeResponse = unknown,
-  TResponse = unknown
+  TResponse = unknown,
 >(
   config: ExpressHandlerConfig<
     TInputs,
@@ -133,7 +130,7 @@ export const defineExpressHandler = <
     TUnsafeResponse,
     TResponse
   >
-): InferredHandlerConfig => (config as unknown) as InferredHandlerConfig;
+): InferredHandlerConfig => config as unknown as InferredHandlerConfig;
 
 // Adapter-baseline extractInputs: produces the canonical {params, query, body, headers} shape.
 function expressBaselineExtractInputs(raw: ExpressRaw): ExpressRawInputs {
@@ -153,7 +150,7 @@ export function toExpressHandler<
     FinalAuthorizeDepsMet<TConf> &
     ExecuteDepsMet<TConf> &
     RedactResponseDepsMet<TConf> &
-    HasResponseMeta
+    HasResponseMeta,
 >(handlingStrategy: TConf) {
   assertHipthrustable(handlingStrategy);
 

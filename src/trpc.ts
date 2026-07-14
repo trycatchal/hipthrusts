@@ -2,7 +2,7 @@ import {
   assertHipthrustable,
   executeHipthrustable,
   withDefaultImplementations,
-} from './core';
+} from './core.js';
 import {
   ExecuteDepsMet,
   FinalAuthorizeDepsMet,
@@ -12,7 +12,7 @@ import {
   PreAuthorizeDepsMet,
   PromiseOrSync,
   RedactResponseDepsMet,
-} from './types';
+} from './types.js';
 
 // The raw envelope a tRPC procedure resolver receives: a context and a parsed input.
 export interface TrpcRaw<TCtx = unknown, TInput = unknown> {
@@ -32,7 +32,6 @@ function trpcBaselineExtractInputs<TInput>(
 // AFTER the adapter baseline (which hands through the parsed `input`); if
 // omitted, the parsed input flows directly to sanitizeInputs. There is no
 // responseMeta/status here — tRPC procedures return their value directly.
-// tslint:disable-next-line:interface-over-type-literal
 type TrpcHandlerConfig<
   TCtx = unknown,
   TInput = unknown,
@@ -43,7 +42,7 @@ type TrpcHandlerConfig<
   TLoadResourcesOut = unknown,
   TFinalAuthOut = unknown,
   TUnsafeResponse = unknown,
-  TResponse = unknown
+  TResponse = unknown,
 > = {
   extractAmbient?: (raw: TrpcRaw<TCtx, TInput>) => TAmbient;
   extractInputs?: (canonical: TInput) => TInputs;
@@ -91,7 +90,7 @@ export const defineTrpcProcedure = <
   TLoadResourcesOut = unknown,
   TFinalAuthOut = unknown,
   TUnsafeResponse = unknown,
-  TResponse = unknown
+  TResponse = unknown,
 >(
   config: TrpcHandlerConfig<
     TCtx,
@@ -105,7 +104,7 @@ export const defineTrpcProcedure = <
     TUnsafeResponse,
     TResponse
   >
-): InferredTrpcConfig => (config as unknown) as InferredTrpcConfig;
+): InferredTrpcConfig => config as unknown as InferredTrpcConfig;
 
 export function toTrpcProcedure<
   TConf extends OptionalStagesShape &
@@ -114,7 +113,7 @@ export function toTrpcProcedure<
     LoadResourcesDepsMet<TConf> &
     FinalAuthorizeDepsMet<TConf> &
     ExecuteDepsMet<TConf> &
-    RedactResponseDepsMet<TConf>
+    RedactResponseDepsMet<TConf>,
 >(handlingStrategy: TConf) {
   assertHipthrustable(handlingStrategy);
 
