@@ -1,13 +1,13 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { executeHipthrustable } from './core';
-import { hipErrorToStatus, HipRedirect, isHipError } from './errors';
+import { NextRequest, NextResponse } from 'next/server.js';
+import { executeHipthrustable } from './core.js';
+import { hipErrorToStatus, HipRedirect, isHipError } from './errors.js';
 import {
   composeHttpHipthrustable,
   HasResponseMeta,
   HttpHandlerConfig,
   HttpRawInputs,
   resolveResponseMeta,
-} from './http-adapter';
+} from './http-adapter.js';
 import {
   ExecuteDepsMet,
   FinalAuthorizeDepsMet,
@@ -16,7 +16,7 @@ import {
   OptionalStagesShape,
   PreAuthorizeDepsMet,
   RedactResponseDepsMet,
-} from './types';
+} from './types.js';
 
 // App Router route context: params arrive as a Promise.
 export interface NextRouteContext {
@@ -103,7 +103,7 @@ export function toNextHandler<
     try {
       if (options.afterResponse) {
         try {
-          const { after } = await import('next/server');
+          const { after } = await import('next/server.js');
           after(options.afterResponse);
         } catch {
           // `after` unavailable (older Next.js); skip scheduling.

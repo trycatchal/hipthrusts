@@ -4,9 +4,9 @@ import {
   assertHipthrustable,
   executeHipthrustable,
   withDefaultImplementations,
-} from './core';
-import { HipError, HipRedirect, isHipError } from './errors';
-import { HasResponseMeta, ResponseMeta } from './http-adapter';
+} from './core.js';
+import { HipError, HipRedirect, isHipError } from './errors.js';
+import { HasResponseMeta, ResponseMeta } from './http-adapter.js';
 import {
   ExecuteDepsMet,
   FinalAuthorizeDepsMet,
@@ -17,7 +17,7 @@ import {
   PromiseOrSync,
   PromiseResolveOrSync,
   RedactResponseDepsMet,
-} from './types';
+} from './types.js';
 
 // Canonical input shape produced by the express adapter baseline extractInputs.
 export interface ExpressRawInputs {
@@ -54,7 +54,6 @@ function hipErrorToBoom(error: HipError): Error {
 // Handler config the dev writes for an express endpoint.
 // `extractInputs` chains AFTER the adapter baseline; if omitted, the canonical
 // {params, query, body, headers} shape flows directly to sanitizeInputs.
-// tslint:disable-next-line:interface-over-type-literal
 type ExpressHandlerConfig<
   TInputs = ExpressRawInputs,
   TSafeInputs = any,

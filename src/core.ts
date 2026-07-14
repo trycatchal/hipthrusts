@@ -6,7 +6,7 @@ import {
   HipNotFound,
   HipRedirect,
   isHipError,
-} from './errors';
+} from './errors.js';
 import {
   ExecuteDepsMet,
   FinalAuthorizeDepsMet,
@@ -34,7 +34,7 @@ import {
   PromiseOrSync,
   PromiseResolveOrSync,
   RedactResponseDepsMet,
-} from './types';
+} from './types.js';
 
 export function withDefaultImplementations<
   TStrategy extends OptionalStagesShape &

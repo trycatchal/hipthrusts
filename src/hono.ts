@@ -1,13 +1,13 @@
 import { Context } from 'hono';
-import { executeHipthrustable } from './core';
-import { hipErrorToStatus, HipRedirect, isHipError } from './errors';
+import { executeHipthrustable } from './core.js';
+import { hipErrorToStatus, HipRedirect, isHipError } from './errors.js';
 import {
   composeHttpHipthrustable,
   HasResponseMeta,
   HttpHandlerConfig,
   HttpRawInputs,
   resolveResponseMeta,
-} from './http-adapter';
+} from './http-adapter.js';
 import {
   ExecuteDepsMet,
   FinalAuthorizeDepsMet,
@@ -16,7 +16,7 @@ import {
   OptionalStagesShape,
   PreAuthorizeDepsMet,
   RedactResponseDepsMet,
-} from './types';
+} from './types.js';
 
 // The raw envelope a hono handler receives: the hono Context plus the values
 // pre-extracted from the request (hono body parsing is async, so it happens in

@@ -1,11 +1,11 @@
 import { z } from 'zod';
-import { HipBadInputs, HipInternal } from './errors';
-import { WithInputSlice } from './index';
+import { HipBadInputs, HipInternal } from './errors.js';
+import { WithInputSlice } from './index.js';
 import {
   LoadResources,
   RedactResponse,
   SanitizeInputs,
-} from './lifecycle-functions';
+} from './lifecycle-functions.js';
 
 export function htZodFactory() {
   function stripIdTransform(obj: any) {

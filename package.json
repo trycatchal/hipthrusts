@@ -3,25 +3,71 @@
   "version": "0.11.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/captaincaius/hipthrusts.git"
+    "url": "https://github.com/trycatchal/hipthrusts.git"
   },
   "description": "Build stronger, leaner backends with HipThrusTS",
-  "main": "./lib/index.js",
-  "types": "./lib/index.d.ts",
-  "files": [
-    "lib/**/*.js",
-    "lib/**/*.d.ts"
+  "homepage": "https://github.com/trycatchal/hipthrusts#readme",
+  "bugs": {
+    "url": "https://github.com/trycatchal/hipthrusts/issues"
+  },
+  "keywords": [
+    "typescript",
+    "security",
+    "authorization",
+    "validation",
+    "sanitization",
+    "request-handler",
+    "express",
+    "fastify",
+    "hono",
+    "nextjs",
+    "trpc",
+    "mongoose",
+    "zod",
+    "backend",
+    "api"
   ],
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "./dist/commonjs/index.js",
+  "types": "./dist/commonjs/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "tshy": {
+    "exports": {
+      ".": "./src/index.ts",
+      "./core": "./src/core.ts",
+      "./errors": "./src/errors.ts",
+      "./http-adapter": "./src/http-adapter.ts",
+      "./lifecycle-functions": "./src/lifecycle-functions.ts",
+      "./types": "./src/types.ts",
+      "./user": "./src/user.ts",
+      "./express": "./src/express.ts",
+      "./fastify": "./src/fastify.ts",
+      "./hono": "./src/hono.ts",
+      "./next": "./src/next.ts",
+      "./mongoose": "./src/mongoose.ts",
+      "./zod": "./src/zod.ts",
+      "./trpc": "./src/trpc.ts",
+      "./package.json": "./package.json"
+    }
+  },
   "scripts": {
-    "clean": "rimraf lib .tsbuildinfo .nyc_output coverage doc build",
+    "clean": "rimraf lib dist .tshy .tshy-build .tsbuildinfo coverage doc test-build",
     "test": "vitest run",
     "test:watch": "vitest",
-    "build": "tsc -p tsconfig.json",
-    "lint": "tslint --project tsconfig.base.json",
-    "tsc": "tsc",
-    "tslint-check": "tslint-config-prettier-check ./tslint.json",
-    "prepublishOnly": "pnpm clean && pnpm build",
-    "prettier": "if test -z $CI; then prettier --write \"./{src,test}/**/*.{ts,js}\"; fi"
+    "test:coverage": "vitest run --coverage",
+    "build": "tshy",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
+    "lint": "eslint .",
+    "format": "prettier --write \"./{src,test,examples,scripts}/**/*.{ts,js,cjs,mjs}\"",
+    "format:check": "prettier --check \"./{src,test,examples,scripts}/**/*.{ts,js,cjs,mjs}\"",
+    "check:exports": "attw --pack . --profile node16",
+    "smoke": "node scripts/smoke.cjs && node scripts/smoke.mjs",
+    "docs:build": "typedoc",
+    "prepublishOnly": "pnpm clean && pnpm build && pnpm check:exports && pnpm smoke"
   },
   "license": "MIT",
   "packageManager": "pnpm@10.33.0",
@@ -62,27 +108,28 @@
     }
   },
   "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
+    "@eslint/js": "^10.0.1",
     "@hapi/boom": "^10.0.1",
     "@hono/node-server": "^2.0.4",
     "@types/express": "^5.0.6",
     "@types/node": "^25.9.1",
-    "coveralls": "^3.1.1",
+    "@vitest/coverage-v8": "^4.1.10",
+    "eslint": "^10.7.0",
+    "eslint-config-prettier": "^10.1.8",
     "express": "^5.2.1",
     "fastify": "^5.8.5",
     "hono": "^4.12.23",
-    "husky": "^9.1.7",
     "json-mask": "^2.0.0",
     "mongoose": "^8.24.0",
     "next": "^16.2.6",
     "prettier": "^3.8.3",
-    "pretty-quick": "^4.2.2",
     "rimraf": "^6.1.3",
-    "ts-node": "^10.9.2",
-    "tslint": "^6.1.3",
-    "tslint-config-prettier": "^1.18.0",
-    "tslint-eslint-rules": "^5.4.0",
+    "tshy": "^4.1.3",
     "tsx": "^4.22.4",
+    "typedoc": "^0.28.20",
     "typescript": "^6.0.3",
+    "typescript-eslint": "^8.64.0",
     "vitest": "^4.1.7",
     "zod": "^4.4.3"
   },
@@ -90,69 +137,150 @@
     "trailingComma": "es5",
     "singleQuote": true
   },
-  "husky": {
-    "hooks": {
-      "pre-commit": "pretty-quick --staged && pnpm lint && pnpm test"
-    }
-  },
   "author": "Captain Caius",
   "exports": {
     ".": {
-      "types": "./lib/index.d.ts",
-      "default": "./lib/index.js"
+      "import": {
+        "types": "./dist/esm/index.d.ts",
+        "default": "./dist/esm/index.js"
+      },
+      "require": {
+        "types": "./dist/commonjs/index.d.ts",
+        "default": "./dist/commonjs/index.js"
+      }
     },
     "./core": {
-      "types": "./lib/core.d.ts",
-      "default": "./lib/core.js"
+      "import": {
+        "types": "./dist/esm/core.d.ts",
+        "default": "./dist/esm/core.js"
+      },
+      "require": {
+        "types": "./dist/commonjs/core.d.ts",
+        "default": "./dist/commonjs/core.js"
+      }
     },
     "./errors": {
-      "types": "./lib/errors.d.ts",
-      "default": "./lib/errors.js"
+      "import": {
+        "types": "./dist/esm/errors.d.ts",
+        "default": "./dist/esm/errors.js"
+      },
+      "require": {
+        "types": "./dist/commonjs/errors.d.ts",
+        "default": "./dist/commonjs/errors.js"
+      }
     },
     "./http-adapter": {
-      "types": "./lib/http-adapter.d.ts",
-      "default": "./lib/http-adapter.js"
+      "import": {
+        "types": "./dist/esm/http-adapter.d.ts",
+        "default": "./dist/esm/http-adapter.js"
+      },
+      "require": {
+        "types": "./dist/commonjs/http-adapter.d.ts",
+        "default": "./dist/commonjs/http-adapter.js"
+      }
     },
     "./lifecycle-functions": {
-      "types": "./lib/lifecycle-functions.d.ts",
-      "default": "./lib/lifecycle-functions.js"
+      "import": {
+        "types": "./dist/esm/lifecycle-functions.d.ts",
+        "default": "./dist/esm/lifecycle-functions.js"
+      },
+      "require": {
+        "types": "./dist/commonjs/lifecycle-functions.d.ts",
+        "default": "./dist/commonjs/lifecycle-functions.js"
+      }
     },
     "./types": {
-      "types": "./lib/types.d.ts",
-      "default": "./lib/types.js"
+      "import": {
+        "types": "./dist/esm/types.d.ts",
+        "default": "./dist/esm/types.js"
+      },
+      "require": {
+        "types": "./dist/commonjs/types.d.ts",
+        "default": "./dist/commonjs/types.js"
+      }
     },
     "./user": {
-      "types": "./lib/user.d.ts",
-      "default": "./lib/user.js"
+      "import": {
+        "types": "./dist/esm/user.d.ts",
+        "default": "./dist/esm/user.js"
+      },
+      "require": {
+        "types": "./dist/commonjs/user.d.ts",
+        "default": "./dist/commonjs/user.js"
+      }
     },
     "./express": {
-      "types": "./lib/express.d.ts",
-      "default": "./lib/express.js"
+      "import": {
+        "types": "./dist/esm/express.d.ts",
+        "default": "./dist/esm/express.js"
+      },
+      "require": {
+        "types": "./dist/commonjs/express.d.ts",
+        "default": "./dist/commonjs/express.js"
+      }
     },
     "./fastify": {
-      "types": "./lib/fastify.d.ts",
-      "default": "./lib/fastify.js"
+      "import": {
+        "types": "./dist/esm/fastify.d.ts",
+        "default": "./dist/esm/fastify.js"
+      },
+      "require": {
+        "types": "./dist/commonjs/fastify.d.ts",
+        "default": "./dist/commonjs/fastify.js"
+      }
     },
     "./hono": {
-      "types": "./lib/hono.d.ts",
-      "default": "./lib/hono.js"
+      "import": {
+        "types": "./dist/esm/hono.d.ts",
+        "default": "./dist/esm/hono.js"
+      },
+      "require": {
+        "types": "./dist/commonjs/hono.d.ts",
+        "default": "./dist/commonjs/hono.js"
+      }
     },
     "./next": {
-      "types": "./lib/next.d.ts",
-      "default": "./lib/next.js"
+      "import": {
+        "types": "./dist/esm/next.d.ts",
+        "default": "./dist/esm/next.js"
+      },
+      "require": {
+        "types": "./dist/commonjs/next.d.ts",
+        "default": "./dist/commonjs/next.js"
+      }
     },
     "./mongoose": {
-      "types": "./lib/mongoose.d.ts",
-      "default": "./lib/mongoose.js"
+      "import": {
+        "types": "./dist/esm/mongoose.d.ts",
+        "default": "./dist/esm/mongoose.js"
+      },
+      "require": {
+        "types": "./dist/commonjs/mongoose.d.ts",
+        "default": "./dist/commonjs/mongoose.js"
+      }
     },
     "./zod": {
-      "types": "./lib/zod.d.ts",
-      "default": "./lib/zod.js"
+      "import": {
+        "types": "./dist/esm/zod.d.ts",
+        "default": "./dist/esm/zod.js"
+      },
+      "require": {
+        "types": "./dist/commonjs/zod.d.ts",
+        "default": "./dist/commonjs/zod.js"
+      }
     },
     "./trpc": {
-      "types": "./lib/trpc.d.ts",
-      "default": "./lib/trpc.js"
+      "import": {
+        "types": "./dist/esm/trpc.d.ts",
+        "default": "./dist/esm/trpc.js"
+      },
+      "require": {
+        "types": "./dist/commonjs/trpc.d.ts",
+        "default": "./dist/commonjs/trpc.js"
+      }
     },
     "./package.json": "./package.json"
-  }
+  },
+  "type": "module",
+  "module": "./dist/esm/index.js"
 }

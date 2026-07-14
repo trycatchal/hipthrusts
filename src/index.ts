@@ -8,7 +8,7 @@ import {
   isHasPreAuthorize,
   isHasRedactResponse,
   isHasSanitizeInputs,
-} from './core';
+} from './core.js';
 import {
   Execute,
   ExtractAmbient,
@@ -18,7 +18,7 @@ import {
   PreAuthorize,
   RedactResponse,
   SanitizeInputs,
-} from './lifecycle-functions';
+} from './lifecycle-functions.js';
 import {
   AllStageKeys,
   HasExecute,
@@ -28,7 +28,6 @@ import {
   HasLoadResources,
   HasPreAuthorize,
   HasRedactResponse,
-  HasRequiredStages,
   HasSanitizeInputs,
   OptionallyHasExecute,
   OptionallyHasExtractAmbient,
@@ -38,9 +37,8 @@ import {
   OptionallyHasPreAuthorize,
   OptionallyHasRedactResponse,
   OptionallyHasSanitizeInputs,
-  OptionalStagesShape,
   PromiseResolveOrSync,
-} from './types';
+} from './types.js';
 
 type FunctionTaking<TIn> = (param: TIn) => any;
 
@@ -52,9 +50,7 @@ export function fromWrappedInstanceMethod<
   TInstance extends HasTypedFunctionOn<TIn, TMethodName>,
   TMethodName extends string
 >(instanceMethodName: TMethodName) {
-  // tslint:disable-next-line:only-arrow-functions
   return function(instance: TInstance) {
-    // tslint:disable-next-line:only-arrow-functions
     return Promise.resolve(function(arg: TIn): Promise<TOut> {
       return Promise.resolve(instance[instanceMethodName](arg) as TOut);
     });
@@ -665,7 +661,7 @@ type ClashlessExtractInputs<TLeft, TRight> = OptionallyHasExtractInputs<
     : any
 >;
 
-type ClashlessSanitizeInputs<TLeft, TRight> = OptionallyHasSanitizeInputs<
+type ClashlessSanitizeInputs<_TLeft, TRight> = OptionallyHasSanitizeInputs<
   any,
   TRight extends HasSanitizeInputs<any, any>
     ? Parameters<TRight['sanitizeInputs']>[0]
@@ -720,12 +716,12 @@ type ClashlessFinalAuthorize<TLeft, TRight> = OptionallyHasFinalAuthorize<
       : any)
 >;
 
-type ClashlessExecute<TLeft, TRight> = OptionallyHasExecute<
+type ClashlessExecute<_TLeft, TRight> = OptionallyHasExecute<
   any,
   TRight extends HasExecute<any, any> ? Parameters<TRight['execute']>[0] : any
 >;
 
-type ClashlessRedactResponse<TLeft, TRight> = OptionallyHasRedactResponse<
+type ClashlessRedactResponse<_TLeft, TRight> = OptionallyHasRedactResponse<
   any,
   TRight extends HasRedactResponse<any, any>
     ? Parameters<TRight['redactResponse']>[0]
@@ -1146,8 +1142,8 @@ export function HTPipe(...objs: any[]) {
   return objs.reduce((prev: any, curr: any) => HTPipe(prev, curr), {});
 }
 
-export * from './core';
-export * from './errors';
-export * from './http-adapter';
-export * from './user';
-export * from './lifecycle-functions';
+export * from './core.js';
+export * from './errors.js';
+export * from './http-adapter.js';
+export * from './user.js';
+export * from './lifecycle-functions.js';

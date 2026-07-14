@@ -1,5 +1,6 @@
 // Run with: pnpm exec tsx examples/express-hello.ts
 // Then:     curl -X POST localhost:4000/greet/world
+// (In your own project, import from 'hipthrusts/...' instead of '../src/...'.)
 import express, { NextFunction, Request, Response } from 'express';
 import { HipBadInputs } from '../src/errors';
 import { defineExpressHandler, toExpressHandler } from '../src/express';
@@ -25,7 +26,7 @@ app.use(express.json());
 app.post('/greet/:name', toExpressHandler(greet));
 
 // Express error middleware: hipthrusts hands Boom errors to next().
-app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
   if (err && err.isBoom) {
     res.status(err.output.statusCode).json(err.output.payload);
   } else {
@@ -35,6 +36,5 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
 
 const PORT = 4000;
 app.listen(PORT, () => {
-  // tslint:disable-next-line:no-console
   console.log(`express-hello listening on http://localhost:${PORT}`);
 });

@@ -4,7 +4,11 @@ node_modules
 package-lock.json
 build
 lib
+dist
+.tshy
+.tshy-build
 .vscode
 .nyc_output
 coverage
+doc
 test-build

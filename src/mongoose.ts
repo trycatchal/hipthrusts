@@ -1,15 +1,14 @@
-import { HipBadInputs, HipNotFound } from './errors';
-import { WithInputSlice } from './index';
+import { HipBadInputs, HipNotFound } from './errors.js';
+import { WithInputSlice } from './index.js';
 import {
   Execute,
   LoadResources,
   RedactResponse,
   SanitizeInputs,
-} from './lifecycle-functions';
-import { Constructor } from './types';
+} from './lifecycle-functions.js';
+import { Constructor } from './types.js';
 
-// tslint:disable-next-line:no-var-requires
-const mask = require('json-mask');
+import mask from 'json-mask';
 
 interface ModelWithFindById<TInstance = any> {
   findById(id: string): { exec(): Promise<TInstance> };
@@ -28,7 +27,6 @@ interface HasToObject<T> {
 
 export function htMongooseFactory(mongoose: any) {
   function findByIdRequired(Model: ModelWithFindById) {
-    // tslint:disable-next-line:only-arrow-functions
     return async function(id: string) {
       if (!id || !id.toString()) {
         throw new HipBadInputs('Missing dependent resource ID');
@@ -42,7 +40,6 @@ export function htMongooseFactory(mongoose: any) {
   }
 
   function findOneByRequired(Model: ModelWithFindOne, fieldName: string) {
-    // tslint:disable-next-line:only-arrow-functions
     return async function(fieldValue: any) {
       if (!fieldValue || !fieldValue.toString()) {
         throw new HipBadInputs('Missing dependent resource value');
@@ -59,7 +56,7 @@ export function htMongooseFactory(mongoose: any) {
     };
   }
 
-  function stripIdTransform(doc: any, ret: { _id: any }, options: any) {
+  function stripIdTransform(doc: any, ret: { _id: any }, _options: any) {
     delete ret._id;
     return ret;
   }
@@ -169,7 +166,7 @@ export function htMongooseFactory(mongoose: any) {
       if (context[propertyKeyOfDocument]) {
         try {
           return await context[propertyKeyOfDocument].save();
-        } catch (err) {
+        } catch {
           throw new HipBadInputs(
             'Unable to save. Please check if data sent was valid.'
           );

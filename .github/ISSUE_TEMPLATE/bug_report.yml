@@ -1,0 +1,34 @@
+name: Bug report
+description: Something behaves differently than documented or expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: A handler config + adapter call that reproduces the problem. For type-level bugs, the snippet that should/shouldn't compile.
+      render: TypeScript
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: hipthrusts version
+      placeholder: e.g. 0.11.0
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Framework adapter, Node.js version, TypeScript version, module system (ESM/CJS)
+      placeholder: e.g. express adapter, Node 22, TS 5.9, ESM
+    validations:
+      required: true

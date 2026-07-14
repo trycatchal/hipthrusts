@@ -143,7 +143,6 @@ describe('HipThrusTS', () => {
           },
         };
 
-        // tslint:disable-next-line:no-unused-variable
         const triple = HTPipe(left, midNotCovered, rightFullyCovered);
       });
 
@@ -151,11 +150,9 @@ describe('HipThrusTS', () => {
         it('returns equal empty object', () => {
           const pipedWithEmptyObjectsOnly = HTPipe({}, {});
 
-          // tslint:disable-next-line:no-unused-variable
           type assignableToCorrect = {} extends typeof pipedWithEmptyObjectsOnly
             ? true
             : false;
-          // tslint:disable-next-line:no-unused-variable
           type assignableFromCorrect = typeof pipedWithEmptyObjectsOnly extends {}
             ? true
             : false;

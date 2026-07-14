@@ -1,0 +1,23 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": [
+    "src/index.ts",
+    "src/core.ts",
+    "src/errors.ts",
+    "src/http-adapter.ts",
+    "src/lifecycle-functions.ts",
+    "src/types.ts",
+    "src/user.ts",
+    "src/express.ts",
+    "src/fastify.ts",
+    "src/hono.ts",
+    "src/next.ts",
+    "src/mongoose.ts",
+    "src/zod.ts",
+    "src/trpc.ts"
+  ],
+  "out": "doc",
+  "tsconfig": "tsconfig.json",
+  "excludeInternal": true,
+  "includeVersion": true
+}

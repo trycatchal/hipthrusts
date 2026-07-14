@@ -5,11 +5,11 @@
 import {
   assertHipthrustable,
   withDefaultImplementations,
-} from './core';
+} from './core.js';
 import {
   PromiseOrSync,
   PromiseResolveOrSync,
-} from './types';
+} from './types.js';
 
 // Canonical input shape produced by every HTTP adapter baseline.
 export interface HttpRawInputs {
@@ -32,7 +32,6 @@ export interface HasResponseMeta<TCtx = any> {
 // Generic HTTP handler config, parameterized by the framework raw type so each
 // adapter supplies its own shape for extractAmbient/extractInputs. Everything
 // from sanitizeInputs onward is framework-independent.
-// tslint:disable-next-line:interface-over-type-literal
 export type HttpHandlerConfig<
   TRaw,
   TInputs = HttpRawInputs,
