@@ -78,7 +78,9 @@ describe('toTrpcProcedure', () => {
   });
 
   it('rejects with HipForbidden when preAuthorize denies', async () => {
-    const procedure = toTrpcProcedure(baseConfig({ preAuthorize: () => false }));
+    const procedure = toTrpcProcedure(
+      baseConfig({ preAuthorize: () => false })
+    );
     await expect(procedure({ ctx: {}, input: {} })).rejects.toThrow(
       HipForbidden
     );

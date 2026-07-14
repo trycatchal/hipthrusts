@@ -27,7 +27,7 @@ interface HasToObject<T> {
 
 export function htMongooseFactory(mongoose: any) {
   function findByIdRequired(Model: ModelWithFindById) {
-    return async function(id: string) {
+    return async function (id: string) {
       if (!id || !id.toString()) {
         throw new HipBadInputs('Missing dependent resource ID');
       }
@@ -40,7 +40,7 @@ export function htMongooseFactory(mongoose: any) {
   }
 
   function findOneByRequired(Model: ModelWithFindOne, fieldName: string) {
-    return async function(fieldValue: any) {
+    return async function (fieldValue: any) {
       if (!fieldValue || !fieldValue.toString()) {
         throw new HipBadInputs('Missing dependent resource value');
       }
@@ -63,7 +63,7 @@ export function htMongooseFactory(mongoose: any) {
 
   function deepWipeDefault(obj: any): any {
     if (Array.isArray(obj)) {
-      return obj.map(elm => deepWipeDefault(elm));
+      return obj.map((elm) => deepWipeDefault(elm));
     } else if (typeof obj === 'object' && !obj.instanceOfSchema) {
       return Object.keys(obj).reduce((acc, key) => {
         return {
@@ -113,7 +113,7 @@ export function htMongooseFactory(mongoose: any) {
     TSafe extends ReturnType<TInstance['toObject']>,
     TDocFactory extends DocumentFactory<any>,
     TInstance extends ReturnType<TDocFactory>,
-    TUnsafe extends object
+    TUnsafe extends object,
   >(DocFactory: TDocFactory, options?: { validateModifiedOnly?: boolean }) {
     return SanitizeInputs((unsafeInputs: TUnsafe) => {
       const doc = DocFactory(unsafeInputs);
@@ -137,7 +137,7 @@ export function htMongooseFactory(mongoose: any) {
     TSafeSlice extends ReturnType<TInstance['toObject']>,
     TDocFactory extends DocumentFactory<any>,
     TInstance extends ReturnType<TDocFactory>,
-    TUnsafeSlice extends object
+    TUnsafeSlice extends object,
   >(
     sliceName: TSliceName,
     DocFactory: TDocFactory,
@@ -203,7 +203,7 @@ export function htMongooseFactory(mongoose: any) {
   function RedactResponseWithMongoose<
     TSafeResponse extends ReturnType<TInstance['toObject']>,
     TDocFactory extends DocumentFactory<any>,
-    TInstance extends ReturnType<TDocFactory>
+    TInstance extends ReturnType<TDocFactory>,
   >(DocFactory: TDocFactory) {
     return RedactResponse((unsafeResponse: any) => {
       const doc = DocFactory(unsafeResponse);
@@ -214,7 +214,7 @@ export function htMongooseFactory(mongoose: any) {
   function PojoToDocument<
     TPojoKey extends string,
     TMongooseModel extends Constructor<any>,
-    TContextIn extends { [key in TPojoKey]: any }
+    TContextIn extends { [key in TPojoKey]: any },
   >(pojoKey: TPojoKey, modelClass: TMongooseModel, newDocKey: string) {
     return LoadResources((context: TContextIn) => {
       return {

@@ -119,28 +119,25 @@ type Bar = IntersectProperties<Foo>;
 type IntersectProperties<T extends object> = keyof T extends never
   ? {}
   : { [K in keyof T]: (arg: T[K]) => void } extends Record<
-      keyof T,
-      (arg: infer A) => void
-    >
-  ? A
-  : never;
+        keyof T,
+        (arg: infer A) => void
+      >
+    ? A
+    : never;
 
 type ReturnedTypeUpToPreAuthorize<TValue, TKey> = TKey extends 'inputs'
   ? HasSanitizeInputs<any, TValue>
   : TKey extends 'ambient'
-  ? HasExtractAmbient<any, TValue>
-  : {};
+    ? HasExtractAmbient<any, TValue>
+    : {};
 
-export type PreAuthorizeDepsMet<
-  T extends HasPreAuthorize<any, any>
-> = IntersectProperties<
-  {
+export type PreAuthorizeDepsMet<T extends HasPreAuthorize<any, any>> =
+  IntersectProperties<{
     [P in keyof Parameters<T['preAuthorize']>[0]]: ReturnedTypeUpToPreAuthorize<
       Parameters<T['preAuthorize']>[0][P],
       P
     >;
-  }
->;
+  }>;
 
 type OptionalLoadResourcesParams<T> = [T] extends [HasLoadResources<any, any>]
   ? Parameters<T['loadResources']>[0]
@@ -149,35 +146,35 @@ type OptionalLoadResourcesParams<T> = [T] extends [HasLoadResources<any, any>]
 type ReturnedSomewhereUpToLoadResources<
   TOut,
   TValue,
-  TKey extends string | symbol | number
+  TKey extends string | symbol | number,
 > = [TOut] extends [HasPreAuthorize<any, Record<TKey, TValue>>]
   ? HasPreAuthorize<any, Record<TKey, TValue>>
   : never;
 
 type AllInitKeys = 'ambient' | 'inputs';
 
-export type LoadResourcesDepsMet<T> = IntersectProperties<
-  {
-    [P in keyof OptionalLoadResourcesParams<T>]: [P] extends [AllInitKeys]
-      ? ReturnedTypeUpToPreAuthorize<OptionalLoadResourcesParams<T>[P], P>
-      : ReturnedSomewhereUpToLoadResources<T, OptionalLoadResourcesParams<T>[P], P>;
-  }
->;
+export type LoadResourcesDepsMet<T> = IntersectProperties<{
+  [P in keyof OptionalLoadResourcesParams<T>]: [P] extends [AllInitKeys]
+    ? ReturnedTypeUpToPreAuthorize<OptionalLoadResourcesParams<T>[P], P>
+    : ReturnedSomewhereUpToLoadResources<
+        T,
+        OptionalLoadResourcesParams<T>[P],
+        P
+      >;
+}>;
 
 type ReturnedSomewhereUpToFinalAuthorize<
   TOut,
   TValue,
-  TKey extends string | symbol | number
+  TKey extends string | symbol | number,
 > = [TOut] extends [HasLoadResources<any, Record<TKey, TValue>>]
   ? HasLoadResources<any, Record<TKey, TValue>>
   : [TOut] extends [HasPreAuthorize<any, Record<TKey, TValue>>]
-  ? HasPreAuthorize<any, Record<TKey, TValue>>
-  : never;
+    ? HasPreAuthorize<any, Record<TKey, TValue>>
+    : never;
 
-export type FinalAuthorizeDepsMet<
-  T extends HasFinalAuthorize<any, any>
-> = IntersectProperties<
-  {
+export type FinalAuthorizeDepsMet<T extends HasFinalAuthorize<any, any>> =
+  IntersectProperties<{
     [P in keyof Parameters<T['finalAuthorize']>[0]]: [P] extends [AllInitKeys]
       ? ReturnedTypeUpToPreAuthorize<Parameters<T['finalAuthorize']>[0][P], P>
       : ReturnedSomewhereUpToFinalAuthorize<
@@ -185,8 +182,7 @@ export type FinalAuthorizeDepsMet<
           Parameters<T['finalAuthorize']>[0][P],
           P
         >;
-  }
->;
+  }>;
 
 type OptionalExecuteParams<T> = [T] extends [HasExecute<any, any>]
   ? Parameters<T['execute']>[0]
@@ -195,38 +191,33 @@ type OptionalExecuteParams<T> = [T] extends [HasExecute<any, any>]
 type ReturnedSomewhereUpToExecute<
   TOut,
   TValue,
-  TKey extends string | symbol | number
+  TKey extends string | symbol | number,
 > = [TOut] extends [HasFinalAuthorize<any, Record<TKey, TValue>>]
   ? HasFinalAuthorize<any, Record<TKey, TValue>>
   : [TOut] extends [HasLoadResources<any, Record<TKey, TValue>>]
-  ? HasLoadResources<any, Record<TKey, TValue>>
-  : [TOut] extends [HasPreAuthorize<any, Record<TKey, TValue>>]
-  ? HasPreAuthorize<any, Record<TKey, TValue>>
-  : never;
+    ? HasLoadResources<any, Record<TKey, TValue>>
+    : [TOut] extends [HasPreAuthorize<any, Record<TKey, TValue>>]
+      ? HasPreAuthorize<any, Record<TKey, TValue>>
+      : never;
 
-export type ExecuteDepsMet<T> = IntersectProperties<
-  {
-    [P in keyof OptionalExecuteParams<T>]: [P] extends [AllInitKeys]
-      ? ReturnedTypeUpToPreAuthorize<OptionalExecuteParams<T>[P], P>
-      : ReturnedSomewhereUpToExecute<T, OptionalExecuteParams<T>[P], P>;
-  }
->;
+export type ExecuteDepsMet<T> = IntersectProperties<{
+  [P in keyof OptionalExecuteParams<T>]: [P] extends [AllInitKeys]
+    ? ReturnedTypeUpToPreAuthorize<OptionalExecuteParams<T>[P], P>
+    : ReturnedSomewhereUpToExecute<T, OptionalExecuteParams<T>[P], P>;
+}>;
 
 type ReturnedSomewhereUpToRedactResponse<TOut, TValue> = [TOut] extends [
-  HasExecute<any, TValue>
+  HasExecute<any, TValue>,
 ]
   ? HasExecute<any, TValue>
   : never;
 
-export type RedactResponseDepsMet<
-  T extends HasRedactResponse<any, any>
-> = IntersectProperties<
-  {
+export type RedactResponseDepsMet<T extends HasRedactResponse<any, any>> =
+  IntersectProperties<{
     [P in keyof Parameters<
       T['redactResponse']
     >[0]]: ReturnedSomewhereUpToRedactResponse<
       T,
       Record<P, Parameters<T['redactResponse']>[0][P]>
     >;
-  }
->;
+  }>;

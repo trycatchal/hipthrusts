@@ -3,7 +3,7 @@ export function assigneeCheckersOnIdKey<TPrincipalIdKey extends string>(
 ) {
   return {
     idOnKeyIs<TIdKey extends string>(idKey: TIdKey) {
-      return function<TPrincipal extends Record<TPrincipalIdKey, string>>(
+      return function <TPrincipal extends Record<TPrincipalIdKey, string>>(
         this: Record<TIdKey, string>,
         principal: TPrincipal
       ) {

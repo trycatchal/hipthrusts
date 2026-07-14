@@ -65,7 +65,7 @@ export const defineNextHandler = <
   TLoadResourcesOut = unknown,
   TFinalAuthOut = unknown,
   TUnsafeResponse = unknown,
-  TResponse = unknown
+  TResponse = unknown,
 >(
   config: HttpHandlerConfig<
     NextRaw,
@@ -78,7 +78,7 @@ export const defineNextHandler = <
     TUnsafeResponse,
     TResponse
   >
-): InferredHandlerConfig => (config as unknown) as InferredHandlerConfig;
+): InferredHandlerConfig => config as unknown as InferredHandlerConfig;
 
 export function toNextHandler<
   TConf extends OptionalStagesShape &
@@ -88,7 +88,7 @@ export function toNextHandler<
     FinalAuthorizeDepsMet<TConf> &
     ExecuteDepsMet<TConf> &
     RedactResponseDepsMet<TConf> &
-    HasResponseMeta
+    HasResponseMeta,
 >(handlingStrategy: TConf, options: HipNextHandlerOptions = {}) {
   const fullHipthrustable = composeHttpHipthrustable<NextRaw>(
     handlingStrategy,

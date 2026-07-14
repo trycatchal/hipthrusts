@@ -14,7 +14,10 @@ export type HipErrorKind =
 
 export abstract class HipError extends Error {
   public abstract readonly kind: HipErrorKind;
-  constructor(message?: string, public readonly detail?: unknown) {
+  constructor(
+    message?: string,
+    public readonly detail?: unknown
+  ) {
     super(message);
     // Maintain a correct prototype chain when extending a built-in under
     // ES5-targeted transpilation, and give each subclass a useful `name`.

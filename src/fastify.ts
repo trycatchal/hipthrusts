@@ -48,7 +48,7 @@ export const defineFastifyHandler = <
   TLoadResourcesOut = unknown,
   TFinalAuthOut = unknown,
   TUnsafeResponse = unknown,
-  TResponse = unknown
+  TResponse = unknown,
 >(
   config: HttpHandlerConfig<
     FastifyRaw,
@@ -61,7 +61,7 @@ export const defineFastifyHandler = <
     TUnsafeResponse,
     TResponse
   >
-): InferredHandlerConfig => (config as unknown) as InferredHandlerConfig;
+): InferredHandlerConfig => config as unknown as InferredHandlerConfig;
 
 export function toFastifyHandler<
   TConf extends OptionalStagesShape &
@@ -71,7 +71,7 @@ export function toFastifyHandler<
     FinalAuthorizeDepsMet<TConf> &
     ExecuteDepsMet<TConf> &
     RedactResponseDepsMet<TConf> &
-    HasResponseMeta
+    HasResponseMeta,
 >(handlingStrategy: TConf) {
   const fullHipthrustable = composeHttpHipthrustable<FastifyRaw>(
     handlingStrategy,

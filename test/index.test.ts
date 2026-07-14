@@ -22,7 +22,7 @@ import {
 
 type ReturnTypeFromStage<
   T extends (context: any) => any,
-  TStage extends AllStageKeys
+  TStage extends AllStageKeys,
 > = TStage extends AllAsyncStageKeys
   ? PromiseResolveOrSync<ReturnType<T>>
   : ReturnType<T>;
@@ -37,34 +37,34 @@ async function HTPipeTest<
       ? TPipe[TStage]
       : never
     : TStage extends 'extractInputs'
-    ? TPipe extends HasExtractInputs<any, any>
-      ? TPipe[TStage]
-      : never
-    : TStage extends 'sanitizeInputs'
-    ? TPipe extends HasSanitizeInputs<any, any>
-      ? TPipe[TStage]
-      : never
-    : TStage extends 'preAuthorize'
-    ? TPipe extends HasPreAuthorize<any, any>
-      ? TPipe[TStage]
-      : never
-    : TStage extends 'loadResources'
-    ? TPipe extends HasLoadResources<any, any>
-      ? TPipe[TStage]
-      : never
-    : TStage extends 'finalAuthorize'
-    ? TPipe extends HasFinalAuthorize<any, any>
-      ? TPipe[TStage]
-      : never
-    : TStage extends 'execute'
-    ? TPipe extends HasExecute<any, any>
-      ? TPipe[TStage]
-      : never
-    : TStage extends 'redactResponse'
-    ? TPipe extends HasRedactResponse<any, any>
-      ? TPipe[TStage]
-      : never
-    : never,
+      ? TPipe extends HasExtractInputs<any, any>
+        ? TPipe[TStage]
+        : never
+      : TStage extends 'sanitizeInputs'
+        ? TPipe extends HasSanitizeInputs<any, any>
+          ? TPipe[TStage]
+          : never
+        : TStage extends 'preAuthorize'
+          ? TPipe extends HasPreAuthorize<any, any>
+            ? TPipe[TStage]
+            : never
+          : TStage extends 'loadResources'
+            ? TPipe extends HasLoadResources<any, any>
+              ? TPipe[TStage]
+              : never
+            : TStage extends 'finalAuthorize'
+              ? TPipe extends HasFinalAuthorize<any, any>
+                ? TPipe[TStage]
+                : never
+              : TStage extends 'execute'
+                ? TPipe extends HasExecute<any, any>
+                  ? TPipe[TStage]
+                  : never
+                : TStage extends 'redactResponse'
+                  ? TPipe extends HasRedactResponse<any, any>
+                    ? TPipe[TStage]
+                    : never
+                  : never,
   TValid extends TPipeInExpected extends Parameters<TLifecycleStage>[0]
     ? Parameters<TLifecycleStage>[0] extends TPipeInExpected
       ? TPipeOutExpected extends ReturnTypeFromStage<TLifecycleStage, TStage>
@@ -75,7 +75,7 @@ async function HTPipeTest<
       : never
     : never,
   TPipeInExpected = TPipeIn,
-  TPipeOutExpected = TPipeOut
+  TPipeOutExpected = TPipeOut,
 >(
   pipe: TPipe,
   lifecycleStage: TStage,
@@ -153,9 +153,8 @@ describe('HipThrusTS', () => {
           type assignableToCorrect = {} extends typeof pipedWithEmptyObjectsOnly
             ? true
             : false;
-          type assignableFromCorrect = typeof pipedWithEmptyObjectsOnly extends {}
-            ? true
-            : false;
+          type assignableFromCorrect =
+            typeof pipedWithEmptyObjectsOnly extends {} ? true : false;
 
           expect(pipedWithEmptyObjectsOnly).toEqual({});
         });
@@ -271,9 +270,7 @@ describe('HipThrusTS', () => {
         const bPassedIn = 'some other string';
 
         const left = {
-          redactResponse: (context: {
-            someObj: { a: string; b: string };
-          }) => {
+          redactResponse: (context: { someObj: { a: string; b: string } }) => {
             return context.someObj;
           },
         };
@@ -661,9 +658,9 @@ describe('HipThrusTS', () => {
           redactResponse: (u: { ok: boolean }) => ({ ok: u.ok }),
         });
 
-        await expect(
-          executeHipthrustable(handler, {})
-        ).rejects.toThrow(HipForbidden);
+        await expect(executeHipthrustable(handler, {})).rejects.toThrow(
+          HipForbidden
+        );
       });
     });
   });

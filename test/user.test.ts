@@ -28,9 +28,12 @@ describe('assigneeCheckersOnIdKey', () => {
     const checker = idOnKeyIs('ownerId');
     const objectIdLike = { toString: () => 'abc' };
     expect(
-      checker.call({ ownerId: objectIdLike } as any, {
-        userId: 'abc',
-      } as any)
+      checker.call(
+        { ownerId: objectIdLike } as any,
+        {
+          userId: 'abc',
+        } as any
+      )
     ).toBeTruthy();
   });
 });
@@ -55,9 +58,9 @@ describe('roleCheckersOnRoleKey', () => {
   });
 
   it('oneOfRolesIsOneOf passes when any principal role is allowed', () => {
-    expect(
-      oneOfRolesIsOneOf(['admin'])({ role: ['viewer', 'admin'] })
-    ).toBe(true);
+    expect(oneOfRolesIsOneOf(['admin'])({ role: ['viewer', 'admin'] })).toBe(
+      true
+    );
   });
 
   it('oneOfRolesIsOneOf fails when no principal role is allowed', () => {

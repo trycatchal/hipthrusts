@@ -42,7 +42,7 @@ type TrpcHandlerConfig<
   TLoadResourcesOut = unknown,
   TFinalAuthOut = unknown,
   TUnsafeResponse = unknown,
-  TResponse = unknown
+  TResponse = unknown,
 > = {
   extractAmbient?: (raw: TrpcRaw<TCtx, TInput>) => TAmbient;
   extractInputs?: (canonical: TInput) => TInputs;
@@ -90,7 +90,7 @@ export const defineTrpcProcedure = <
   TLoadResourcesOut = unknown,
   TFinalAuthOut = unknown,
   TUnsafeResponse = unknown,
-  TResponse = unknown
+  TResponse = unknown,
 >(
   config: TrpcHandlerConfig<
     TCtx,
@@ -104,7 +104,7 @@ export const defineTrpcProcedure = <
     TUnsafeResponse,
     TResponse
   >
-): InferredTrpcConfig => (config as unknown) as InferredTrpcConfig;
+): InferredTrpcConfig => config as unknown as InferredTrpcConfig;
 
 export function toTrpcProcedure<
   TConf extends OptionalStagesShape &
@@ -113,7 +113,7 @@ export function toTrpcProcedure<
     LoadResourcesDepsMet<TConf> &
     FinalAuthorizeDepsMet<TConf> &
     ExecuteDepsMet<TConf> &
-    RedactResponseDepsMet<TConf>
+    RedactResponseDepsMet<TConf>,
 >(handlingStrategy: TConf) {
   assertHipthrustable(handlingStrategy);
 

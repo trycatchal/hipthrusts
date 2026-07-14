@@ -62,21 +62,21 @@ type ExpressHandlerConfig<
   TLoadResourcesOut = unknown,
   TFinalAuthOut = unknown,
   TUnsafeResponse = unknown,
-  TResponse = unknown
+  TResponse = unknown,
 > = {
   extractAmbient?: (raw: ExpressRaw) => TAmbient;
   extractInputs?: (canonical: ExpressRawInputs) => TInputs;
   sanitizeInputs: (unsafe: TInputs) => TSafeInputs;
   preAuthorize: (
     context: { inputs: PromiseResolveOrSync<TSafeInputs> } & ([
-      TAmbient
+      TAmbient,
     ] extends [never]
       ? {}
       : { ambient: TAmbient })
   ) => TPreAuthOut;
   loadResources?: (
     context: { inputs: PromiseResolveOrSync<TSafeInputs> } & ([
-      TAmbient
+      TAmbient,
     ] extends [never]
       ? {}
       : { ambient: TAmbient }) &
@@ -84,7 +84,7 @@ type ExpressHandlerConfig<
   ) => PromiseOrSync<TLoadResourcesOut>;
   finalAuthorize: (
     context: { inputs: PromiseResolveOrSync<TSafeInputs> } & ([
-      TAmbient
+      TAmbient,
     ] extends [never]
       ? {}
       : { ambient: TAmbient }) &
@@ -93,7 +93,7 @@ type ExpressHandlerConfig<
   ) => PromiseOrSync<TFinalAuthOut>;
   execute: (
     context: { inputs: PromiseResolveOrSync<TSafeInputs> } & ([
-      TAmbient
+      TAmbient,
     ] extends [never]
       ? {}
       : { ambient: TAmbient }) &
@@ -101,9 +101,7 @@ type ExpressHandlerConfig<
       PromiseResolveOrSync<TLoadResourcesOut> &
       PromiseResolveOrSync<TFinalAuthOut>
   ) => PromiseOrSync<TUnsafeResponse>;
-  redactResponse: (
-    unsafe: PromiseResolveOrSync<TUnsafeResponse>
-  ) => TResponse;
+  redactResponse: (unsafe: PromiseResolveOrSync<TUnsafeResponse>) => TResponse;
   responseMeta?: ResponseMeta | ((ctx: any) => ResponseMeta);
 };
 
@@ -120,7 +118,7 @@ export const defineExpressHandler = <
   TLoadResourcesOut = unknown,
   TFinalAuthOut = unknown,
   TUnsafeResponse = unknown,
-  TResponse = unknown
+  TResponse = unknown,
 >(
   config: ExpressHandlerConfig<
     TInputs,
@@ -132,7 +130,7 @@ export const defineExpressHandler = <
     TUnsafeResponse,
     TResponse
   >
-): InferredHandlerConfig => (config as unknown) as InferredHandlerConfig;
+): InferredHandlerConfig => config as unknown as InferredHandlerConfig;
 
 // Adapter-baseline extractInputs: produces the canonical {params, query, body, headers} shape.
 function expressBaselineExtractInputs(raw: ExpressRaw): ExpressRawInputs {
@@ -152,7 +150,7 @@ export function toExpressHandler<
     FinalAuthorizeDepsMet<TConf> &
     ExecuteDepsMet<TConf> &
     RedactResponseDepsMet<TConf> &
-    HasResponseMeta
+    HasResponseMeta,
 >(handlingStrategy: TConf) {
   assertHipthrustable(handlingStrategy);
 

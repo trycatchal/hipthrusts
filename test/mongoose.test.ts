@@ -53,9 +53,9 @@ describe('findOneByRequired', () => {
 
   it('throws HipNotFound when nothing matches', async () => {
     const model = { findOne: () => ({ exec: async () => null }) };
-    await expect(
-      ht.findOneByRequired(model, 'email')('a@b.c')
-    ).rejects.toThrow(HipNotFound);
+    await expect(ht.findOneByRequired(model, 'email')('a@b.c')).rejects.toThrow(
+      HipNotFound
+    );
   });
 });
 
@@ -113,9 +113,9 @@ describe('SaveOnDocumentFrom', () => {
   it('saves the document found on the context key', async () => {
     const { execute } = ht.SaveOnDocumentFrom('doc');
     const saved = { fresh: true };
-    await expect(
-      execute({ doc: { save: async () => saved } })
-    ).resolves.toBe(saved);
+    await expect(execute({ doc: { save: async () => saved } })).resolves.toBe(
+      saved
+    );
   });
 
   it('throws HipBadInputs when save rejects', async () => {
@@ -153,9 +153,9 @@ describe('UpdateDocumentFromTo', () => {
 
   it('throws HipBadInputs when the document is missing', async () => {
     const { execute } = ht.UpdateDocumentFromTo('doc');
-    await expect(
-      execute({ inputs: { body: {} } } as any)
-    ).rejects.toThrow(HipBadInputs);
+    await expect(execute({ inputs: { body: {} } } as any)).rejects.toThrow(
+      HipBadInputs
+    );
   });
 });
 

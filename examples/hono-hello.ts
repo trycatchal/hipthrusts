@@ -22,7 +22,7 @@ const greet = toHonoHandler({
 });
 
 const app = new Hono();
-app.post('/greet/:name', c => greet(c));
+app.post('/greet/:name', (c) => greet(c));
 
 const PORT = 3001;
 serve({ fetch: app.fetch, port: PORT }, () => {

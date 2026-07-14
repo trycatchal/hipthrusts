@@ -16,7 +16,7 @@ export function htZodFactory() {
   function SanitizeInputsWithZod<
     TSafe extends z.infer<TSchema>,
     TSchema extends z.ZodType<any, any, any>,
-    TUnsafe extends object
+    TUnsafe extends object,
   >(schema: TSchema) {
     return SanitizeInputs((unsafeInputs: TUnsafe) => {
       const parseResult = schema.safeParse(unsafeInputs);
@@ -31,7 +31,7 @@ export function htZodFactory() {
     TSliceName extends string,
     TSafeSlice extends z.infer<TSchema>,
     TSchema extends z.ZodType<any, any, any>,
-    TUnsafeSlice extends object
+    TUnsafeSlice extends object,
   >(sliceName: TSliceName, schema: TSchema, options?: { partial?: boolean }) {
     const effectiveSchema =
       options?.partial && (schema as any).partial
@@ -52,7 +52,7 @@ export function htZodFactory() {
 
   function RedactResponseWithZod<
     TSafeResponse extends z.infer<TSchema>,
-    TSchema extends z.ZodType<any, any, any>
+    TSchema extends z.ZodType<any, any, any>,
   >(schema: TSchema) {
     return RedactResponse((unsafeResponse: any) => {
       const parseResult = schema.safeParse(unsafeResponse);
@@ -66,7 +66,7 @@ export function htZodFactory() {
   function PojoToValidated<
     TPojoKey extends string,
     TSchema extends z.ZodType<any, any, any>,
-    TContextIn extends { [key in TPojoKey]: any }
+    TContextIn extends { [key in TPojoKey]: any },
   >(pojoKey: TPojoKey, schema: TSchema, newValidatedKey: string) {
     return LoadResources((context: TContextIn) => {
       const parseResult = schema.safeParse(context[pojoKey]);
