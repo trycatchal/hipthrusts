@@ -665,3 +665,66 @@ describe('HipThrusTS', () => {
     });
   });
 });
+
+describe('HTPipe non-stage key passthrough (Finding P0-2)', () => {
+  const requiredStages = {
+    sanitizeInputs: (i: any) => i,
+    preAuthorize: () => true,
+    finalAuthorize: () => true,
+    execute: () => ({ made: true }),
+    redactResponse: (u: any) => u,
+  };
+
+  it('carries responseMeta through HTPipe', () => {
+    const piped = HTPipe(
+      { preAuthorize: () => true },
+      { ...requiredStages, responseMeta: { status: 201 } }
+    );
+    expect((piped as any).responseMeta).toEqual({ status: 201 });
+  });
+
+  it('right fragment responseMeta wins over the left one', () => {
+    const piped = HTPipe(
+      { preAuthorize: () => true, responseMeta: { status: 200 } },
+      { ...requiredStages, responseMeta: { status: 201 } }
+    );
+    expect((piped as any).responseMeta).toEqual({ status: 201 });
+  });
+
+  it('passes non-stage keys through multi-fragment pipes and single-fragment pipes', () => {
+    const single = HTPipe({ ...requiredStages, responseMeta: { status: 202 } });
+    expect((single as any).responseMeta).toEqual({ status: 202 });
+    const triple = HTPipe(
+      { preAuthorize: () => true, responseMeta: { status: 200 } },
+      { loadResources: () => ({}) },
+      { ...requiredStages, responseMeta: { status: 201 } }
+    );
+    expect((triple as any).responseMeta).toEqual({ status: 201 });
+  });
+
+  it('a piped responseMeta reaches the wire through an HTTP adapter', async () => {
+    const handler = toExpressHandler(
+      HTPipe(
+        { preAuthorize: () => true },
+        { ...requiredStages, responseMeta: { status: 201 } }
+      ) as any
+    );
+    const res: any = {
+      statusCode: 200,
+      status(code: number) {
+        this.statusCode = code;
+        return this;
+      },
+      json() {
+        return this;
+      },
+      setHeader() {},
+    };
+    await handler(
+      { params: {}, query: {}, body: {}, headers: {} } as any,
+      res,
+      (() => undefined) as any
+    );
+    expect(res.statusCode).toBe(201);
+  });
+});

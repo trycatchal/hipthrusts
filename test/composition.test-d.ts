@@ -49,3 +49,20 @@ describe('HTPipe sanitizeInputs composition (P0-1)', () => {
     expectTypeOf<SanitizedOut>().toEqualTypeOf<{ replaced: true }>();
   });
 });
+
+describe('HTPipe non-stage key passthrough (P0-2)', () => {
+  it('the piped type keeps responseMeta with right-wins semantics', () => {
+    const piped = HTPipe(
+      { preAuthorize: () => true, responseMeta: { status: 200 } },
+      {
+        sanitizeInputs: (i: any) => i,
+        preAuthorize: () => true,
+        finalAuthorize: () => true,
+        execute: () => ({}),
+        redactResponse: (u: any) => u,
+        responseMeta: { status: 201 },
+      }
+    );
+    expectTypeOf(piped.responseMeta).toEqualTypeOf<{ status: number }>();
+  });
+});

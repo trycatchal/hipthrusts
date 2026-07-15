@@ -755,6 +755,34 @@ type ClashlessRedactResponse<_TLeft, TRight> = OptionallyHasRedactResponse<
     : any
 >;
 
+// Non-stage keys (e.g. the HTTP adapters' `responseMeta`) pass through HTPipe
+// untouched with right-wins semantics, so adapter-level configuration can live
+// on any fragment. Core stays ignorant of what the keys mean.
+type NonStageKeys<T> = Omit<KnownKeys<T>, AllStageKeys>;
+type PipedPassthrough<TLeft, TRight> = NonStageKeys<TRight> &
+  Omit<NonStageKeys<TLeft>, keyof NonStageKeys<TRight>>;
+
+const ALL_STAGE_KEYS: AllStageKeys[] = [
+  'extractAmbient',
+  'extractInputs',
+  'sanitizeInputs',
+  'preAuthorize',
+  'loadResources',
+  'finalAuthorize',
+  'execute',
+  'redactResponse',
+];
+
+function nonStageKeysOf(obj: Record<string, any>) {
+  const out: Record<string, any> = {};
+  for (const key of Object.keys(obj)) {
+    if (!(ALL_STAGE_KEYS as string[]).includes(key)) {
+      out[key] = obj[key];
+    }
+  }
+  return out;
+}
+
 // no parameter - returns empty object
 export function HTPipe(): {};
 
@@ -768,7 +796,7 @@ export function HTPipe<
     OptionallyHasFinalAuthorize<any, any> &
     OptionallyHasExecute<any, any> &
     OptionallyHasRedactResponse<any, any>,
->(obj: T): Pick<T, AllStageKeys>;
+>(obj: T): Pick<T, AllStageKeys> & NonStageKeys<T>;
 
 // two parameters with automatic type guessing of right - all or nothing!
 export function HTPipe<
@@ -823,7 +851,8 @@ export function HTPipe<
   PipedLoadResources<TLeft, TRight> &
   PipedFinalAuthorize<TLeft, TRight> &
   PipedExecute<TLeft, TRight> &
-  PipedRedactResponse<TLeft, TRight>;
+  PipedRedactResponse<TLeft, TRight> &
+  PipedPassthrough<TLeft, TRight>;
 
 // two parameters with possibly added inputs
 export function HTPipe<
@@ -853,7 +882,8 @@ export function HTPipe<
   PipedLoadResources<TLeft, TRight> &
   PipedFinalAuthorize<TLeft, TRight> &
   PipedExecute<TLeft, TRight> &
-  PipedRedactResponse<TLeft, TRight>;
+  PipedRedactResponse<TLeft, TRight> &
+  PipedPassthrough<TLeft, TRight>;
 
 // three parameters with possibly added inputs
 export function HTPipe<
@@ -892,7 +922,8 @@ export function HTPipe<
   PipedLoadResources<T3, PipedLoadResources<T2, T1>> &
   PipedFinalAuthorize<T3, PipedFinalAuthorize<T2, T1>> &
   PipedExecute<T3, PipedExecute<T2, T1>> &
-  PipedRedactResponse<T3, PipedRedactResponse<T2, T1>>;
+  PipedRedactResponse<T3, PipedRedactResponse<T2, T1>> &
+  PipedPassthrough<T3, PipedPassthrough<T2, T1>>;
 
 // four parameters with possibly added inputs
 export function HTPipe<
@@ -970,7 +1001,11 @@ export function HTPipe<
     PipedFinalAuthorize<T3, PipedFinalAuthorize<T2, T1>>
   > &
   PipedExecute<T4, PipedExecute<T3, PipedExecute<T2, T1>>> &
-  PipedRedactResponse<T4, PipedRedactResponse<T3, PipedRedactResponse<T2, T1>>>;
+  PipedRedactResponse<
+    T4,
+    PipedRedactResponse<T3, PipedRedactResponse<T2, T1>>
+  > &
+  PipedPassthrough<T4, PipedPassthrough<T3, PipedPassthrough<T2, T1>>>;
 
 export function HTPipe(...objs: any[]) {
   if (objs.length === 0) {
@@ -983,6 +1018,10 @@ export function HTPipe(...objs: any[]) {
     const left = objs[0];
     const right = objs[1];
     return {
+      // Non-stage keys (adapter config like responseMeta) pass through,
+      // right-wins. Stage keys are rebuilt below and never leak through here.
+      ...nonStageKeysOf(left),
+      ...nonStageKeysOf(right),
       ...((isHasExtractAmbient(left) && isHasExtractAmbient(right)
         ? {
             extractAmbient: (context: any) => {
