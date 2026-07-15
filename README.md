@@ -101,6 +101,11 @@ The package ships both ESM and CommonJS builds — `import` and `require`
 both work, for the root and for every subpath (`hipthrusts/express`,
 `hipthrusts/zod`, …). Node.js >= 20.
 
+Subpath types are resolved through the package `exports` map, so your
+`tsconfig.json` needs `"moduleResolution": "node16"`, `"nodenext"`, or
+`"bundler"`. The legacy `"node"` (node10) resolution cannot see the
+subpath type declarations.
+
 ## The lifecycle, in detail
 
 Every handler config is a plain object. Five methods are required; three
@@ -117,7 +122,7 @@ returned.
 | `loadResources`   | no   | async  | everything so far              | fetch the resource the request is about                    |
 | `finalAuthorize`  | yes  | async  | everything so far              | ownership/permission check with the resource in hand       |
 | `execute`         | yes  | async  | everything so far              | the actual work (mutate, compute, save)                    |
-| `redactResponse`  | yes  | sync   | unsafe response                | strip secrets/internal fields before sending               |
+| `redactResponse`  | yes  | sync   | unsafe response, final context | strip secrets/internal fields before sending               |
 
 `extractAmbient`'s output lives at `ctx.ambient`. `sanitizeInputs`'s output
 lives at `ctx.inputs`. Outputs from `preAuthorize` / `loadResources` /
@@ -136,6 +141,17 @@ finalAuthorize: (ctx) =>
 ```
 
 …and `execute` will see `ctx.isOwner` with full type information.
+
+`redactResponse` optionally takes the final context as a second
+argument, so redaction can depend on the caller — no need to smuggle
+authorization flags through the `execute` return value:
+
+```ts
+finalAuthorize: (ctx) => ({ canSeeEmails: ctx.ambient.user.role === 'admin' }),
+execute:        (ctx) => ({ rows: ctx.rows }),
+redactResponse: (unsafe, ctx: { canSeeEmails: boolean }) =>
+  ctx.canSeeEmails ? unsafe.rows : unsafe.rows.map(({ email, ...rest }) => rest),
+```
 
 ## Compose, don't repeat yourself
 
@@ -258,12 +274,44 @@ from any stage and the adapter takes care of the HTTP details:
 Adapters translate per their framework: the **Express** adapter maps to
 **Boom** so your existing error middleware keeps working unchanged. The
 **Hono / Fastify / Next.js** adapters respond directly with the mapped
-status and `{ error: message }`. The **tRPC** adapter lets `HipError`
-propagate with its `.kind`; map it in your `errorFormatter` if you want
-specific `TRPCError` codes.
+status and a JSON body. The **tRPC** adapter lets `HipError` propagate
+with its `.kind`; map it in your `errorFormatter` if you want specific
+`TRPCError` codes.
 
-Anything thrown that *isn't* a `HipError` becomes a `500` with the
-message scrubbed.
+### What the error body contains
+
+The HTTP error body is `{ error, issues?, detail? }`:
+
+- `error` — the message, always.
+- `issues` — when the error's `detail` is a `ZodError` (as thrown by the
+  zod helpers), it is projected to `[{ path, message }]` so forms can
+  render per-field errors. Paths and messages only — received input
+  values never reach the wire.
+- `detail` — arbitrary structured payload, included **only** when the
+  error was constructed with the explicit opt-in:
+
+  ```ts
+  throw new HipConflict('blocked by open items', { blockedBy }, { expose: true });
+  // -> 409 { "error": "blocked by open items", "detail": { "blockedBy": [...] } }
+  ```
+
+`HipInternal` never exposes `issues` or `detail`, opt-in or not.
+
+### Unexpected errors
+
+Anything thrown that *isn't* a `HipError` is scrubbed and routed by
+stage: the input stages (`extractAmbient` / `extractInputs` /
+`sanitizeInputs`) map unknown throws to `422` (they exist to reject bad
+input — a raw `schema.parse()` works fine there), and every later stage
+maps them to a `500` with the body `{ "error": "Internal server error" }`.
+The original error is chained as `Error.cause` on the `HipError`, so the
+adapters' `onError` hook (below) can log the real failure.
+
+> **403 vs 404:** `finalAuthorize` returning `false` is always a `403`.
+> If "the resource doesn't exist" should read as `404`, throw
+> `HipNotFound` from `loadResources` (the mongoose helper
+> `findByIdRequired` does exactly this). A `loadResources` that merely
+> returns nothing is NOT a 404 by itself.
 
 ## HTTP response metadata
 
@@ -288,6 +336,103 @@ toExpressHandler({
 `responseMeta` can be a static object (`{ status: 201 }`) or a function
 of the final context. tRPC has no `responseMeta` — procedures return
 values, not HTTP responses.
+
+`responseMeta` (like any non-stage key) passes through `HTPipe`
+composition with right-wins semantics, so it can live on any fragment.
+
+## Adapter options
+
+Every HTTP adapter (`toExpressHandler`, `toHonoHandler`,
+`toFastifyHandler`, `toNextHandler`) takes an options object as its
+second argument:
+
+```ts
+toNextHandler(handler, {
+  // Called with every error the adapter converts to an error response
+  // (redirects excluded). For unexpected failures, error.cause carries
+  // the original underlying error. A throwing hook never affects the
+  // response.
+  onError: (error, { raw }) => logger.error({ err: error }),
+
+  // Post-response side effects with the FINAL lifecycle context —
+  // inputs, ambient, loaded resources, and the response. Fires only
+  // after a successful lifecycle; never blocks or breaks the response.
+  afterResponse: async (ctx) => auditLog.write({ input: ctx.inputs, out: ctx.response }),
+});
+```
+
+The Next.js and Hono adapters (which parse JSON bodies themselves)
+additionally reject non-empty bodies that fail to parse with a
+`422 { "error": "Malformed JSON body" }` — pass
+`allowMalformedBody: true` to coerce them to `{}` instead. Empty bodies
+always coerce to `{}`. (Express and Fastify body parsing is configured
+in the framework.)
+
+The Next.js adapter also keeps its `gatherContext` option for merging
+async request context (e.g. the auth principal) into the raw envelope.
+
+## List endpoints & tenant scoping
+
+A list endpoint has no single resource to authorize, so `finalAuthorize:
+() => true` is correct — but then the tenant filter must live in the
+query itself, and forgetting it is a cross-tenant data leak. Make the
+scope a *typed context dependency* instead of a convention: one fragment
+contributes `queryScope`, and the scoped finders require it.
+
+```ts
+import { htMongooseFactory } from 'hipthrusts/mongoose';
+const { findScoped } = htMongooseFactory(mongoose);
+
+const WithTenantScope = LoadResources((ctx: { ambient: { user: User } }) => ({
+  queryScope: { businessGroup: { $in: ctx.ambient.user.accessibleGroupIds } },
+}));
+
+app.get('/things', toExpressHandler(HTPipe(
+  WithUserFromReq,
+  WithTenantScope,
+  {
+    sanitizeInputs: (i) => i,
+    preAuthorize:   (ctx) => !!ctx.ambient.user,
+    finalAuthorize: () => true,
+    ...findScoped(ThingModel),          // Model.find({ ...ctx.queryScope })
+    redactResponse: (rows) => rows.map(({ id, name }) => ({ id, name })),
+  },
+)));
+```
+
+`findScoped(Model, extraFilter?)` is an `Execute` fragment whose context
+type **requires** `queryScope` — drop `WithTenantScope` from the pipe
+and the handler no longer compiles. `loadScopedTo(Model, key,
+extraFilter?)` is the `LoadResources` variant for handlers that
+post-process the scoped rows in their own `execute`.
+
+## Type troubleshooting
+
+The deps-met machinery rejects a handler whose stages declare context
+keys nothing contributes. When that happens the compiler error names the
+stage and key via a branded type:
+
+```
+... is not assignable to ... HipDepNotMet<"finalAuthorize", "doc">
+```
+
+That means: `finalAuthorize` declares `ctx.doc`, and no earlier stage
+(`preAuthorize` / `loadResources`) returns an object with a compatible
+`doc`. Fix the provider (or the declared type), don't `as any` the
+handler.
+
+A few patterns to know:
+
+- **Keep ORM documents narrow.** Don't let a full
+  `mongoose.Document<...>` generic flow into a declared stage context —
+  declare the small structural interface you actually use
+  (`{ ownerId: string; save(): Promise<unknown> }`). It compiles faster
+  and produces readable errors.
+- **Conditional loads are fine.** `if (!doc) return {}; return { doc }`
+  (a union return) counts as providing `doc`. If the consuming stage
+  must handle the missing case, declare it optional/nullable there.
+- **`any`-typed context keys are tolerated,** but you lose the
+  guarantee that anything provides them — prefer real types.
 
 ## Validation helpers
 
@@ -322,8 +467,21 @@ app.put('/things/:id', toExpressHandler(HTPipe(
 ```
 
 A Zod parse failure throws `HipBadInputs` carrying the `ZodError` as
-`.detail` (so the issues are at `.detail.issues`); the adapter turns
-that into a 422.
+`.detail`; the adapter turns that into a
+`422 { error, issues: [{ path, message }] }` response (see
+[Errors](#errors)).
+
+To validate several slices in one fragment, use
+`SanitizeInputsSlicesWithZod` — the return type names every slice key:
+
+```ts
+const { SanitizeInputsSlicesWithZod } = htZodFactory();
+
+HTPipe(
+  SanitizeInputsSlicesWithZod({ params: Params, body: Body }),
+  { /* ...stages consuming ctx.inputs.params and ctx.inputs.body... */ },
+);
+```
 
 ### Mongoose
 
