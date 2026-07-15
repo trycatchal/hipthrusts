@@ -193,3 +193,141 @@ describe('error detail on the wire (Finding P0-3)', () => {
     });
   });
 });
+
+describe('adapter options (Findings P1-5, P1-6, P2-12.2)', () => {
+  const okStages = {
+    sanitizeInputs: (i: any) => i,
+    preAuthorize: () => true,
+    loadResources: () => ({ thing: { id: 't1' } }),
+    finalAuthorize: () => true,
+    execute: () => ({ made: true }),
+    redactResponse: (u: any) => u,
+  };
+
+  it('onError receives the original error (via cause) on a 500 path', async () => {
+    const seen: unknown[] = [];
+    const dbDown = new Error('db down');
+    const handler = toNextHandler(
+      {
+        ...okStages,
+        loadResources: () => {
+          throw dbDown;
+        },
+      },
+      { onError: (e) => seen.push(e) }
+    );
+    const res = await handler(
+      postReq('http://localhost/api/x', {}),
+      routeCtx({})
+    );
+    expect(res.status).toBe(500);
+    expect(seen).toHaveLength(1);
+    expect((seen[0] as Error).cause).toBe(dbDown);
+  });
+
+  it('a throwing onError does not change the response', async () => {
+    const handler = toNextHandler(
+      {
+        ...okStages,
+        execute: () => {
+          throw new Error('boom');
+        },
+      },
+      {
+        onError: () => {
+          throw new Error('logging is broken too');
+        },
+      }
+    );
+    const res = await handler(
+      postReq('http://localhost/api/x', {}),
+      routeCtx({})
+    );
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: 'Internal server error' });
+  });
+
+  it('afterResponse receives the final context (inputs, resources, response)', async () => {
+    let ctx: any;
+    const handler = toNextHandler(okStages, {
+      afterResponse: (c) => {
+        ctx = c;
+      },
+    });
+    const res = await handler(
+      postReq('http://localhost/api/x?q=1', { name: 'n' }),
+      routeCtx({ id: '9' })
+    );
+    expect(res.status).toBe(200);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(ctx).toBeDefined();
+    expect(ctx.inputs.body).toEqual({ name: 'n' });
+    expect(ctx.inputs.params).toEqual({ id: '9' });
+    expect(ctx.thing).toEqual({ id: 't1' });
+    expect(ctx.response).toEqual({ made: true });
+  });
+
+  it('afterResponse does not fire on a failed request', async () => {
+    let fired = false;
+    const handler = toNextHandler(
+      {
+        ...okStages,
+        finalAuthorize: () => false,
+      },
+      {
+        afterResponse: () => {
+          fired = true;
+        },
+      }
+    );
+    const res = await handler(
+      postReq('http://localhost/api/x', {}),
+      routeCtx({})
+    );
+    expect(res.status).toBe(403);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(fired).toBe(false);
+  });
+
+  it('a malformed JSON body responds 422 by default', async () => {
+    const handler = toNextHandler(okStages);
+    const res = await handler(
+      new NextRequest('http://localhost/api/x', {
+        method: 'POST',
+        body: '{not json',
+        headers: { 'content-type': 'application/json' },
+      }),
+      routeCtx({})
+    );
+    expect(res.status).toBe(422);
+    expect((await res.json()).error).toBe('Malformed JSON body');
+  });
+
+  it('allowMalformedBody restores coerce-to-{} and an empty body still passes', async () => {
+    const seenBodies: any[] = [];
+    const strategy = {
+      ...okStages,
+      sanitizeInputs: (i: any) => {
+        seenBodies.push(i.body);
+        return i;
+      },
+    };
+    const lenient = toNextHandler(strategy, { allowMalformedBody: true });
+    const malformed = await lenient(
+      new NextRequest('http://localhost/api/x', {
+        method: 'POST',
+        body: '{not json',
+        headers: { 'content-type': 'application/json' },
+      }),
+      routeCtx({})
+    );
+    expect(malformed.status).toBe(200);
+    const strict = toNextHandler(strategy);
+    const empty = await strict(
+      new NextRequest('http://localhost/api/x', { method: 'POST' }),
+      routeCtx({})
+    );
+    expect(empty.status).toBe(200);
+    expect(seenBodies).toEqual([{}, {}]);
+  });
+});

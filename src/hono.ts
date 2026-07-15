@@ -6,12 +6,16 @@ import {
   HipRedirect,
   isHipError,
 } from './errors.js';
+import { HipBadInputs } from './errors.js';
 import {
   composeHttpHipthrustable,
   HasResponseMeta,
+  HttpAdapterOptions,
   HttpHandlerConfig,
   HttpRawInputs,
   resolveResponseMeta,
+  safeInvokeAfterResponse,
+  safeInvokeOnError,
 } from './http-adapter.js';
 import {
   ExecuteDepsMet,
@@ -28,6 +32,13 @@ import {
 // the adapter before the synchronous lifecycle runs).
 export interface HonoRaw extends HttpRawInputs {
   c: Context;
+}
+
+export interface HipHonoHandlerOptions extends HttpAdapterOptions {
+  // A non-empty request body that fails to parse as JSON responds 422 by
+  // default (previously it silently became `{}`). Set true to restore the old
+  // coerce-to-{} behavior.
+  allowMalformedBody?: boolean;
 }
 
 const BODYLESS_METHODS = ['GET', 'HEAD', 'DELETE'];
@@ -79,7 +90,7 @@ export function toHonoHandler<
     ExecuteDepsMet<TConf> &
     RedactResponseDepsMet<TConf> &
     HasResponseMeta,
->(handlingStrategy: TConf) {
+>(handlingStrategy: TConf, options: HipHonoHandlerOptions = {}) {
   const fullHipthrustable = composeHttpHipthrustable<HonoRaw>(
     handlingStrategy,
     honoBaselineExtractInputs
@@ -87,16 +98,24 @@ export function toHonoHandler<
   const responseMeta = (handlingStrategy as HasResponseMeta).responseMeta;
 
   return async (c: Context) => {
+    let raw: HonoRaw | undefined;
     try {
       let body: any = {};
       if (!BODYLESS_METHODS.includes(c.req.method)) {
-        try {
-          body = await c.req.json();
-        } catch {
-          body = {};
+        const text = await c.req.text();
+        if (text.trim() !== '') {
+          try {
+            body = JSON.parse(text);
+          } catch {
+            if (options.allowMalformedBody) {
+              body = {};
+            } else {
+              throw new HipBadInputs('Malformed JSON body');
+            }
+          }
         }
       }
-      const raw: HonoRaw = {
+      raw = {
         c,
         params: c.req.param(),
         query: c.req.query(),
@@ -107,6 +126,17 @@ export function toHonoHandler<
         fullHipthrustable as any,
         raw
       );
+      if (options.afterResponse) {
+        const runAfterResponse = () =>
+          safeInvokeAfterResponse(options.afterResponse, context);
+        try {
+          // On edge runtimes waitUntil keeps the worker alive for the side
+          // effect; on Node hono has no executionCtx, so fall back to a task.
+          c.executionCtx.waitUntil(Promise.resolve().then(runAfterResponse));
+        } catch {
+          setTimeout(runAfterResponse, 0);
+        }
+      }
       const meta = resolveResponseMeta(responseMeta, context);
       if (meta.headers) {
         for (const headerName of Object.keys(meta.headers)) {
@@ -115,6 +145,9 @@ export function toHonoHandler<
       }
       return c.json(response, (meta.status || 200) as any);
     } catch (exception) {
+      if (!(exception instanceof HipRedirect)) {
+        safeInvokeOnError(options.onError, exception, { raw });
+      }
       if (exception instanceof HipRedirect) {
         return c.redirect(exception.redirectUrl, exception.redirectCode as any);
       } else if (isHipError(exception)) {

@@ -100,3 +100,50 @@ describe('toFastifyHandler', () => {
     expect(reply.redirectedTo).toBe('/home');
   });
 });
+
+describe('fastify adapter options (Findings P1-5, P1-6)', () => {
+  const okStages = {
+    sanitizeInputs: (i: any) => i,
+    preAuthorize: () => true,
+    finalAuthorize: () => true,
+    execute: () => ({ ok: true }),
+    redactResponse: (u: any) => u,
+  };
+
+  it('onError fires on the 500 path and a throwing hook is harmless', async () => {
+    const seen: unknown[] = [];
+    const boom = new Error('db down');
+    const handler = toFastifyHandler(
+      {
+        ...okStages,
+        execute: () => {
+          throw boom;
+        },
+      },
+      {
+        onError: (e) => {
+          seen.push(e);
+          throw new Error('broken logger');
+        },
+      }
+    );
+    const reply = fakeReply();
+    await handler(fakeReq() as any, reply);
+    expect(reply.statusCode).toBe(500);
+    expect((seen[0] as Error).cause).toBe(boom);
+  });
+
+  it('afterResponse receives the final context after the reply is sent', async () => {
+    let ctx: any;
+    const handler = toFastifyHandler(okStages, {
+      afterResponse: (c) => {
+        ctx = c;
+      },
+    });
+    const reply = fakeReply();
+    await handler(fakeReq({ body: { x: 1 } }) as any, reply);
+    await new Promise((r) => setImmediate(r));
+    expect(ctx.response).toEqual({ ok: true });
+    expect(ctx.inputs.body).toEqual({ x: 1 });
+  });
+});

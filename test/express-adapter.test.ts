@@ -105,3 +105,56 @@ describe('toExpressHandler', () => {
     expect(res.redirectCode).toBe(302);
   });
 });
+
+describe('express adapter options (Findings P1-5, P1-6)', () => {
+  const okStages = {
+    sanitizeInputs: (i: any) => i,
+    preAuthorize: () => true,
+    finalAuthorize: () => true,
+    execute: () => ({ ok: true }),
+    redactResponse: (u: any) => u,
+  };
+
+  it('onError fires with the converted error before next() and a throwing hook is harmless', async () => {
+    const seen: unknown[] = [];
+    const boom = new Error('db down');
+    const handler = toExpressHandler(
+      {
+        ...okStages,
+        loadResources: () => {
+          throw boom;
+        },
+      },
+      {
+        onError: (e) => {
+          seen.push(e);
+          throw new Error('broken logger');
+        },
+      }
+    );
+    const next = vi.fn();
+    await handler(rawReq() as any, fakeRes(), next);
+    expect(next).toHaveBeenCalledTimes(1);
+    expect((seen[0] as Error).cause).toBe(boom);
+  });
+
+  it('afterResponse fires on res finish with the final context', async () => {
+    let ctx: any;
+    const listeners: Record<string, () => void> = {};
+    const res = fakeRes();
+    res.on = (event: string, cb: () => void) => {
+      listeners[event] = cb;
+    };
+    const handler = toExpressHandler(okStages, {
+      afterResponse: (c) => {
+        ctx = c;
+      },
+    });
+    await handler(rawReq({ body: { x: 1 } }) as any, res, vi.fn());
+    expect(ctx).toBeUndefined();
+    listeners.finish();
+    await new Promise((r) => setTimeout(r, 5));
+    expect(ctx.response).toEqual({ ok: true });
+    expect(ctx.inputs.body).toEqual({ x: 1 });
+  });
+});

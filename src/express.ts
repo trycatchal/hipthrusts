@@ -6,7 +6,13 @@ import {
   withDefaultImplementations,
 } from './core.js';
 import { hipErrorToBody, HipError, HipRedirect, isHipError } from './errors.js';
-import { HasResponseMeta, ResponseMeta } from './http-adapter.js';
+import {
+  HasResponseMeta,
+  HttpAdapterOptions,
+  ResponseMeta,
+  safeInvokeAfterResponse,
+  safeInvokeOnError,
+} from './http-adapter.js';
 import {
   ExecuteDepsMet,
   FinalAuthorizeDepsMet,
@@ -167,7 +173,7 @@ export function toExpressHandler<
     ExecuteDepsMet<TConf> &
     RedactResponseDepsMet<TConf> &
     HasResponseMeta,
->(handlingStrategy: TConf) {
+>(handlingStrategy: TConf, options: HttpAdapterOptions = {}) {
   assertHipthrustable(handlingStrategy);
 
   // Compose: baseline runs first, handler's extractInputs (if any) chains after.
@@ -206,8 +212,16 @@ export function toExpressHandler<
           res.setHeader(headerName, meta.headers[headerName]);
         }
       }
+      if (options.afterResponse) {
+        res.on('finish', () =>
+          safeInvokeAfterResponse(options.afterResponse, context)
+        );
+      }
       res.status(meta.status || 200).json(response);
     } catch (exception) {
+      if (!(exception instanceof HipRedirect)) {
+        safeInvokeOnError(options.onError, exception, { raw: { req, res } });
+      }
       if (exception instanceof HipRedirect) {
         res.redirect(exception.redirectCode, exception.redirectUrl);
       } else if (isHipError(exception)) {
