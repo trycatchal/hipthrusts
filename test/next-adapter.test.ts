@@ -1,6 +1,9 @@
 import { NextRequest } from 'next/server';
 import { describe, expect, it } from 'vitest';
-import { HipForbidden, HipRedirect } from '../src/errors';
+import { z } from 'zod';
+import { HTPipe } from '../src';
+import { HipConflict, HipForbidden, HipRedirect } from '../src/errors';
+import { htZodFactory } from '../src/zod';
 import { defineNextHandler, toNextHandler } from '../src/next';
 
 function postReq(url: string, body: any): NextRequest {
@@ -135,5 +138,58 @@ describe('toNextHandler', () => {
     );
     expect([302, 307]).toContain(res.status);
     expect(res.headers.get('location')).toBe('http://localhost/login');
+  });
+});
+
+describe('error detail on the wire (Finding P0-3)', () => {
+  it('a zod sanitize failure responds 422 with issues (paths+messages only)', async () => {
+    const { SanitizeInputsSliceWithZod } = htZodFactory();
+    const handler = toNextHandler(
+      HTPipe(
+        SanitizeInputsSliceWithZod('body', z.object({ name: z.string() })),
+        {
+          sanitizeInputs: (i: any) => i,
+          preAuthorize: () => true,
+          finalAuthorize: () => true,
+          execute: () => ({}),
+          redactResponse: (u: any) => u,
+        }
+      ) as any
+    );
+    const res = await handler(
+      postReq('http://localhost/api/x', { name: 12345678901 }),
+      routeCtx({})
+    );
+    expect(res.status).toBe(422);
+    const body = await res.json();
+    expect(body.error).toBe('body not valid');
+    expect(body.issues[0].path).toEqual(['name']);
+    expect(typeof body.issues[0].message).toBe('string');
+    expect(JSON.stringify(body)).not.toContain('12345678901');
+  });
+
+  it('an exposed HipConflict detail reaches the client', async () => {
+    const handler = toNextHandler({
+      sanitizeInputs: (i: any) => i,
+      preAuthorize: () => true,
+      finalAuthorize: () => true,
+      execute: () => {
+        throw new HipConflict(
+          'blocked',
+          { blockedBy: ['a'] },
+          { expose: true }
+        );
+      },
+      redactResponse: (u: any) => u,
+    });
+    const res = await handler(
+      postReq('http://localhost/api/x', {}),
+      routeCtx({})
+    );
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      error: 'blocked',
+      detail: { blockedBy: ['a'] },
+    });
   });
 });

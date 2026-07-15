@@ -5,7 +5,7 @@ import {
   executeHipthrustable,
   withDefaultImplementations,
 } from './core.js';
-import { HipError, HipRedirect, isHipError } from './errors.js';
+import { hipErrorToBody, HipError, HipRedirect, isHipError } from './errors.js';
 import { HasResponseMeta, ResponseMeta } from './http-adapter.js';
 import {
   ExecuteDepsMet,
@@ -33,22 +33,38 @@ export interface ExpressRaw {
 }
 
 // Maps a transport-agnostic HipError to its Boom equivalent so existing express
-// error-handling middleware keeps working unchanged.
+// error-handling middleware keeps working unchanged. The safe hipErrorToBody
+// projection (zod issues / opted-in detail) is merged into the Boom payload so
+// it reaches the wire like it does with the other HTTP adapters.
 function hipErrorToBoom(error: HipError): Error {
+  let boom: Boom.Boom;
   switch (error.kind) {
     case 'badInputs':
-      return Boom.badData(error.message, error.detail);
+      boom = Boom.badData(error.message, error.detail);
+      break;
     case 'unauthorized':
-      return Boom.unauthorized(error.message);
+      boom = Boom.unauthorized(error.message);
+      break;
     case 'forbidden':
-      return Boom.forbidden(error.message);
+      boom = Boom.forbidden(error.message);
+      break;
     case 'notFound':
-      return Boom.notFound(error.message);
+      boom = Boom.notFound(error.message);
+      break;
     case 'conflict':
-      return Boom.conflict(error.message);
+      boom = Boom.conflict(error.message);
+      break;
     default:
-      return Boom.badImplementation(error.message);
+      boom = Boom.badImplementation(error.message);
   }
+  const body = hipErrorToBody(error);
+  if (body.issues !== undefined) {
+    (boom.output.payload as Record<string, unknown>).issues = body.issues;
+  }
+  if (body.detail !== undefined) {
+    (boom.output.payload as Record<string, unknown>).detail = body.detail;
+  }
+  return boom;
 }
 
 // Handler config the dev writes for an express endpoint.

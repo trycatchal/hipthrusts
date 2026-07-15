@@ -1,6 +1,11 @@
 import { Context } from 'hono';
 import { executeHipthrustable } from './core.js';
-import { hipErrorToStatus, HipRedirect, isHipError } from './errors.js';
+import {
+  hipErrorToBody,
+  hipErrorToStatus,
+  HipRedirect,
+  isHipError,
+} from './errors.js';
 import {
   composeHttpHipthrustable,
   HasResponseMeta,
@@ -114,7 +119,7 @@ export function toHonoHandler<
         return c.redirect(exception.redirectUrl, exception.redirectCode as any);
       } else if (isHipError(exception)) {
         return c.json(
-          { error: exception.message },
+          hipErrorToBody(exception) as any,
           hipErrorToStatus(exception) as any
         );
       }

@@ -1,6 +1,11 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { executeHipthrustable } from './core.js';
-import { hipErrorToStatus, HipRedirect, isHipError } from './errors.js';
+import {
+  hipErrorToBody,
+  hipErrorToStatus,
+  HipRedirect,
+  isHipError,
+} from './errors.js';
 import {
   composeHttpHipthrustable,
   HasResponseMeta,
@@ -98,7 +103,7 @@ export function toFastifyHandler<
       } else if (isHipError(exception)) {
         return reply
           .status(hipErrorToStatus(exception))
-          .send({ error: exception.message });
+          .send(hipErrorToBody(exception));
       }
       return reply.status(500).send({ error: 'Internal server error' });
     }

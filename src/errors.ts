@@ -96,6 +96,55 @@ export function hipErrorToStatus(error: HipError): number {
   }
 }
 
+// Wire shape for HipError responses across the HTTP adapters.
+export interface HipErrorBody {
+  error: string;
+  // Present when `detail` is a ZodError(-like): paths + messages ONLY, never
+  // the received input values (those can contain secrets).
+  issues?: { path: (string | number)[]; message: string }[];
+  // Present only when the error was constructed with `{ expose: true }`.
+  detail?: unknown;
+}
+
+// Duck-typed so this works with any zod version (and zod-compatible
+// validators) without importing zod into core.
+function isZodErrorLike(
+  detail: unknown
+): detail is { issues: { path?: unknown; message?: unknown }[] } {
+  return (
+    typeof detail === 'object' &&
+    detail !== null &&
+    Array.isArray((detail as { issues?: unknown }).issues)
+  );
+}
+
+// Projects a HipError to the JSON body adapters put on the wire. `detail` is
+// NEVER dumped verbatim: a ZodError is reduced to paths + messages, anything
+// else requires the explicit `{ expose: true }` opt-in at construction time,
+// and HipInternal exposes nothing beyond its message.
+export function hipErrorToBody(error: HipError): HipErrorBody {
+  const body: HipErrorBody = { error: error.message };
+  if (error.kind === 'internal' || error.detail === undefined) {
+    return body;
+  }
+  if (isZodErrorLike(error.detail)) {
+    body.issues = error.detail.issues.map((issue) => ({
+      path: Array.isArray(issue.path)
+        ? issue.path.filter(
+            (segment): segment is string | number =>
+              typeof segment === 'string' || typeof segment === 'number'
+          )
+        : [],
+      message: typeof issue.message === 'string' ? issue.message : '',
+    }));
+    return body;
+  }
+  if (error.exposeDetail) {
+    body.detail = error.detail;
+  }
+  return body;
+}
+
 // Control-flow signal, not an error: instructs HTTP-style adapters to issue a
 // redirect. Non-HTTP adapters treat it as an internal error.
 export class HipRedirect {

@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server.js';
 import { executeHipthrustable } from './core.js';
-import { hipErrorToStatus, HipRedirect, isHipError } from './errors.js';
+import {
+  hipErrorToBody,
+  hipErrorToStatus,
+  HipRedirect,
+  isHipError,
+} from './errors.js';
 import {
   composeHttpHipthrustable,
   HasResponseMeta,
@@ -154,10 +159,9 @@ export function toNextHandler<
           code as 301 | 302 | 303 | 307 | 308
         );
       } else if (isHipError(exception)) {
-        return NextResponse.json(
-          { error: exception.message },
-          { status: hipErrorToStatus(exception) }
-        );
+        return NextResponse.json(hipErrorToBody(exception), {
+          status: hipErrorToStatus(exception),
+        });
       }
       return NextResponse.json(
         { error: 'Internal server error' },
