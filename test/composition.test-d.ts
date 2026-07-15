@@ -66,3 +66,52 @@ describe('HTPipe non-stage key passthrough (P0-2)', () => {
     expectTypeOf(piped.responseMeta).toEqualTypeOf<{ status: number }>();
   });
 });
+
+describe('HTPipe arity beyond 4 (P1-7)', () => {
+  it('composes 6 fragments where the 6th consumes context from fragments 1-5', () => {
+    const piped = HTPipe(
+      WithInputSlice('params', (p: any) => ({ id: String(p.id) })),
+      WithInputSlice('body', (b: any) => ({ name: String(b.name) })),
+      { preAuthorize: () => ({ role: 'admin' as const }) },
+      {
+        loadResources: (ctx: { inputs: { params: { id: string } } }) => ({
+          doc: { id: ctx.inputs.params.id, ownerId: 'o1' },
+        }),
+      },
+      {
+        finalAuthorize: (ctx: {
+          role: 'admin';
+          doc: { id: string; ownerId: string };
+        }) => ({ canWrite: ctx.role === 'admin' }),
+      },
+      {
+        execute: (ctx: {
+          inputs: { body: { name: string } };
+          doc: { id: string; ownerId: string };
+          canWrite: boolean;
+        }) => ({ saved: ctx.canWrite, name: ctx.inputs.body.name }),
+        redactResponse: (u: { saved: boolean; name: string }) => u,
+        responseMeta: { status: 201 },
+      }
+    );
+    expectTypeOf(piped.responseMeta).toEqualTypeOf<{ status: number }>();
+    type ExecOut = Awaited<ReturnType<(typeof piped)['execute']>>;
+    expectTypeOf<ExecOut>().toEqualTypeOf<{ saved: boolean; name: string }>();
+  });
+
+  it('composes 8 fragments', () => {
+    const noop = { preAuthorize: () => true };
+    const piped = HTPipe(
+      noop,
+      noop,
+      noop,
+      noop,
+      noop,
+      noop,
+      noop,
+      { execute: () => ({ ok: true }) }
+    );
+    expectTypeOf(piped.preAuthorize).toBeFunction();
+    expectTypeOf(piped.execute).toBeFunction();
+  });
+});

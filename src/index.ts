@@ -21,6 +21,7 @@ import {
 } from './lifecycle-functions.js';
 import {
   AllStageKeys,
+  AllStagesOptionalShape,
   HasExecute,
   HasExtractAmbient,
   HasExtractInputs,
@@ -528,8 +529,7 @@ type KnownKeys<T> = {
 //   entire output; the left's keys are gone.
 type ChainedSanitizeReturn<TLeftReturn, TRightReturn> =
   string extends keyof TRightReturn
-    ? TRightReturn &
-        Omit<KnownKeys<TLeftReturn>, keyof KnownKeys<TRightReturn>>
+    ? TRightReturn & Omit<KnownKeys<TLeftReturn>, keyof KnownKeys<TRightReturn>>
     : TRightReturn;
 
 type PipedSanitizeInputs<TLeft, TRight> = [TLeft] extends [
@@ -762,6 +762,19 @@ type NonStageKeys<T> = Omit<KnownKeys<T>, AllStageKeys>;
 type PipedPassthrough<TLeft, TRight> = NonStageKeys<TRight> &
   Omit<NonStageKeys<TLeft>, keyof NonStageKeys<TRight>>;
 
+// Flat variant for the 5+-arity overloads: folds right-wins passthrough over
+// the raw fragment tuple (first fragment = leftmost = lowest precedence).
+// Operating on plain fragments instead of nested PipedAll folds keeps the
+// mapped-type instantiation cost linear.
+type PipedPassthroughAll<Ts extends readonly any[]> = Ts extends [
+  infer THead,
+  ...infer TRest,
+]
+  ? TRest extends []
+    ? NonStageKeys<THead>
+    : PipedPassthrough<THead, PipedPassthroughAll<TRest>>
+  : {};
+
 const ALL_STAGE_KEYS: AllStageKeys[] = [
   'extractAmbient',
   'extractInputs',
@@ -772,6 +785,17 @@ const ALL_STAGE_KEYS: AllStageKeys[] = [
   'execute',
   'redactResponse',
 ];
+
+// Compact aliases for the higher arities: the intersection composes the same
+// way per-stage folds do, because each PipedX contributes a disjoint key.
+type PipedAll<TLeft, TRight> = PipedExtractAmbient<TLeft, TRight> &
+  PipedExtractInputs<TLeft, TRight> &
+  PipedSanitizeInputs<TLeft, TRight> &
+  PipedPreAuthorize<TLeft, TRight> &
+  PipedLoadResources<TLeft, TRight> &
+  PipedFinalAuthorize<TLeft, TRight> &
+  PipedExecute<TLeft, TRight> &
+  PipedRedactResponse<TLeft, TRight>;
 
 function nonStageKeysOf(obj: Record<string, any>) {
   const out: Record<string, any> = {};
@@ -1006,6 +1030,91 @@ export function HTPipe<
     PipedRedactResponse<T3, PipedRedactResponse<T2, T1>>
   > &
   PipedPassthrough<T4, PipedPassthrough<T3, PipedPassthrough<T2, T1>>>;
+
+// five parameters with possibly added inputs
+export function HTPipe<
+  T5 extends AllStagesOptionalShape,
+  T4 extends AllStagesOptionalShape,
+  T3 extends AllStagesOptionalShape,
+  T2 extends AllStagesOptionalShape,
+  T1 extends AllStagesOptionalShape,
+>(
+  obj5: T5,
+  obj4: T4,
+  obj3: T3,
+  obj2: T2,
+  obj1: T1
+): PipedAll<T5, PipedAll<T4, PipedAll<T3, PipedAll<T2, T1>>>> &
+  PipedPassthroughAll<[T5, T4, T3, T2, T1]>;
+
+// six parameters with possibly added inputs
+export function HTPipe<
+  T6 extends AllStagesOptionalShape,
+  T5 extends AllStagesOptionalShape,
+  T4 extends AllStagesOptionalShape,
+  T3 extends AllStagesOptionalShape,
+  T2 extends AllStagesOptionalShape,
+  T1 extends AllStagesOptionalShape,
+>(
+  obj6: T6,
+  obj5: T5,
+  obj4: T4,
+  obj3: T3,
+  obj2: T2,
+  obj1: T1
+): PipedAll<T6, PipedAll<T5, PipedAll<T4, PipedAll<T3, PipedAll<T2, T1>>>>> &
+  PipedPassthroughAll<[T6, T5, T4, T3, T2, T1]>;
+
+// seven parameters with possibly added inputs
+export function HTPipe<
+  T7 extends AllStagesOptionalShape,
+  T6 extends AllStagesOptionalShape,
+  T5 extends AllStagesOptionalShape,
+  T4 extends AllStagesOptionalShape,
+  T3 extends AllStagesOptionalShape,
+  T2 extends AllStagesOptionalShape,
+  T1 extends AllStagesOptionalShape,
+>(
+  obj7: T7,
+  obj6: T6,
+  obj5: T5,
+  obj4: T4,
+  obj3: T3,
+  obj2: T2,
+  obj1: T1
+): PipedAll<
+  T7,
+  PipedAll<T6, PipedAll<T5, PipedAll<T4, PipedAll<T3, PipedAll<T2, T1>>>>>
+> &
+  PipedPassthroughAll<[T7, T6, T5, T4, T3, T2, T1]>;
+
+// eight parameters with possibly added inputs
+export function HTPipe<
+  T8 extends AllStagesOptionalShape,
+  T7 extends AllStagesOptionalShape,
+  T6 extends AllStagesOptionalShape,
+  T5 extends AllStagesOptionalShape,
+  T4 extends AllStagesOptionalShape,
+  T3 extends AllStagesOptionalShape,
+  T2 extends AllStagesOptionalShape,
+  T1 extends AllStagesOptionalShape,
+>(
+  obj8: T8,
+  obj7: T7,
+  obj6: T6,
+  obj5: T5,
+  obj4: T4,
+  obj3: T3,
+  obj2: T2,
+  obj1: T1
+): PipedAll<
+  T8,
+  PipedAll<
+    T7,
+    PipedAll<T6, PipedAll<T5, PipedAll<T4, PipedAll<T3, PipedAll<T2, T1>>>>>
+  >
+> &
+  PipedPassthroughAll<[T8, T7, T6, T5, T4, T3, T2, T1]>;
 
 export function HTPipe(...objs: any[]) {
   if (objs.length === 0) {
