@@ -18,6 +18,18 @@ interface ModelWithFindOne<TInstance = any> {
   findOne(options: any): { exec(): Promise<TInstance> };
 }
 
+interface ModelWithFind<TInstance = any> {
+  find(filter: any): { exec(): Promise<TInstance[]> };
+}
+
+// The context contribution/requirement for tenant-scoped list endpoints: some
+// fragment contributes `queryScope` (a mongo filter restricting what the
+// caller may see) and the scoped finders below type-REQUIRE it, so forgetting
+// the scope is a compile error instead of a cross-tenant data leak.
+export interface HasQueryScope {
+  queryScope: Record<string, unknown>;
+}
+
 interface HasValidateSync {
   validateSync(paths?: any, options?: any): { errors: any[] };
 }
@@ -161,6 +173,37 @@ export function htMongooseFactory(mongoose: any) {
     );
   }
 
+  // Execute fragment for list endpoints: runs Model.find with the composed
+  // filter `{ ...ctx.queryScope, ...extraFilter }`. `queryScope` is REQUIRED
+  // in the context type, so the deps-met machinery forces some earlier
+  // fragment (e.g. a LoadResources contributing the caller's tenant filter)
+  // to provide it — authorization-as-query-scope by construction.
+  function findScoped(Model: ModelWithFind, extraFilter?: object) {
+    return Execute(async (context: HasQueryScope) => {
+      return await Model.find({
+        ...context.queryScope,
+        ...(extraFilter || {}),
+      }).exec();
+    });
+  }
+
+  // LoadResources variant of findScoped for handlers that post-process the
+  // scoped rows in their own execute stage; stores them under `docsKey`.
+  function loadScopedTo(
+    Model: ModelWithFind,
+    docsKey: string,
+    extraFilter?: object
+  ) {
+    return LoadResources(async (context: HasQueryScope) => {
+      return {
+        [docsKey]: await Model.find({
+          ...context.queryScope,
+          ...(extraFilter || {}),
+        }).exec(),
+      };
+    });
+  }
+
   function SaveOnDocumentFrom(propertyKeyOfDocument: string) {
     return Execute(async (context: any) => {
       if (context[propertyKeyOfDocument]) {
@@ -235,6 +278,8 @@ export function htMongooseFactory(mongoose: any) {
     dtoSchemaObj,
     findByIdRequired,
     findOneByRequired,
+    findScoped,
+    loadScopedTo,
     stripIdTransform,
   };
 }

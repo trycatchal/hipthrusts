@@ -3,7 +3,10 @@
 // collapse handler inference to `never`, and genuinely-unmet dependencies
 // must fail with the branded HipDepNotMet type (naming stage + key) rather
 // than an unreadable `never`.
+import mongoose from 'mongoose';
 import { describe, expectTypeOf, it } from 'vitest';
+import { HTPipe } from '../src/index.js';
+import { htMongooseFactory } from '../src/mongoose.js';
 import { toNextHandler } from '../src/next.js';
 
 const requiredStages = {
@@ -60,6 +63,49 @@ describe('deps-met tolerance (P1-8)', () => {
     toNextHandler({
       ...requiredStages,
       finalAuthorize: (ctx: { doc: { id: string } }) => !!ctx.doc,
+    });
+  });
+});
+
+describe('scoped list endpoints require a queryScope provider (P2-10)', () => {
+  const listModel = {
+    find: (_filter: any) => ({ exec: async () => [] as any[] }),
+  };
+
+  it('compiles when a fragment contributes queryScope', () => {
+    const handler = toNextHandler(
+      HTPipe(
+        {
+          loadResources: (ctx: { ambient: { tenantIds: string[] } }) => ({
+            queryScope: { tenant: { $in: ctx.ambient.tenantIds } } as Record<
+              string,
+              unknown
+            >,
+          }),
+        },
+        {
+          extractAmbient: (raw: any) => ({
+            tenantIds: (raw.tenantIds || []) as string[],
+          }),
+          sanitizeInputs: (i: any) => i,
+          preAuthorize: () => true,
+          finalAuthorize: () => true,
+          ...htMongooseFactory(mongoose).findScoped(listModel),
+          redactResponse: (u: any) => u,
+        }
+      )
+    );
+    expectTypeOf(handler).toBeFunction();
+  });
+
+  it('using findScoped without any scope-providing fragment fails to compile', () => {
+    // @ts-expect-error - nothing contributes `queryScope`
+    toNextHandler({
+      sanitizeInputs: (i: any) => i,
+      preAuthorize: () => true,
+      finalAuthorize: () => true,
+      ...htMongooseFactory(mongoose).findScoped(listModel),
+      redactResponse: (u: any) => u,
     });
   });
 });

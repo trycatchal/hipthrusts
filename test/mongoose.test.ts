@@ -194,3 +194,45 @@ describe('dtoSchemaObj', () => {
     });
   });
 });
+
+describe('findScoped / loadScopedTo (Finding P2-10)', () => {
+  const rows = [
+    { _id: '1', tenant: 'a', name: 'a-one' },
+    { _id: '2', tenant: 'a', name: 'a-two' },
+    { _id: '3', tenant: 'b', name: 'b-one' },
+  ];
+  const FakeModel = {
+    find(filter: Record<string, any>) {
+      return {
+        exec: async () =>
+          rows.filter((row) =>
+            Object.entries(filter).every(([k, v]) =>
+              v && typeof v === 'object' && Array.isArray(v.$in)
+                ? v.$in.includes((row as any)[k])
+                : (row as any)[k] === v
+            )
+          ),
+      };
+    },
+  };
+
+  it('findScoped composes ctx.queryScope into the filter (two-tenant fixture)', async () => {
+    const { execute } = ht.findScoped(FakeModel);
+    const result = await execute({ queryScope: { tenant: { $in: ['a'] } } });
+    expect(result.map((r: any) => r.name)).toEqual(['a-one', 'a-two']);
+  });
+
+  it('findScoped merges an extra filter on top of the scope', async () => {
+    const { execute } = ht.findScoped(FakeModel, { name: 'a-two' });
+    const result = await execute({ queryScope: { tenant: { $in: ['a'] } } });
+    expect(result.map((r: any) => r.name)).toEqual(['a-two']);
+  });
+
+  it('loadScopedTo stores the scoped rows under the given key', async () => {
+    const { loadResources } = ht.loadScopedTo(FakeModel, 'items');
+    const out: any = await loadResources({
+      queryScope: { tenant: { $in: ['b'] } },
+    });
+    expect(out.items.map((r: any) => r.name)).toEqual(['b-one']);
+  });
+});
