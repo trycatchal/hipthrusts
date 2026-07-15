@@ -506,13 +506,42 @@ type PipedExtractInputs<TLeft, TRight> = [TLeft] extends [
     ? { extractInputs: TRight['extractInputs'] }
     : {};
 
+// Strips index signatures, keeping only statically-known keys. Needed because
+// slice-style sanitizers (WithInputSlice) return `{...} & Record<string, any>`,
+// and `Omit<X, keyof (Y & Record<string, any>)>` would omit EVERYTHING.
+type KnownKeys<T> = {
+  [K in keyof T as string extends K
+    ? never
+    : number extends K
+      ? never
+      : symbol extends K
+        ? never
+        : K]: T[K];
+};
+
+// Sanitize stages CHAIN (the right one consumes the left one's output), so the
+// composed return type depends on the right fragment's style:
+// - passthrough style (has an index signature, e.g. WithInputSlice): unknown
+//   keys flow through at runtime, so the left fragment's named keys survive —
+//   merge them in (right wins on clashes).
+// - full-replace style (no index signature): the right return describes the
+//   entire output; the left's keys are gone.
+type ChainedSanitizeReturn<TLeftReturn, TRightReturn> =
+  string extends keyof TRightReturn
+    ? TRightReturn &
+        Omit<KnownKeys<TLeftReturn>, keyof KnownKeys<TRightReturn>>
+    : TRightReturn;
+
 type PipedSanitizeInputs<TLeft, TRight> = [TLeft] extends [
   HasSanitizeInputs<any, any>,
 ]
   ? [TRight] extends [HasSanitizeInputs<any, any>]
     ? HasSanitizeInputs<
         SanitizeInputsContextIn<TLeft>,
-        SanitizeInputsReturn<TRight>
+        ChainedSanitizeReturn<
+          SanitizeInputsReturn<TLeft>,
+          SanitizeInputsReturn<TRight>
+        >
       >
     : { sanitizeInputs: TLeft['sanitizeInputs'] }
   : [TRight] extends [HasSanitizeInputs<any, any>]

@@ -50,6 +50,38 @@ export function htZodFactory() {
     );
   }
 
+  // Validates several slices in ONE sanitize fragment. Prefer this over piping
+  // multiple SanitizeInputsSliceWithZod fragments when validating e.g. params
+  // AND body: the return type names every slice key explicitly.
+  // Unvalidated slices pass through untouched (Record<string, any> absorbs them).
+  function SanitizeInputsSlicesWithZod<
+    TShapes extends Record<string, z.ZodType<any, any, any>>,
+  >(shapes: TShapes) {
+    return SanitizeInputs(
+      (
+        unsafeInputs: Record<string, any>
+      ): { [K in keyof TShapes]: z.output<TShapes[K]> } & Record<
+        string,
+        any
+      > => {
+        const out: Record<string, any> = { ...unsafeInputs };
+        for (const sliceName of Object.keys(shapes)) {
+          const parseResult = shapes[sliceName].safeParse(
+            unsafeInputs[sliceName]
+          );
+          if (!parseResult.success) {
+            throw new HipBadInputs(`${sliceName} not valid`, parseResult.error);
+          }
+          out[sliceName] = stripIdTransform(parseResult.data);
+        }
+        return out as { [K in keyof TShapes]: z.output<TShapes[K]> } & Record<
+          string,
+          any
+        >;
+      }
+    );
+  }
+
   function RedactResponseWithZod<
     TSafeResponse extends z.infer<TSchema>,
     TSchema extends z.ZodType<any, any, any>,
@@ -82,6 +114,7 @@ export function htZodFactory() {
   return {
     SanitizeInputsWithZod,
     SanitizeInputsSliceWithZod,
+    SanitizeInputsSlicesWithZod,
     RedactResponseWithZod,
     PojoToValidated,
     stripIdTransform,

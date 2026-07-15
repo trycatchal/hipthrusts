@@ -109,3 +109,39 @@ describe('stripIdTransform', () => {
     expect(stripIdTransform({ _id: 'x', a: 1 })).toEqual({ a: 1 });
   });
 });
+
+describe('SanitizeInputsSlicesWithZod', () => {
+  const { SanitizeInputsSlicesWithZod } = htZodFactory();
+  const shapes = {
+    params: z.object({ id: z.string() }),
+    body: z.object({ name: z.string() }),
+  };
+
+  it('validates every named slice and passes unnamed slices through', () => {
+    const { sanitizeInputs } = SanitizeInputsSlicesWithZod(shapes);
+    const result = sanitizeInputs({
+      params: { id: '7' },
+      body: { name: 'hip' },
+      headers: { untouched: true },
+    });
+    expect(result.params).toEqual({ id: '7' });
+    expect(result.body).toEqual({ name: 'hip' });
+    expect(result.headers).toEqual({ untouched: true });
+  });
+
+  it('throws HipBadInputs naming the offending slice', () => {
+    const { sanitizeInputs } = SanitizeInputsSlicesWithZod(shapes);
+    expect(() =>
+      sanitizeInputs({ params: { id: '7' }, body: { name: 42 } })
+    ).toThrow('body not valid');
+  });
+
+  it('strips _id from each validated slice', () => {
+    const { sanitizeInputs } = SanitizeInputsSlicesWithZod({
+      body: z.object({ name: z.string(), _id: z.string() }),
+    });
+    expect(sanitizeInputs({ body: { name: 'hip', _id: 'nope' } }).body).toEqual(
+      { name: 'hip' }
+    );
+  });
+});
