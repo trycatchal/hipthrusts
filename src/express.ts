@@ -1,11 +1,15 @@
-import Boom from '@hapi/boom';
 import { NextFunction, Request, Response } from 'express';
 import {
   assertHipthrustable,
   executeHipthrustable,
   withDefaultImplementations,
 } from './core.js';
-import { hipErrorToBody, HipError, HipRedirect, isHipError } from './errors.js';
+import {
+  hipErrorToBody,
+  hipErrorToStatus,
+  HipRedirect,
+  isHipError,
+} from './errors.js';
 import {
   HasResponseMeta,
   HttpAdapterOptions,
@@ -38,39 +42,13 @@ export interface ExpressRaw {
   res: Response;
 }
 
-// Maps a transport-agnostic HipError to its Boom equivalent so existing express
-// error-handling middleware keeps working unchanged. The safe hipErrorToBody
-// projection (zod issues / opted-in detail) is merged into the Boom payload so
-// it reaches the wire like it does with the other HTTP adapters.
-function hipErrorToBoom(error: HipError): Error {
-  let boom: Boom.Boom;
-  switch (error.kind) {
-    case 'badInputs':
-      boom = Boom.badData(error.message, error.detail);
-      break;
-    case 'unauthorized':
-      boom = Boom.unauthorized(error.message);
-      break;
-    case 'forbidden':
-      boom = Boom.forbidden(error.message);
-      break;
-    case 'notFound':
-      boom = Boom.notFound(error.message);
-      break;
-    case 'conflict':
-      boom = Boom.conflict(error.message);
-      break;
-    default:
-      boom = Boom.badImplementation(error.message);
-  }
-  const body = hipErrorToBody(error);
-  if (body.issues !== undefined) {
-    (boom.output.payload as Record<string, unknown>).issues = body.issues;
-  }
-  if (body.detail !== undefined) {
-    (boom.output.payload as Record<string, unknown>).detail = body.detail;
-  }
-  return boom;
+export interface HipExpressHandlerOptions extends HttpAdapterOptions {
+  // By default the adapter responds to errors directly (status +
+  // { error, issues?, detail? }), matching the other HTTP adapters. Set true
+  // to instead forward every error — the HipError itself, or the raw unknown
+  // exception — to next() so your own express error middleware handles it
+  // (use hipErrorToStatus/hipErrorToBody from 'hipthrusts/errors' there).
+  delegateErrors?: boolean;
 }
 
 // Handler config the dev writes for an express endpoint.
@@ -183,7 +161,7 @@ export function toExpressHandler<
     ExecuteDepsMet<TConf> &
     RedactResponseDepsMet<TConf> &
     HasResponseMeta,
->(handlingStrategy: TConf, options: HttpAdapterOptions = {}) {
+>(handlingStrategy: TConf, options: HipExpressHandlerOptions = {}) {
   assertHipthrustable(handlingStrategy);
 
   // Compose: baseline runs first, handler's extractInputs (if any) chains after.
@@ -234,10 +212,12 @@ export function toExpressHandler<
       }
       if (exception instanceof HipRedirect) {
         res.redirect(exception.redirectCode, exception.redirectUrl);
-      } else if (isHipError(exception)) {
-        next(hipErrorToBoom(exception));
-      } else {
+      } else if (options.delegateErrors) {
         next(exception);
+      } else if (isHipError(exception)) {
+        res.status(hipErrorToStatus(exception)).json(hipErrorToBody(exception));
+      } else {
+        res.status(500).json({ error: 'Internal server error' });
       }
     }
   };

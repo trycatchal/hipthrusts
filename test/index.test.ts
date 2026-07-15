@@ -1,4 +1,3 @@
-import Boom from '@hapi/boom';
 import { describe, expect, it } from 'vitest';
 
 import { HTPipe, WithInputSlice } from '../src';
@@ -584,7 +583,7 @@ describe('HipThrusTS', () => {
         expect(resUpdated.statusCode).toBe(200);
       });
 
-      it('translates a denied authorization to a Boom 403 via next', async () => {
+      it('translates a denied authorization to a direct 403 response', async () => {
         const handler = toExpressHandler({
           sanitizeInputs: (i: any) => i,
           preAuthorize: () => false,
@@ -592,14 +591,10 @@ describe('HipThrusTS', () => {
           execute: () => ({}),
           redactResponse: (u: any) => u,
         });
-        let nextErr: any;
         const res = fakeRes();
-        await handler(rawReq as any, res, ((e: any) => {
-          nextErr = e;
-        }) as any);
-        expect(nextErr).toBeDefined();
-        expect(Boom.isBoom(nextErr)).toBe(true);
-        expect(nextErr.output.statusCode).toBe(403);
+        await handler(rawReq as any, res, (() => undefined) as any);
+        expect(res.statusCode).toBe(403);
+        expect(res.body.error).toBeDefined();
       });
     });
 

@@ -1,8 +1,8 @@
 // Transport-agnostic error hierarchy.
 //
 // The core lifecycle throws these semantic errors; each adapter translates
-// them to its framework-native shape (Boom for express, TRPCError for tRPC,
-// etc.). This keeps HTTP/library specifics out of core.
+// them to its transport's shape (an HTTP status + JSON body, or propagation
+// for tRPC). This keeps HTTP/library specifics out of core.
 
 export type HipErrorKind =
   | 'badInputs'
@@ -76,9 +76,9 @@ export function isHipError(thing: unknown): thing is HipError {
   return thing instanceof HipError;
 }
 
-// Maps a transport-agnostic HipError to an HTTP status code. Used by adapters
-// that respond with a raw status + JSON body (Hono, Fastify, Next.js). The
-// express adapter maps to Boom instead and does not use this.
+// Maps a transport-agnostic HipError to an HTTP status code. Used by every
+// adapter that responds with a raw status + JSON body (Express, Hono,
+// Fastify, Next.js).
 export function hipErrorToStatus(error: HipError): number {
   switch (error.kind) {
     case 'badInputs':

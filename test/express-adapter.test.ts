@@ -72,7 +72,7 @@ describe('toExpressHandler', () => {
     expect(res.body).toEqual({ echoed: { id: 'abc', n: 7 } });
   });
 
-  it('forwards a denied authorization to next as an error', async () => {
+  it('responds directly to a denied authorization with a 403 error body', async () => {
     const handler = toExpressHandler({
       sanitizeInputs: (i: any) => i,
       preAuthorize: () => {
@@ -85,8 +85,28 @@ describe('toExpressHandler', () => {
     const next = vi.fn();
     const res = fakeRes();
     await handler(rawReq() as any, res, next as any);
+    expect(next).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(403);
+    expect(res.body).toEqual({ error: 'nope' });
+  });
+
+  it('delegateErrors forwards the HipError itself to next()', async () => {
+    const handler = toExpressHandler(
+      {
+        sanitizeInputs: (i: any) => i,
+        preAuthorize: () => {
+          throw new HipForbidden('nope');
+        },
+        finalAuthorize: () => true,
+        execute: () => ({}),
+        redactResponse: (u: any) => u,
+      },
+      { delegateErrors: true }
+    );
+    const next = vi.fn();
+    await handler(rawReq() as any, fakeRes(), next as any);
     expect(next).toHaveBeenCalledTimes(1);
-    expect(next.mock.calls[0][0]).toBeDefined();
+    expect(next.mock.calls[0][0]).toBeInstanceOf(HipForbidden);
   });
 
   it('issues a redirect when a HipRedirect is thrown', async () => {
@@ -115,7 +135,7 @@ describe('express adapter options (Findings P1-5, P1-6)', () => {
     redactResponse: (u: any) => u,
   };
 
-  it('onError fires with the converted error before next() and a throwing hook is harmless', async () => {
+  it('onError fires with the converted error and a throwing hook is harmless', async () => {
     const seen: unknown[] = [];
     const boom = new Error('db down');
     const handler = toExpressHandler(
@@ -132,9 +152,10 @@ describe('express adapter options (Findings P1-5, P1-6)', () => {
         },
       }
     );
-    const next = vi.fn();
-    await handler(rawReq() as any, fakeRes(), next);
-    expect(next).toHaveBeenCalledTimes(1);
+    const res = fakeRes();
+    await handler(rawReq() as any, res, vi.fn());
+    expect(res.statusCode).toBe(500);
+    expect(res.body).toEqual({ error: 'Internal server error' });
     expect((seen[0] as Error).cause).toBe(boom);
   });
 

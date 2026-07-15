@@ -89,7 +89,7 @@ HipThrusTS makes the stages **the unit of work**:
 ```sh
 pnpm add hipthrusts
 # peer-installs depending on what you'll use:
-pnpm add express @hapi/boom   # Express adapter
+pnpm add express              # Express adapter
 pnpm add hono                 # Hono adapter
 pnpm add fastify              # Fastify adapter
 pnpm add next                 # Next.js (App Router) adapter
@@ -271,12 +271,15 @@ from any stage and the adapter takes care of the HTTP details:
 | `HipInternal()`      | 500                   | Unexpected failure (default for anything else).  |
 | `new HipRedirect(u)` | 302 (or what you set) | Control-flow signal; HTTP-style adapters honor.  |
 
-Adapters translate per their framework: the **Express** adapter maps to
-**Boom** so your existing error middleware keeps working unchanged. The
-**Hono / Fastify / Next.js** adapters respond directly with the mapped
-status and a JSON body. The **tRPC** adapter lets `HipError` propagate
-with its `.kind`; map it in your `errorFormatter` if you want specific
-`TRPCError` codes.
+Every HTTP adapter (**Express / Hono / Fastify / Next.js**) responds
+directly with the mapped status and a JSON body. If you'd rather have
+your own express error middleware handle errors, pass
+`{ delegateErrors: true }` to `toExpressHandler` — every error (the
+`HipError` itself, or the raw unknown exception) is forwarded to
+`next()`, and `hipErrorToStatus` / `hipErrorToBody` from
+`hipthrusts/errors` do the translation in your middleware. The **tRPC**
+adapter lets `HipError` propagate with its `.kind`; map it in your
+`errorFormatter` if you want specific `TRPCError` codes.
 
 ### What the error body contains
 

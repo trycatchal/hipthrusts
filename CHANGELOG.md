@@ -18,8 +18,8 @@ dogfooding-feedback fixes into the upcoming 0.12.0 release._
   `issues: [{ path, message }]` (paths + messages only — never received input
   values); other `detail` is serialized only when the error was constructed
   with the new `{ expose: true }` opt-in (`HipErrorOptions`); `HipInternal`
-  exposes nothing beyond its message. Express merges the same projection into
-  the Boom payload. (`hipErrorToBody` in `hipthrusts/errors`.)
+  exposes nothing beyond its message. (`hipErrorToBody` in
+  `hipthrusts/errors`.)
 - `onError(error, { raw })` adapter option (all HTTP adapters): observability
   hook called with every error the adapter converts to an error response.
   Unknown failures carry the original error as `Error.cause`.
@@ -42,6 +42,15 @@ dogfooding-feedback fixes into the upcoming 0.12.0 release._
   `HipDepNotMet<'stage', 'key'>` in the compiler error instead of collapsing
   to `never`; `any`-typed context keys and union stage returns are tolerated.
 - Type-level test suite (`vitest --typecheck`, `test/*.test-d.ts`).
+
+### Removed (dogfooding feedback round)
+
+- **BREAKING:** the express adapter no longer depends on `@hapi/boom`. It now
+  responds to errors directly (status + `{ error, issues?, detail? }`) like
+  the other HTTP adapters. Apps with their own express error middleware can
+  pass `{ delegateErrors: true }` to `toExpressHandler` to receive the raw
+  `HipError` via `next()` and translate it with `hipErrorToStatus` /
+  `hipErrorToBody`.
 
 ### Changed (dogfooding feedback round)
 
