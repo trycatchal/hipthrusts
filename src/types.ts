@@ -131,6 +131,35 @@ type IntersectProperties<T extends object> = keyof T extends never
     ? A
     : never;
 
+// The canonical any-detection trick: `any` is the only type where `0 extends 1 & T`.
+type IsAny<T> = 0 extends 1 & T ? true : false;
+
+// Resolved (unmet) constraint marker. Instead of collapsing the whole deps-met
+// intersection to `never` — which makes TS report the useless "not assignable
+// to parameter of type 'never'" — an unmet dependency resolves to this branded
+// type, so the compiler error names the consuming stage and the missing
+// context key.
+export interface HipDepNotMet<TStage extends string, TKey> {
+  __hipDepNotMet: [TStage, TKey];
+}
+
+// A stage's (promise-resolved) return type, or `never` when the stage is
+// absent/optional on T.
+type StageReturnOf<T, K extends AllStageKeys> =
+  T extends Record<K, (...args: any[]) => infer R>
+    ? PromiseResolveOrSync<R>
+    : never;
+
+// Does any union member of TReturn carry TKey with a TValue-compatible value?
+// Distributing via Extract (a) tolerates conditional stage returns like
+// `{} | { doc: Doc }`, and (b) naturally ignores the `false` members of
+// authorization-stage returns.
+type ProvidesKey<TReturn, TKey extends PropertyKey, TValue> = [
+  Extract<TReturn, Record<TKey, TValue>>,
+] extends [never]
+  ? false
+  : true;
+
 type ReturnedTypeUpToPreAuthorize<TValue, TKey> = TKey extends 'inputs'
   ? HasSanitizeInputs<any, TValue>
   : TKey extends 'ambient'
@@ -153,9 +182,16 @@ type ReturnedSomewhereUpToLoadResources<
   TOut,
   TValue,
   TKey extends string | symbol | number,
-> = [TOut] extends [HasPreAuthorize<any, Record<TKey, TValue>>]
-  ? HasPreAuthorize<any, Record<TKey, TValue>>
-  : never;
+> =
+  IsAny<TValue> extends true
+    ? {}
+    : ProvidesKey<
+          StageReturnOf<TOut, 'preAuthorize'>,
+          TKey,
+          TValue
+        > extends true
+      ? {}
+      : HipDepNotMet<'loadResources', TKey>;
 
 type AllInitKeys = 'ambient' | 'inputs';
 
@@ -173,11 +209,22 @@ type ReturnedSomewhereUpToFinalAuthorize<
   TOut,
   TValue,
   TKey extends string | symbol | number,
-> = [TOut] extends [HasLoadResources<any, Record<TKey, TValue>>]
-  ? HasLoadResources<any, Record<TKey, TValue>>
-  : [TOut] extends [HasPreAuthorize<any, Record<TKey, TValue>>]
-    ? HasPreAuthorize<any, Record<TKey, TValue>>
-    : never;
+> =
+  IsAny<TValue> extends true
+    ? {}
+    : ProvidesKey<
+          StageReturnOf<TOut, 'loadResources'>,
+          TKey,
+          TValue
+        > extends true
+      ? {}
+      : ProvidesKey<
+            StageReturnOf<TOut, 'preAuthorize'>,
+            TKey,
+            TValue
+          > extends true
+        ? {}
+        : HipDepNotMet<'finalAuthorize', TKey>;
 
 export type FinalAuthorizeDepsMet<T extends HasFinalAuthorize<any, any>> =
   IntersectProperties<{
@@ -198,13 +245,29 @@ type ReturnedSomewhereUpToExecute<
   TOut,
   TValue,
   TKey extends string | symbol | number,
-> = [TOut] extends [HasFinalAuthorize<any, Record<TKey, TValue>>]
-  ? HasFinalAuthorize<any, Record<TKey, TValue>>
-  : [TOut] extends [HasLoadResources<any, Record<TKey, TValue>>]
-    ? HasLoadResources<any, Record<TKey, TValue>>
-    : [TOut] extends [HasPreAuthorize<any, Record<TKey, TValue>>]
-      ? HasPreAuthorize<any, Record<TKey, TValue>>
-      : never;
+  TStage extends string = 'execute',
+> =
+  IsAny<TValue> extends true
+    ? {}
+    : ProvidesKey<
+          StageReturnOf<TOut, 'finalAuthorize'>,
+          TKey,
+          TValue
+        > extends true
+      ? {}
+      : ProvidesKey<
+            StageReturnOf<TOut, 'loadResources'>,
+            TKey,
+            TValue
+          > extends true
+        ? {}
+        : ProvidesKey<
+              StageReturnOf<TOut, 'preAuthorize'>,
+              TKey,
+              TValue
+            > extends true
+          ? {}
+          : HipDepNotMet<TStage, TKey>;
 
 export type ExecuteDepsMet<T> = IntersectProperties<{
   [P in keyof OptionalExecuteParams<T>]: [P] extends [AllInitKeys]
@@ -212,11 +275,12 @@ export type ExecuteDepsMet<T> = IntersectProperties<{
     : ReturnedSomewhereUpToExecute<T, OptionalExecuteParams<T>[P], P>;
 }>;
 
-type ReturnedSomewhereUpToRedactResponse<TOut, TValue> = [TOut] extends [
-  HasExecute<any, TValue>,
-]
-  ? HasExecute<any, TValue>
-  : never;
+type ReturnedSomewhereUpToRedactResponse<TOut, TValue> =
+  IsAny<TValue extends Record<any, infer V> ? V : never> extends true
+    ? {}
+    : [Extract<StageReturnOf<TOut, 'execute'>, TValue>] extends [never]
+      ? HipDepNotMet<'redactResponse', keyof TValue>
+      : {};
 
 // Infers the declared type of a redactor's optional context parameter; for a
 // one-parameter redactor this resolves to `unknown` (no context requirements).
@@ -241,5 +305,10 @@ export type RedactResponseDepsMet<T extends HasRedactResponse<any, any>> =
     IntersectProperties<{
       [P in keyof RedactResponseCtxParam<T>]: [P] extends [AllInitKeys]
         ? ReturnedTypeUpToPreAuthorize<RedactResponseCtxParam<T>[P], P>
-        : ReturnedSomewhereUpToExecute<T, RedactResponseCtxParam<T>[P], P>;
+        : ReturnedSomewhereUpToExecute<
+            T,
+            RedactResponseCtxParam<T>[P],
+            P,
+            'redactResponse'
+          >;
     }>;
