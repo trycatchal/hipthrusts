@@ -23,6 +23,7 @@ import {
   AllStageKeys,
   AllStagesOptionalShape,
   HasExecute,
+  HasUnsafeSlices,
   HasExtractAmbient,
   HasExtractInputs,
   HasFinalAuthorize,
@@ -39,6 +40,7 @@ import {
   OptionallyHasRedactResponse,
   OptionallyHasSanitizeInputs,
   PromiseResolveOrSync,
+  UNSAFE_SLICES,
 } from './types.js';
 
 type FunctionTaking<TIn> = (param: TIn) => any;
@@ -178,26 +180,38 @@ export function SanitizeInputsFromTo<
   });
 }
 
-// Per-slot composer: writes to sanitizeInputs under a chosen key, preserving any other
-// slices already present. This restores per-slot ergonomics on top of the single-slot core.
-// Example: WithInputSlice('params', IdSchema.parse) becomes the new WithParamsSanitized.
-// Input type is intentionally loose (Record<string, any>) so multiple WithInputSlice mixins
-// can chain freely; the sanitizer enforces the slice's own runtime shape.
-export function WithInputSlice<
-  TSliceName extends string,
-  TUnsafeSlice,
-  TSafeSlice,
->(sliceName: TSliceName, sanitizer: (unsafeSlice: TUnsafeSlice) => TSafeSlice) {
+// Per-slice sanitization for HTTP-style handlers whose inputs are the
+// canonical { params, query, body, headers } object. Each named slice is
+// sanitized by its function; the RAW remainder travels to the next chained
+// sanitizer under UNSAFE_SLICES only — core deletes that key after the
+// sanitize stage, so ONLY explicitly-sanitized slices reach later stages
+// (want a raw slice through? say so: `{ query: (q) => q }`). Fragments chain
+// via HTPipe: a later fragment's slices are added (right wins on a clash,
+// re-sanitizing from the raw slice), and its output carries the union of all
+// named slices.
+export function SanitizeInputsSlices<
+  TSanitizers extends Record<string, (unsafeSlice: any) => any>,
+>(sanitizers: TSanitizers) {
+  type SafeSlices = {
+    [K in keyof TSanitizers]: ReturnType<TSanitizers[K]>;
+  };
   return SanitizeInputs(
-    (
-      unsafeInputs: Record<string, any>
-    ): {
-      [K in TSliceName]: TSafeSlice;
-    } & Record<string, any> => {
-      return {
-        ...unsafeInputs,
-        [sliceName]: sanitizer(unsafeInputs[sliceName] as TUnsafeSlice),
-      } as { [K in TSliceName]: TSafeSlice } & Record<string, any>;
+    (unsafeInputs: Record<string, any>): SafeSlices & HasUnsafeSlices => {
+      const chained =
+        unsafeInputs !== null &&
+        typeof unsafeInputs === 'object' &&
+        UNSAFE_SLICES in unsafeInputs;
+      // First fragment in a chain receives the raw inputs; later fragments
+      // receive the previous fragment's { ...safe, [UNSAFE_SLICES]: raw }.
+      const rawSlices: Record<string, any> = chained
+        ? (unsafeInputs as Record<PropertyKey, any>)[UNSAFE_SLICES]
+        : unsafeInputs;
+      const out: Record<PropertyKey, any> = chained ? { ...unsafeInputs } : {};
+      for (const sliceName of Object.keys(sanitizers)) {
+        out[sliceName] = sanitizers[sliceName](rawSlices[sliceName]);
+      }
+      out[UNSAFE_SLICES] = rawSlices;
+      return out as SafeSlices & HasUnsafeSlices;
     }
   );
 }
@@ -507,9 +521,8 @@ type PipedExtractInputs<TLeft, TRight> = [TLeft] extends [
     ? { extractInputs: TRight['extractInputs'] }
     : {};
 
-// Strips index signatures, keeping only statically-known keys. Needed because
-// slice-style sanitizers (WithInputSlice) return `{...} & Record<string, any>`,
-// and `Omit<X, keyof (Y & Record<string, any>)>` would omit EVERYTHING.
+// Strips index signatures, keeping only statically-known keys, so merging a
+// legacy `X & Record<string, any>`-shaped return can't omit everything.
 type KnownKeys<T> = {
   [K in keyof T as string extends K
     ? never
@@ -522,14 +535,18 @@ type KnownKeys<T> = {
 
 // Sanitize stages CHAIN (the right one consumes the left one's output), so the
 // composed return type depends on the right fragment's style:
-// - passthrough style (has an index signature, e.g. WithInputSlice): unknown
-//   keys flow through at runtime, so the left fragment's named keys survive —
-//   merge them in (right wins on clashes).
-// - full-replace style (no index signature): the right return describes the
+// - slice style (carries the UNSAFE_SLICES raw-remainder channel, i.e.
+//   SanitizeInputsSlices): the left fragment's named slices survive — merge
+//   them in (right wins on clashes).
+// - full-replace style (no UNSAFE_SLICES key): the right return describes the
 //   entire output; the left's keys are gone.
 type ChainedSanitizeReturn<TLeftReturn, TRightReturn> =
-  string extends keyof TRightReturn
-    ? TRightReturn & Omit<KnownKeys<TLeftReturn>, keyof KnownKeys<TRightReturn>>
+  typeof UNSAFE_SLICES extends keyof TRightReturn
+    ? TRightReturn &
+        Omit<
+          KnownKeys<Omit<TLeftReturn, typeof UNSAFE_SLICES>>,
+          keyof KnownKeys<TRightReturn>
+        >
     : TRightReturn;
 
 type PipedSanitizeInputs<TLeft, TRight> = [TLeft] extends [
@@ -1321,6 +1338,8 @@ export function HTPipe(...objs: any[]) {
   return objs.reduce((prev: any, curr: any) => HTPipe(prev, curr), {});
 }
 
+export { UNSAFE_SLICES } from './types.js';
+export type { HasUnsafeSlices, SanitizedOnly } from './types.js';
 export * from './core.js';
 export * from './errors.js';
 export * from './http-adapter.js';

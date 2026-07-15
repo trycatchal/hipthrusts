@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HTPipe } from '../src';
+import { HTPipe, SanitizeInputsSlices } from '../src';
 import { executeHipthrustable, withDefaultImplementations } from '../src/core';
 import {
   HipBadInputs,
@@ -272,5 +272,37 @@ describe('redactResponse receives the final context (Finding P2-11)', () => {
     );
     (piped as any).redactResponse({ x: 1 }, { role: 'admin' });
     expect(seen).toEqual(['admin', 'admin']);
+  });
+});
+
+describe('strict sanitization guarantee (UNSAFE_SLICES stripped by core)', () => {
+  it('unsanitized slices never reach stages after sanitizeInputs', async () => {
+    const handler = withDefaultImplementations({
+      ...SanitizeInputsSlices({ params: (p: any) => ({ id: String(p.id) }) }),
+      preAuthorize: () => true,
+      finalAuthorize: () => true,
+      execute: (ctx: any) => ctx.inputs,
+      redactResponse: (u: any) => u,
+    } as any);
+    const { response } = await executeHipthrustable(handler, {
+      params: { id: 7 },
+      body: { sneaky: true },
+      query: { alsoSneaky: 1 },
+      headers: {},
+    });
+    expect(response).toEqual({ params: { id: '7' } });
+    expect(Object.getOwnPropertySymbols(response)).toEqual([]);
+  });
+
+  it('a full-replace sanitizer is untouched (tRPC-style single input)', async () => {
+    const handler = withDefaultImplementations({
+      sanitizeInputs: (i: any) => ({ n: Number(i.n) }),
+      preAuthorize: () => true,
+      finalAuthorize: () => true,
+      execute: (ctx: any) => ctx.inputs,
+      redactResponse: (u: any) => u,
+    } as any);
+    const { response } = await executeHipthrustable(handler, { n: '5' });
+    expect(response).toEqual({ n: 5 });
   });
 });

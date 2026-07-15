@@ -153,6 +153,30 @@ redactResponse: (unsafe, ctx: { canSeeEmails: boolean }) =>
   ctx.canSeeEmails ? unsafe.rows : unsafe.rows.map(({ email, ...rest }) => rest),
 ```
 
+### Input slices & the strictness guarantee
+
+`sanitizeInputs` is single-slot: one function, unsafe in, safe out —
+which is exactly right for tRPC's single `input`. HTTP-style adapters
+feed it the canonical `{ params, query, body, headers }` object, and
+`SanitizeInputsSlices` gives you per-slice ergonomics on top:
+
+```ts
+SanitizeInputsSlices({
+  params: (p) => ParamsSchema.parse(p),
+  body:   (b) => BodySchema.parse(b),
+})
+```
+
+**Only slices you explicitly sanitize survive the stage.** Chained
+sanitize fragments hand the raw remainder to each other under the
+`UNSAFE_SLICES` symbol, and core deletes that channel once the stage
+completes — so an unsanitized `query` never reaches `preAuthorize` or
+anything after it, at runtime *or* in the types (consuming it downstream
+is a compile error). Want a raw slice through? Say so explicitly:
+`{ query: (q) => q }`. A plain whole-object sanitizer
+(`sanitizeInputs: (i) => …`) is likewise an explicit mapping — whatever
+it returns is, by definition, sanitized.
+
 ## Compose, don't repeat yourself
 
 The real payoff shows up the second time you need "load a Thing by ID,
@@ -182,13 +206,15 @@ export const RequireThingOwner = HTPipe(
 Then use it in every handler that needs it:
 
 ```ts
-import { HTPipe, WithInputSlice } from 'hipthrusts';
+import { HTPipe, SanitizeInputsSlices } from 'hipthrusts';
 import { toExpressHandler } from 'hipthrusts/express';
 
 app.put('/things/:id', toExpressHandler(HTPipe(
   WithUserFromReq,                                       // ambient.user
-  WithInputSlice('params', (p: any) => ({ id: String(p.id) })),
-  WithInputSlice('body',   (b: any) => ({ name: String(b.name) })),
+  SanitizeInputsSlices({
+    params: (p: any) => ({ id: String(p.id) }),
+    body:   (b: any) => ({ name: String(b.name) }),
+  }),
   RequireThingOwner,                                     // shared fragment
   {
     preAuthorize:   (ctx) => ctx.ambient.user?.role === 'editor',
@@ -210,7 +236,7 @@ and intersecting types so an `execute` written here knows it can reach
 The same shared fragments power every endpoint in a router:
 
 ```ts
-import { HTPipe, WithInputSlice } from 'hipthrusts';
+import { HTPipe, SanitizeInputsSlices } from 'hipthrusts';
 import { toExpressHandler } from 'hipthrusts/express';
 import { WithUserFromReq, RequireThingOwner } from './shared';
 
@@ -226,7 +252,7 @@ thingRouter.get('/', toExpressHandler({
 // GET /things/:id — owner-only read
 thingRouter.get('/:id', toExpressHandler(HTPipe(
   WithUserFromReq,
-  WithInputSlice('params', (p: any) => ({ id: String(p.id) })),
+  SanitizeInputsSlices({ params: (p: any) => ({ id: String(p.id) }) }),
   RequireThingOwner,
   {
     preAuthorize:   () => true,
@@ -238,8 +264,10 @@ thingRouter.get('/:id', toExpressHandler(HTPipe(
 // PUT /things/:id — owner-only update
 thingRouter.put('/:id', toExpressHandler(HTPipe(
   WithUserFromReq,
-  WithInputSlice('params', (p: any) => ({ id: String(p.id) })),
-  WithInputSlice('body',   (b: any) => ({ name: String(b.name) })),
+  SanitizeInputsSlices({
+    params: (p: any) => ({ id: String(p.id) }),
+    body:   (b: any) => ({ name: String(b.name) }),
+  }),
   RequireThingOwner,
   {
     preAuthorize:   (ctx) => ctx.ambient.user?.role === 'editor',
@@ -403,10 +431,14 @@ app.get('/things', toExpressHandler(HTPipe(
 )));
 ```
 
-`findScoped(Model, extraFilter?)` is an `Execute` fragment whose context
-type **requires** `queryScope` — drop `WithTenantScope` from the pipe
-and the handler no longer compiles. `loadScopedTo(Model, key,
-extraFilter?)` is the `LoadResources` variant for handlers that
+`findScoped(Model, extraFilter?, docsKey?)` is a two-stage fragment: the
+scoped `Model.find` runs on the **load** stage (so the rows sit in
+context — under `scopedDocs` by default — where `finalAuthorize`, a
+two-param `redactResponse`, and any downstream `execute` you pipe can
+see them) plus a trivial `execute` that returns them. Its load stage
+**requires** `queryScope` in its context type — drop `WithTenantScope`
+from the pipe and the handler no longer compiles. `loadScopedTo(Model,
+key, extraFilter?)` is the load stage alone, for handlers that
 post-process the scoped rows in their own `execute`.
 
 ## Type troubleshooting
@@ -447,7 +479,7 @@ import { HTPipe } from 'hipthrusts';
 import { toExpressHandler } from 'hipthrusts/express';
 import { htZodFactory } from 'hipthrusts/zod';
 
-const { SanitizeInputsSliceWithZod, RedactResponseWithZod } = htZodFactory();
+const { SanitizeInputsSlicesWithZod, RedactResponseWithZod } = htZodFactory();
 
 const Params = z.object({ id: z.string().uuid() });
 const Body   = z.object({ name: z.string().min(1).max(80) });
@@ -455,8 +487,7 @@ const Resp   = z.object({ id: z.string(), name: z.string() });
 
 app.put('/things/:id', toExpressHandler(HTPipe(
   WithUserFromReq,
-  SanitizeInputsSliceWithZod('params', Params),
-  SanitizeInputsSliceWithZod('body',   Body),
+  SanitizeInputsSlicesWithZod({ params: Params, body: Body }),
   RedactResponseWithZod(Resp),
   RequireThingOwner,
   {
@@ -474,17 +505,7 @@ A Zod parse failure throws `HipBadInputs` carrying the `ZodError` as
 `422 { error, issues: [{ path, message }] }` response (see
 [Errors](#errors)).
 
-To validate several slices in one fragment, use
-`SanitizeInputsSlicesWithZod` — the return type names every slice key:
-
-```ts
-const { SanitizeInputsSlicesWithZod } = htZodFactory();
-
-HTPipe(
-  SanitizeInputsSlicesWithZod({ params: Params, body: Body }),
-  { /* ...stages consuming ctx.inputs.params and ctx.inputs.body... */ },
-);
-```
+For partial-update endpoints, pass `Body.partial()` as the slice schema.
 
 ### Mongoose
 
@@ -640,7 +661,7 @@ headers }` input shape are identical across them.
 
 ## No magic
 
-The helpers (`HTPipe`, `LoadResources`, `WithInputSlice`, the
+The helpers (`HTPipe`, `LoadResources`, `SanitizeInputsSlices`, the
 `htZodFactory` family) all just produce or compose plain objects.
 Here's the opening example written longhand, with nothing but built-in
 TypeScript:

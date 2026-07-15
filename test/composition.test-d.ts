@@ -1,14 +1,14 @@
 // Type-level tests for HTPipe composition (Finding P0-1 / P1-7).
 // Run via `vitest --typecheck` (enabled in vitest.config.ts).
 import { describe, expectTypeOf, it } from 'vitest';
-import { HTPipe, WithInputSlice } from '../src/index.js';
+import { HTPipe, SanitizeInputsSlices } from '../src/index.js';
 import { toNextHandler } from '../src/next.js';
 
 describe('HTPipe sanitizeInputs composition (P0-1)', () => {
-  it('keeps both slices visible after piping two WithInputSlice fragments', () => {
+  it('keeps both slices visible after piping two SanitizeInputsSlices fragments', () => {
     const piped = HTPipe(
-      WithInputSlice('params', (p: any) => ({ id: String(p.id) })),
-      WithInputSlice('body', (b: any) => ({ name: String(b.name) }))
+      SanitizeInputsSlices({ params: (p: any) => ({ id: String(p.id) }) }),
+      SanitizeInputsSlices({ body: (b: any) => ({ name: String(b.name) }) })
     );
     type SanitizedOut = ReturnType<(typeof piped)['sanitizeInputs']>;
     expectTypeOf<SanitizedOut['params']>().toEqualTypeOf<{ id: string }>();
@@ -21,8 +21,8 @@ describe('HTPipe sanitizeInputs composition (P0-1)', () => {
     // (keeping only the right fragment's return), so this failed to typecheck.
     const handler = toNextHandler(
       HTPipe(
-        WithInputSlice('params', (p: any) => ({ id: String(p.id) })),
-        WithInputSlice('body', (b: any) => ({ name: String(b.name) })),
+        SanitizeInputsSlices({ params: (p: any) => ({ id: String(p.id) }) }),
+        SanitizeInputsSlices({ body: (b: any) => ({ name: String(b.name) }) }),
         {
           preAuthorize: () => true,
           loadResources: async (ctx: {
@@ -42,7 +42,7 @@ describe('HTPipe sanitizeInputs composition (P0-1)', () => {
 
   it('full-replace sanitizer on the right does not inherit left keys', () => {
     const piped = HTPipe(
-      WithInputSlice('params', (p: any) => ({ id: String(p.id) })),
+      SanitizeInputsSlices({ params: (p: any) => ({ id: String(p.id) }) }),
       { sanitizeInputs: (_all: any) => ({ replaced: true as const }) }
     );
     type SanitizedOut = ReturnType<(typeof piped)['sanitizeInputs']>;
@@ -70,8 +70,8 @@ describe('HTPipe non-stage key passthrough (P0-2)', () => {
 describe('HTPipe arity beyond 4 (P1-7)', () => {
   it('composes 6 fragments where the 6th consumes context from fragments 1-5', () => {
     const piped = HTPipe(
-      WithInputSlice('params', (p: any) => ({ id: String(p.id) })),
-      WithInputSlice('body', (b: any) => ({ name: String(b.name) })),
+      SanitizeInputsSlices({ params: (p: any) => ({ id: String(p.id) }) }),
+      SanitizeInputsSlices({ body: (b: any) => ({ name: String(b.name) }) }),
       { preAuthorize: () => ({ role: 'admin' as const }) },
       {
         loadResources: (ctx: { inputs: { params: { id: string } } }) => ({
@@ -138,5 +138,43 @@ describe('redactResponse context deps-met (P2-11)', () => {
         ctx: { canSeeEmails: boolean }
       ) => (ctx.canSeeEmails ? unsafe.rows : []),
     });
+  });
+});
+
+describe('strict sanitization (unsanitized slices are compile errors downstream)', () => {
+  it('consuming an unsanitized slice in a later stage fails deps-met', () => {
+    // `query` was never sanitized, so ctx.inputs has no `query` key (the raw
+    // remainder rides UNSAFE_SLICES and core strips it).
+    const piped = HTPipe(
+      SanitizeInputsSlices({ params: (p: any) => ({ id: String(p.id) }) }),
+      {
+        preAuthorize: () => true,
+        finalAuthorize: () => true,
+        execute: (ctx: { inputs: { query: { foo: string } } }) =>
+          ctx.inputs.query,
+        redactResponse: (u: unknown) => u,
+      }
+    );
+    // @ts-expect-error - consuming an unsanitized slice must not compile
+    toNextHandler(piped);
+  });
+
+  it('an explicit no-op slice types the raw slice through', () => {
+    const piped = HTPipe(
+      SanitizeInputsSlices({
+        params: (p: any) => ({ id: String(p.id) }),
+        query: (q: any) => q as Record<string, string>,
+      }),
+      {
+        preAuthorize: () => true,
+        finalAuthorize: () => true,
+        execute: (ctx: {
+          inputs: { params: { id: string }; query: Record<string, string> };
+        }) => ctx.inputs,
+        redactResponse: (u: unknown) => u,
+      }
+    );
+    const handler = toNextHandler(piped);
+    expectTypeOf(handler).toBeFunction();
   });
 });

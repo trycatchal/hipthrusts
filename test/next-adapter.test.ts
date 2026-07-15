@@ -143,10 +143,10 @@ describe('toNextHandler', () => {
 
 describe('error detail on the wire (Finding P0-3)', () => {
   it('a zod sanitize failure responds 422 with issues (paths+messages only)', async () => {
-    const { SanitizeInputsSliceWithZod } = htZodFactory();
+    const { SanitizeInputsSlicesWithZod } = htZodFactory();
     const handler = toNextHandler(
       HTPipe(
-        SanitizeInputsSliceWithZod('body', z.object({ name: z.string() })),
+        SanitizeInputsSlicesWithZod({ body: z.object({ name: z.string() }) }),
         {
           sanitizeInputs: (i: any) => i,
           preAuthorize: () => true,

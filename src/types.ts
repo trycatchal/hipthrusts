@@ -1,5 +1,30 @@
 export type Constructor<T = {}> = new (...args: any[]) => T;
 
+// The out-of-band channel slice-style sanitizers use to hand the raw,
+// not-yet-sanitized remainder to the next sanitizer in a chain. Core DELETES
+// this key after the sanitize stage, so raw input can flow BETWEEN chained
+// sanitizers but can never reach preAuthorize or anything after it — nothing
+// survives sanitization except what a sanitizer explicitly returned.
+// Symbol.for() so the marker survives dual-package (ESM+CJS) loading; the
+// unique-symbol assertion lets it be used as a literal key in types.
+export const UNSAFE_SLICES: unique symbol = Symbol.for(
+  'hipthrusts.unsafeSlices'
+) as never;
+
+// The type-level face of the raw-remainder channel. A named interface (rather
+// than an inline computed symbol key) so declaration emit in dependent
+// modules can reference it.
+export interface HasUnsafeSlices {
+  [UNSAFE_SLICES]: Record<string, any>;
+}
+
+// What downstream stages actually see as `ctx.inputs`: the sanitize output
+// minus the raw-remainder channel (core strips it at runtime; this strips it
+// from the type).
+export type SanitizedOnly<T> = T extends object
+  ? Omit<T, typeof UNSAFE_SLICES>
+  : T;
+
 export type PromiseOrSync<T> = Promise<T> | T;
 export type PromiseResolveOrSync<T> = T extends Promise<infer U> ? U : T;
 

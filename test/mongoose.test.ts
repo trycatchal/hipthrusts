@@ -82,29 +82,27 @@ describe('SanitizeInputsWithMongoose', () => {
   });
 });
 
-describe('SanitizeInputsSliceWithMongoose', () => {
+describe('SanitizeInputsSlicesWithMongoose', () => {
   const factory = ht.documentFactoryFromForRequest({
     id: { type: String, required: true },
   });
 
-  it('sanitizes the named slice and passes the rest through', () => {
-    const { sanitizeInputs } = ht.SanitizeInputsSliceWithMongoose(
-      'params',
-      factory
-    );
+  it('sanitizes the named slice; unnamed slices are not named keys', () => {
+    const { sanitizeInputs } = ht.SanitizeInputsSlicesWithMongoose({
+      params: factory,
+    });
     const result = sanitizeInputs({
       params: { id: '7' },
       body: { untouched: true },
     });
     expect(result.params).toEqual({ id: '7' });
-    expect(result.body).toEqual({ untouched: true });
+    expect(Object.keys(result)).toEqual(['params']);
   });
 
   it('throws HipBadInputs naming the slice when invalid', () => {
-    const { sanitizeInputs } = ht.SanitizeInputsSliceWithMongoose(
-      'params',
-      factory
-    );
+    const { sanitizeInputs } = ht.SanitizeInputsSlicesWithMongoose({
+      params: factory,
+    });
     expect(() => sanitizeInputs({ params: {} })).toThrow('params not valid');
   });
 });
@@ -216,16 +214,26 @@ describe('findScoped / loadScopedTo (Finding P2-10)', () => {
     },
   };
 
-  it('findScoped composes ctx.queryScope into the filter (two-tenant fixture)', async () => {
-    const { execute } = ht.findScoped(FakeModel);
-    const result = await execute({ queryScope: { tenant: { $in: ['a'] } } });
-    expect(result.map((r: any) => r.name)).toEqual(['a-one', 'a-two']);
+  it('findScoped loads scoped rows on the LOAD stage and its execute returns them', async () => {
+    const frag = ht.findScoped(FakeModel);
+    const loaded = await frag.loadResources({
+      queryScope: { tenant: { $in: ['a'] } },
+    });
+    expect(loaded.scopedDocs.map((r: any) => r.name)).toEqual([
+      'a-one',
+      'a-two',
+    ]);
+    expect(frag.execute({ ...loaded })).toBe(loaded.scopedDocs);
   });
 
-  it('findScoped merges an extra filter on top of the scope', async () => {
-    const { execute } = ht.findScoped(FakeModel, { name: 'a-two' });
-    const result = await execute({ queryScope: { tenant: { $in: ['a'] } } });
-    expect(result.map((r: any) => r.name)).toEqual(['a-two']);
+  it('findScoped merges an extra filter and honors a custom docs key', async () => {
+    const frag = ht.findScoped(FakeModel, { name: 'a-two' }, 'items');
+    const loaded = await frag.loadResources({
+      queryScope: { tenant: { $in: ['a'] } },
+    });
+    expect(frag.execute({ ...loaded }).map((r: any) => r.name)).toEqual([
+      'a-two',
+    ]);
   });
 
   it('loadScopedTo stores the scoped rows under the given key', async () => {

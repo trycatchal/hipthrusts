@@ -5,7 +5,7 @@ import { htZodFactory } from '../src/zod';
 
 const {
   SanitizeInputsWithZod,
-  SanitizeInputsSliceWithZod,
+  SanitizeInputsSlicesWithZod,
   RedactResponseWithZod,
   PojoToValidated,
   stripIdTransform,
@@ -40,30 +40,30 @@ describe('SanitizeInputsWithZod', () => {
   });
 });
 
-describe('SanitizeInputsSliceWithZod', () => {
+describe('SanitizeInputsSlicesWithZod (single slice)', () => {
   const params = z.object({ id: z.string() });
 
-  it('sanitizes only the named slice and passes the rest through', () => {
-    const { sanitizeInputs } = SanitizeInputsSliceWithZod('params', params);
+  it('sanitizes the named slice; unnamed slices are not named keys', () => {
+    const { sanitizeInputs } = SanitizeInputsSlicesWithZod({ params });
     const result = sanitizeInputs({
       params: { id: '7' },
       body: { untouched: true },
     });
     expect(result.params).toEqual({ id: '7' });
-    expect(result.body).toEqual({ untouched: true });
+    expect(Object.keys(result)).toEqual(['params']);
   });
 
   it('throws HipBadInputs naming the slice when the slice is invalid', () => {
-    const { sanitizeInputs } = SanitizeInputsSliceWithZod('params', params);
+    const { sanitizeInputs } = SanitizeInputsSlicesWithZod({ params });
     expect(() => sanitizeInputs({ params: {} })).toThrow('params not valid');
   });
 
-  it('accepts missing fields when partial: true', () => {
+  it('partial updates: pass schema.partial() yourself', () => {
     const strict = z.object({ id: z.string(), name: z.string() });
-    const { sanitizeInputs } = SanitizeInputsSliceWithZod('params', strict, {
-      partial: true,
+    const { sanitizeInputs } = SanitizeInputsSlicesWithZod({
+      params: strict.partial(),
     });
-    expect((sanitizeInputs({ params: { id: '7' } }) as any).params).toEqual({
+    expect(sanitizeInputs({ params: { id: '7' } }).params).toEqual({
       id: '7',
     });
   });
@@ -111,13 +111,12 @@ describe('stripIdTransform', () => {
 });
 
 describe('SanitizeInputsSlicesWithZod', () => {
-  const { SanitizeInputsSlicesWithZod } = htZodFactory();
   const shapes = {
     params: z.object({ id: z.string() }),
     body: z.object({ name: z.string() }),
   };
 
-  it('validates every named slice and passes unnamed slices through', () => {
+  it('validates every named slice; unnamed slices do not become named keys', () => {
     const { sanitizeInputs } = SanitizeInputsSlicesWithZod(shapes);
     const result = sanitizeInputs({
       params: { id: '7' },
@@ -126,7 +125,7 @@ describe('SanitizeInputsSlicesWithZod', () => {
     });
     expect(result.params).toEqual({ id: '7' });
     expect(result.body).toEqual({ name: 'hip' });
-    expect(result.headers).toEqual({ untouched: true });
+    expect(Object.keys(result).sort()).toEqual(['body', 'params']);
   });
 
   it('throws HipBadInputs naming the offending slice', () => {

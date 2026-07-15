@@ -32,8 +32,9 @@ dogfooding-feedback fixes into the upcoming 0.12.0 release._
 - `HTPipe` typed overloads extended from 4 to 8 fragments.
 - `HTPipe` passes non-stage keys (e.g. `responseMeta`) through composition
   with right-wins semantics instead of silently dropping them.
-- `SanitizeInputsSlicesWithZod({ params: P, body: B })`: validate several
-  input slices in one fragment with every slice key named in the return type.
+- `SanitizeInputsSlices({ params: fn, ... })` core helper plus
+  `SanitizeInputsSlicesWithZod` / `SanitizeInputsSlicesWithMongoose`:
+  per-slice sanitization with every slice key named in the return type.
 - Tenant-scoping helpers in `htMongooseFactory`: `findScoped(Model,
   extraFilter?)` and `loadScopedTo(Model, key, extraFilter?)` compose
   `ctx.queryScope` into the query and type-REQUIRE it, making a missing
@@ -44,6 +45,15 @@ dogfooding-feedback fixes into the upcoming 0.12.0 release._
 - Type-level test suite (`vitest --typecheck`, `test/*.test-d.ts`).
 
 ### Removed (dogfooding feedback round)
+
+- **BREAKING:** `WithInputSlice`, `SanitizeInputsSliceWithZod`, and
+  `SanitizeInputsSliceWithMongoose` are gone — replaced by the map-based
+  plural forms (`SanitizeInputsSlices({ params: fn })`,
+  `SanitizeInputsSlicesWithZod({ params: Schema })`,
+  `SanitizeInputsSlicesWithMongoose({ params: Factory })`), which handle the
+  single-slice case with the same call shape and remove the
+  one-letter-apart Slice/Slices API trap. `SanitizeInputsSlicesWithZod` no
+  longer takes a `partial` option — pass `Schema.partial()` yourself.
 
 - **BREAKING:** the express adapter no longer depends on `@hapi/boom`. It now
   responds to errors directly (status + `{ error, issues?, detail? }`) like
@@ -71,8 +81,20 @@ dogfooding-feedback fixes into the upcoming 0.12.0 release._
   `422 { "error": "Malformed JSON body" }` to non-empty bodies that fail to
   parse as JSON instead of silently coercing them to `{}`; opt out with
   `allowMalformedBody: true`. Empty bodies still coerce to `{}`.
+- **BREAKING (strictness guarantee):** only explicitly-sanitized input
+  slices survive the sanitize stage. Chained slice sanitizers pass the raw
+  remainder to each other under the exported `UNSAFE_SLICES` symbol, and
+  core deletes that channel after the stage — an unsanitized slice never
+  reaches later stages, at runtime or in the types (consuming one downstream
+  is now a compile error). Pass a raw slice through explicitly with a no-op:
+  `SanitizeInputsSlices({ query: (q) => q })`. Whole-object sanitizers
+  (tRPC-style) are unaffected.
+- **BREAKING:** `findScoped` is now a two-stage fragment: the scoped
+  `Model.find` runs on the LOAD stage (rows in context for finalAuthorize /
+  redactResponse / downstream execute stages, under `scopedDocs` or a custom
+  third-argument key) with a trivial execute returning them.
 - `PipedSanitizeInputs` merges the left fragment's named keys through
-  passthrough-style right fragments, so piping two `WithInputSlice`
+  slice-style right fragments, so piping two `SanitizeInputsSlices`
   fragments keeps both slices visible to later stages (the README's own
   multi-slice example now typechecks).
 

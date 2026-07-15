@@ -33,6 +33,7 @@ import {
   PromiseOrSync,
   PromiseResolveOrSync,
   RedactResponseDepsMet,
+  UNSAFE_SLICES,
 } from './types.js';
 
 export function withDefaultImplementations<
@@ -196,11 +197,24 @@ export async function executeHipthrustable<
     { ...(raw as any), ...ambientSlot }
   );
 
-  const safeInputs = transformThrowSync(
+  const sanitizeOutput = transformThrowSync(
     badDataThrow,
     requestHandler.sanitizeInputs,
     unsafeInputs
   );
+
+  // The strictness guarantee: slice-style sanitizers pass the raw remainder
+  // to each other under UNSAFE_SLICES, and it dies HERE — nothing reaches
+  // later stages except what a sanitizer explicitly returned.
+  let safeInputs = sanitizeOutput;
+  if (
+    safeInputs !== null &&
+    typeof safeInputs === 'object' &&
+    UNSAFE_SLICES in safeInputs
+  ) {
+    safeInputs = { ...(safeInputs as object) };
+    delete (safeInputs as Record<PropertyKey, unknown>)[UNSAFE_SLICES];
+  }
 
   const inputsContext = {
     ambient: safeAmbient,
