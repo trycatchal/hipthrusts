@@ -101,16 +101,9 @@ describe('HTPipe arity beyond 4 (P1-7)', () => {
 
   it('composes 8 fragments', () => {
     const noop = { preAuthorize: () => true };
-    const piped = HTPipe(
-      noop,
-      noop,
-      noop,
-      noop,
-      noop,
-      noop,
-      noop,
-      { execute: () => ({ ok: true }) }
-    );
+    const piped = HTPipe(noop, noop, noop, noop, noop, noop, noop, {
+      execute: () => ({ ok: true }),
+    });
     expectTypeOf(piped.preAuthorize).toBeFunction();
     expectTypeOf(piped.execute).toBeFunction();
   });

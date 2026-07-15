@@ -101,7 +101,7 @@ describe('toNextHandler', () => {
     expect(await res.json()).toEqual({ error: 'denied' });
   });
 
-  it('returns a 500 with the uncaught-exception message on an unexpected throw', async () => {
+  it('returns a 500 with the standard scrub message on an unexpected throw', async () => {
     const handler = toNextHandler({
       sanitizeInputs: (i: any) => i,
       preAuthorize: () => true,
@@ -116,7 +116,7 @@ describe('toNextHandler', () => {
       routeCtx({})
     );
     expect(res.status).toBe(500);
-    expect(await res.json()).toEqual({ error: 'Uncaught exception' });
+    expect(await res.json()).toEqual({ error: 'Internal server error' });
   });
 
   it('issues a redirect on a HipRedirect', async () => {

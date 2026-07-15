@@ -12,13 +12,29 @@ export type HipErrorKind =
   | 'conflict'
   | 'internal';
 
+export interface HipErrorOptions {
+  // Chains the underlying failure for logging/debugging (standard Error.cause).
+  // Never serialized to clients.
+  cause?: unknown;
+  // Opt-in to serializing `detail` in HTTP error bodies (see hipErrorToBody).
+  // Off by default so unexpected internals stay scrubbed; set it when app code
+  // deliberately throws a structured payload the client should render.
+  expose?: boolean;
+}
+
 export abstract class HipError extends Error {
   public abstract readonly kind: HipErrorKind;
+  public readonly exposeDetail: boolean;
   constructor(
     message?: string,
-    public readonly detail?: unknown
+    public readonly detail?: unknown,
+    options?: HipErrorOptions
   ) {
-    super(message);
+    super(
+      message,
+      options?.cause !== undefined ? { cause: options.cause } : undefined
+    );
+    this.exposeDetail = options?.expose === true;
     // Maintain a correct prototype chain when extending a built-in under
     // ES5-targeted transpilation, and give each subclass a useful `name`.
     Object.setPrototypeOf(this, new.target.prototype);

@@ -105,8 +105,10 @@ describe('executeHipthrustable lifecycle', () => {
 
   // Regression test for the transformThrowPossiblyAsync sync-throw bug: an
   // async-capable stage (loadResources) that throws *synchronously* must still
-  // be transformed to the stage's semantic HipError, not leak the raw error.
-  it('transforms a SYNCHRONOUS throw from loadResources to HipNotFound', async () => {
+  // be transformed to a HipError, not leak the raw error. (Since Finding P0-4
+  // the transformed error is HipInternal — 404 is reserved for a deliberate
+  // HipNotFound throw.)
+  it('transforms a SYNCHRONOUS throw from loadResources to HipInternal', async () => {
     const handler = buildHandler({
       loadResources: () => {
         throw new Error('sync boom from an async-capable stage');
@@ -119,17 +121,103 @@ describe('executeHipthrustable lifecycle', () => {
       caught = e;
     }
     expect(isHipError(caught)).toBe(true);
-    expect(caught).toBeInstanceOf(HipNotFound);
+    expect(caught).toBeInstanceOf(HipInternal);
   });
 
-  it('still transforms an ASYNCHRONOUS rejection from loadResources to HipNotFound', async () => {
+  it('still transforms an ASYNCHRONOUS rejection from loadResources to HipInternal', async () => {
     const handler = buildHandler({
       loadResources: async () => {
         throw new Error('async boom');
       },
     });
     await expect(executeHipthrustable(handler, {})).rejects.toThrow(
-      HipNotFound
+      HipInternal
     );
+  });
+});
+
+describe('unknown-error routing (Finding P0-4)', () => {
+  const base = {
+    extractAmbient: () => ({}),
+    extractInputs: (raw: any) => raw,
+    sanitizeInputs: (i: any) => i,
+    preAuthorize: () => true,
+    loadResources: () => ({}),
+    finalAuthorize: () => true,
+    execute: () => ({ ok: true }),
+    redactResponse: (u: any) => u,
+  };
+
+  async function run(overrides: Record<string, any>) {
+    try {
+      await executeHipthrustable({ ...base, ...overrides } as any, {});
+      return undefined;
+    } catch (e) {
+      return e;
+    }
+  }
+
+  it('an unknown throw in loadResources becomes HipInternal with the original as cause', async () => {
+    const dbDown = new Error('db down');
+    const caught = await run({
+      loadResources: () => {
+        throw dbDown;
+      },
+    });
+    expect(caught).toBeInstanceOf(HipInternal);
+    expect((caught as HipInternal).message).toBe('Internal server error');
+    expect((caught as HipInternal).cause).toBe(dbDown);
+  });
+
+  it('an unknown throw in preAuthorize/finalAuthorize becomes HipInternal, not 403', async () => {
+    for (const stage of ['preAuthorize', 'finalAuthorize']) {
+      const boom = new Error('db down');
+      const caught = await run({
+        [stage]: () => {
+          throw boom;
+        },
+      });
+      expect(caught).toBeInstanceOf(HipInternal);
+      expect((caught as HipInternal).cause).toBe(boom);
+    }
+  });
+
+  it('a deliberate HipNotFound from loadResources still surfaces as-is', async () => {
+    const caught = await run({
+      loadResources: () => {
+        throw new HipNotFound('Resource not found');
+      },
+    });
+    expect(caught).toBeInstanceOf(HipNotFound);
+  });
+
+  it('unknown throws during input stages stay HipBadInputs and chain the cause', async () => {
+    const zodish = new Error('invalid');
+    const caught = await run({
+      sanitizeInputs: () => {
+        throw zodish;
+      },
+    });
+    expect(caught).toBeInstanceOf(HipBadInputs);
+    expect((caught as HipBadInputs).cause).toBe(zodish);
+  });
+
+  it('an unknown throw in execute uses the standard scrub message and chains the cause', async () => {
+    const boom = new Error('whoops');
+    const caught = await run({
+      execute: () => {
+        throw boom;
+      },
+    });
+    expect(caught).toBeInstanceOf(HipInternal);
+    expect((caught as HipInternal).message).toBe('Internal server error');
+    expect((caught as HipInternal).cause).toBe(boom);
+  });
+
+  it('returning false from the authorize stages still yields HipForbidden', async () => {
+    const pre = await run({ preAuthorize: () => false });
+    expect(pre).toBeInstanceOf(HipForbidden);
+    const fin = await run({ finalAuthorize: () => false });
+    expect(fin).toBeInstanceOf(HipForbidden);
   });
 });
