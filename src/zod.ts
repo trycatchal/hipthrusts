@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { HipBadInputs, HipInternal } from './errors.js';
-import { WithInputSlice } from './index.js';
+import { SanitizeInputsSlices } from './index.js';
 import {
   LoadResources,
   RedactResponse,
@@ -27,27 +27,30 @@ export function htZodFactory() {
     });
   }
 
-  function SanitizeInputsSliceWithZod<
-    TSliceName extends string,
-    TSafeSlice extends z.infer<TSchema>,
-    TSchema extends z.ZodType<any, any, any>,
-    TUnsafeSlice extends object,
-  >(sliceName: TSliceName, schema: TSchema, options?: { partial?: boolean }) {
-    const effectiveSchema =
-      options?.partial && (schema as any).partial
-        ? (schema as any).partial()
-        : schema;
-
-    return WithInputSlice<TSliceName, TUnsafeSlice, TSafeSlice>(
-      sliceName,
-      (unsafeSlice: TUnsafeSlice) => {
-        const parseResult = effectiveSchema.safeParse(unsafeSlice);
-        if (!parseResult.success) {
-          throw new HipBadInputs(`${sliceName} not valid`, parseResult.error);
-        }
-        return stripIdTransform(parseResult.data) as TSafeSlice;
-      }
-    );
+  // Validates one or more named slices in a single fragment; each slice key
+  // is named in the return type. Built on SanitizeInputsSlices, so only the
+  // slices you name here (or in other chained sanitize fragments) survive to
+  // later stages — unvalidated slices are dropped after the sanitize stage.
+  function SanitizeInputsSlicesWithZod<
+    TShapes extends Record<string, z.ZodType<any, any, any>>,
+  >(shapes: TShapes) {
+    const sanitizers = Object.fromEntries(
+      Object.keys(shapes).map((sliceName) => [
+        sliceName,
+        (unsafeSlice: unknown) => {
+          const parseResult = shapes[sliceName].safeParse(unsafeSlice);
+          if (!parseResult.success) {
+            throw new HipBadInputs(`${sliceName} not valid`, parseResult.error);
+          }
+          return stripIdTransform(parseResult.data);
+        },
+      ])
+    ) as {
+      [K in keyof TShapes & string]: (
+        unsafeSlice: unknown
+      ) => z.output<TShapes[K]>;
+    };
+    return SanitizeInputsSlices(sanitizers);
   }
 
   function RedactResponseWithZod<
@@ -81,7 +84,7 @@ export function htZodFactory() {
 
   return {
     SanitizeInputsWithZod,
-    SanitizeInputsSliceWithZod,
+    SanitizeInputsSlicesWithZod,
     RedactResponseWithZod,
     PojoToValidated,
     stripIdTransform,

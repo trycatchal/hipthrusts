@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 import {
   HipBadInputs,
   HipConflict,
   HipError,
+  hipErrorToBody,
   hipErrorToStatus,
   HipForbidden,
   HipInternal,
@@ -57,5 +59,50 @@ describe('HipRedirect', () => {
     expect(r.redirectUrl).toBe('/dashboard');
     expect(r.redirectCode).toBe(302);
     expect(new HipRedirect('/x', 307).redirectCode).toBe(307);
+  });
+});
+
+describe('hipErrorToBody (Finding P0-3)', () => {
+  it('projects a ZodError detail to issues with paths+messages and no input values', () => {
+    const schema = z.object({ name: z.string(), age: z.number() });
+    const parsed = schema.safeParse({ name: 42, age: 'secret-value' });
+    expect(parsed.success).toBe(false);
+    const body = hipErrorToBody(
+      new HipBadInputs(
+        'body not valid',
+        (parsed as { error: z.ZodError }).error
+      )
+    );
+    expect(body.error).toBe('body not valid');
+    expect(body.issues!.length).toBeGreaterThan(0);
+    for (const issue of body.issues!) {
+      expect(Array.isArray(issue.path)).toBe(true);
+      expect(typeof issue.message).toBe('string');
+      expect(Object.keys(issue).sort()).toEqual(['message', 'path']);
+    }
+    expect(JSON.stringify(body)).not.toContain('secret-value');
+    expect(body.detail).toBeUndefined();
+  });
+
+  it('exposes structured detail only with the explicit expose opt-in', () => {
+    const payload = { blockedBy: ['x'], blockingItems: ['y'] };
+    const optedIn = hipErrorToBody(
+      new HipConflict('blocked', payload, { expose: true })
+    );
+    expect(optedIn.detail).toEqual(payload);
+    const notOptedIn = hipErrorToBody(new HipConflict('blocked', payload));
+    expect(notOptedIn).toEqual({ error: 'blocked' });
+  });
+
+  it('HipInternal never exposes detail or issues, even when opted in', () => {
+    const zodError = z.object({ a: z.string() }).safeParse({ a: 1 });
+    const body = hipErrorToBody(
+      new HipInternal(
+        'Internal server error',
+        (zodError as { error?: z.ZodError }).error,
+        { expose: true }
+      )
+    );
+    expect(body).toEqual({ error: 'Internal server error' });
   });
 });

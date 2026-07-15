@@ -1,12 +1,20 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { executeHipthrustable } from './core.js';
-import { hipErrorToStatus, HipRedirect, isHipError } from './errors.js';
+import {
+  hipErrorToBody,
+  hipErrorToStatus,
+  HipRedirect,
+  isHipError,
+} from './errors.js';
 import {
   composeHttpHipthrustable,
   HasResponseMeta,
+  HttpAdapterOptions,
   HttpHandlerConfig,
   HttpRawInputs,
   resolveResponseMeta,
+  safeInvokeAfterResponse,
+  safeInvokeOnError,
 } from './http-adapter.js';
 import {
   ExecuteDepsMet,
@@ -72,7 +80,7 @@ export function toFastifyHandler<
     ExecuteDepsMet<TConf> &
     RedactResponseDepsMet<TConf> &
     HasResponseMeta,
->(handlingStrategy: TConf) {
+>(handlingStrategy: TConf, options: HttpAdapterOptions = {}) {
   const fullHipthrustable = composeHttpHipthrustable<FastifyRaw>(
     handlingStrategy,
     fastifyBaselineExtractInputs
@@ -91,14 +99,23 @@ export function toFastifyHandler<
           reply.header(headerName, meta.headers[headerName]);
         }
       }
+      if (options.afterResponse) {
+        // Fastify is Node-only; schedule off the response path.
+        setImmediate(() =>
+          safeInvokeAfterResponse(options.afterResponse, context)
+        );
+      }
       return reply.status(meta.status || 200).send(response);
     } catch (exception) {
+      if (!(exception instanceof HipRedirect)) {
+        safeInvokeOnError(options.onError, exception, { raw: { req, reply } });
+      }
       if (exception instanceof HipRedirect) {
         return reply.redirect(exception.redirectUrl, exception.redirectCode);
       } else if (isHipError(exception)) {
         return reply
           .status(hipErrorToStatus(exception))
-          .send({ error: exception.message });
+          .send(hipErrorToBody(exception));
       }
       return reply.status(500).send({ error: 'Internal server error' });
     }

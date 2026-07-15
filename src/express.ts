@@ -1,12 +1,22 @@
-import Boom from '@hapi/boom';
 import { NextFunction, Request, Response } from 'express';
 import {
   assertHipthrustable,
   executeHipthrustable,
   withDefaultImplementations,
 } from './core.js';
-import { HipError, HipRedirect, isHipError } from './errors.js';
-import { HasResponseMeta, ResponseMeta } from './http-adapter.js';
+import {
+  hipErrorToBody,
+  hipErrorToStatus,
+  HipRedirect,
+  isHipError,
+} from './errors.js';
+import {
+  HasResponseMeta,
+  HttpAdapterOptions,
+  ResponseMeta,
+  safeInvokeAfterResponse,
+  safeInvokeOnError,
+} from './http-adapter.js';
 import {
   ExecuteDepsMet,
   FinalAuthorizeDepsMet,
@@ -32,23 +42,13 @@ export interface ExpressRaw {
   res: Response;
 }
 
-// Maps a transport-agnostic HipError to its Boom equivalent so existing express
-// error-handling middleware keeps working unchanged.
-function hipErrorToBoom(error: HipError): Error {
-  switch (error.kind) {
-    case 'badInputs':
-      return Boom.badData(error.message, error.detail);
-    case 'unauthorized':
-      return Boom.unauthorized(error.message);
-    case 'forbidden':
-      return Boom.forbidden(error.message);
-    case 'notFound':
-      return Boom.notFound(error.message);
-    case 'conflict':
-      return Boom.conflict(error.message);
-    default:
-      return Boom.badImplementation(error.message);
-  }
+export interface HipExpressHandlerOptions extends HttpAdapterOptions {
+  // By default the adapter responds to errors directly (status +
+  // { error, issues?, detail? }), matching the other HTTP adapters. Set true
+  // to instead forward every error — the HipError itself, or the raw unknown
+  // exception — to next() so your own express error middleware handles it
+  // (use hipErrorToStatus/hipErrorToBody from 'hipthrusts/errors' there).
+  delegateErrors?: boolean;
 }
 
 // Handler config the dev writes for an express endpoint.
@@ -101,7 +101,17 @@ type ExpressHandlerConfig<
       PromiseResolveOrSync<TLoadResourcesOut> &
       PromiseResolveOrSync<TFinalAuthOut>
   ) => PromiseOrSync<TUnsafeResponse>;
-  redactResponse: (unsafe: PromiseResolveOrSync<TUnsafeResponse>) => TResponse;
+  redactResponse: (
+    unsafe: PromiseResolveOrSync<TUnsafeResponse>,
+    context: { inputs: PromiseResolveOrSync<TSafeInputs> } & ([
+      TAmbient,
+    ] extends [never]
+      ? {}
+      : { ambient: TAmbient }) &
+      PromiseResolveOrSync<TPreAuthOut> &
+      PromiseResolveOrSync<TLoadResourcesOut> &
+      PromiseResolveOrSync<TFinalAuthOut>
+  ) => TResponse;
   responseMeta?: ResponseMeta | ((ctx: any) => ResponseMeta);
 };
 
@@ -151,7 +161,7 @@ export function toExpressHandler<
     ExecuteDepsMet<TConf> &
     RedactResponseDepsMet<TConf> &
     HasResponseMeta,
->(handlingStrategy: TConf) {
+>(handlingStrategy: TConf, options: HipExpressHandlerOptions = {}) {
   assertHipthrustable(handlingStrategy);
 
   // Compose: baseline runs first, handler's extractInputs (if any) chains after.
@@ -190,14 +200,24 @@ export function toExpressHandler<
           res.setHeader(headerName, meta.headers[headerName]);
         }
       }
+      if (options.afterResponse) {
+        res.on('finish', () =>
+          safeInvokeAfterResponse(options.afterResponse, context)
+        );
+      }
       res.status(meta.status || 200).json(response);
     } catch (exception) {
+      if (!(exception instanceof HipRedirect)) {
+        safeInvokeOnError(options.onError, exception, { raw: { req, res } });
+      }
       if (exception instanceof HipRedirect) {
         res.redirect(exception.redirectCode, exception.redirectUrl);
-      } else if (isHipError(exception)) {
-        next(hipErrorToBoom(exception));
-      } else {
+      } else if (options.delegateErrors) {
         next(exception);
+      } else if (isHipError(exception)) {
+        res.status(hipErrorToStatus(exception)).json(hipErrorToBody(exception));
+      } else {
+        res.status(500).json({ error: 'Internal server error' });
       }
     }
   };

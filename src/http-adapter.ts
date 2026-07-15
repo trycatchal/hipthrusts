@@ -23,6 +23,52 @@ export interface HasResponseMeta<TCtx = any> {
   responseMeta?: ResponseMeta | ((ctx: TCtx) => ResponseMeta);
 }
 
+// Options shared by every HTTP adapter.
+export interface HttpAdapterOptions {
+  // Observability seam: called with every error the adapter converts to an
+  // error response (HipErrors and unknown failures alike; redirects excluded).
+  // With unknown-error cause-chaining, `error.cause` holds the real underlying
+  // failure. A throwing onError never affects the response.
+  onError?: (error: unknown, info: { raw?: unknown }) => void;
+  // Post-response side effects (audit logs, notifications) with access to the
+  // full final lifecycle context (inputs, ambient, loaded resources, response).
+  // Runs only after a SUCCESSFUL lifecycle; failures never fire it. Errors
+  // thrown from it never affect the response.
+  afterResponse?: (context: Record<string, unknown>) => void | Promise<void>;
+}
+
+// Invokes onError so that a broken logging hook can never break the response.
+export function safeInvokeOnError(
+  onError: HttpAdapterOptions['onError'],
+  error: unknown,
+  info: { raw?: unknown }
+) {
+  if (!onError) {
+    return;
+  }
+  try {
+    onError(error, info);
+  } catch {
+    // Logging failures are intentionally swallowed.
+  }
+}
+
+// Fire-and-forget afterResponse; sync throws and async rejections are both
+// swallowed so side effects can never affect the (already sent) response.
+export function safeInvokeAfterResponse(
+  afterResponse: HttpAdapterOptions['afterResponse'],
+  context: Record<string, unknown>
+) {
+  if (!afterResponse) {
+    return;
+  }
+  try {
+    Promise.resolve(afterResponse(context)).catch(() => {});
+  } catch {
+    // Side-effect failures are intentionally swallowed.
+  }
+}
+
 // Generic HTTP handler config, parameterized by the framework raw type so each
 // adapter supplies its own shape for extractAmbient/extractInputs. Everything
 // from sanitizeInputs onward is framework-independent.
@@ -74,7 +120,17 @@ export type HttpHandlerConfig<
       PromiseResolveOrSync<TLoadResourcesOut> &
       PromiseResolveOrSync<TFinalAuthOut>
   ) => PromiseOrSync<TUnsafeResponse>;
-  redactResponse: (unsafe: PromiseResolveOrSync<TUnsafeResponse>) => TResponse;
+  redactResponse: (
+    unsafe: PromiseResolveOrSync<TUnsafeResponse>,
+    context: { inputs: PromiseResolveOrSync<TSafeInputs> } & ([
+      TAmbient,
+    ] extends [never]
+      ? {}
+      : { ambient: TAmbient }) &
+      PromiseResolveOrSync<TPreAuthOut> &
+      PromiseResolveOrSync<TLoadResourcesOut> &
+      PromiseResolveOrSync<TFinalAuthOut>
+  ) => TResponse;
   responseMeta?: ResponseMeta | ((ctx: any) => ResponseMeta);
 };
 

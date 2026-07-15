@@ -82,29 +82,27 @@ describe('SanitizeInputsWithMongoose', () => {
   });
 });
 
-describe('SanitizeInputsSliceWithMongoose', () => {
+describe('SanitizeInputsSlicesWithMongoose', () => {
   const factory = ht.documentFactoryFromForRequest({
     id: { type: String, required: true },
   });
 
-  it('sanitizes the named slice and passes the rest through', () => {
-    const { sanitizeInputs } = ht.SanitizeInputsSliceWithMongoose(
-      'params',
-      factory
-    );
+  it('sanitizes the named slice; unnamed slices are not named keys', () => {
+    const { sanitizeInputs } = ht.SanitizeInputsSlicesWithMongoose({
+      params: factory,
+    });
     const result = sanitizeInputs({
       params: { id: '7' },
       body: { untouched: true },
     });
     expect(result.params).toEqual({ id: '7' });
-    expect(result.body).toEqual({ untouched: true });
+    expect(Object.keys(result)).toEqual(['params']);
   });
 
   it('throws HipBadInputs naming the slice when invalid', () => {
-    const { sanitizeInputs } = ht.SanitizeInputsSliceWithMongoose(
-      'params',
-      factory
-    );
+    const { sanitizeInputs } = ht.SanitizeInputsSlicesWithMongoose({
+      params: factory,
+    });
     expect(() => sanitizeInputs({ params: {} })).toThrow('params not valid');
   });
 });
@@ -192,5 +190,57 @@ describe('dtoSchemaObj', () => {
     expect(ht.dtoSchemaObj(source, 'name')).toEqual({
       name: { type: String },
     });
+  });
+});
+
+describe('findScoped / loadScopedTo (Finding P2-10)', () => {
+  const rows = [
+    { _id: '1', tenant: 'a', name: 'a-one' },
+    { _id: '2', tenant: 'a', name: 'a-two' },
+    { _id: '3', tenant: 'b', name: 'b-one' },
+  ];
+  const FakeModel = {
+    find(filter: Record<string, any>) {
+      return {
+        exec: async () =>
+          rows.filter((row) =>
+            Object.entries(filter).every(([k, v]) =>
+              v && typeof v === 'object' && Array.isArray(v.$in)
+                ? v.$in.includes((row as any)[k])
+                : (row as any)[k] === v
+            )
+          ),
+      };
+    },
+  };
+
+  it('findScoped loads scoped rows on the LOAD stage and its execute returns them', async () => {
+    const frag = ht.findScoped(FakeModel);
+    const loaded = await frag.loadResources({
+      queryScope: { tenant: { $in: ['a'] } },
+    });
+    expect(loaded.scopedDocs.map((r: any) => r.name)).toEqual([
+      'a-one',
+      'a-two',
+    ]);
+    expect(frag.execute({ ...loaded })).toBe(loaded.scopedDocs);
+  });
+
+  it('findScoped merges an extra filter and honors a custom docs key', async () => {
+    const frag = ht.findScoped(FakeModel, { name: 'a-two' }, 'items');
+    const loaded = await frag.loadResources({
+      queryScope: { tenant: { $in: ['a'] } },
+    });
+    expect(frag.execute({ ...loaded }).map((r: any) => r.name)).toEqual([
+      'a-two',
+    ]);
+  });
+
+  it('loadScopedTo stores the scoped rows under the given key', async () => {
+    const { loadResources } = ht.loadScopedTo(FakeModel, 'items');
+    const out: any = await loadResources({
+      queryScope: { tenant: { $in: ['b'] } },
+    });
+    expect(out.items.map((r: any) => r.name)).toEqual(['b-one']);
   });
 });

@@ -7,6 +7,7 @@ function fakeContext(opts: {
   params?: Record<string, string>;
   query?: Record<string, string>;
   body?: any;
+  bodyText?: string;
   headers?: Record<string, string>;
 }): any {
   const calls: any = {};
@@ -17,6 +18,12 @@ function fakeContext(opts: {
       param: () => opts.params || {},
       query: () => opts.query || {},
       header: () => opts.headers || {},
+      text: async () => {
+        if (opts.bodyText !== undefined) {
+          return opts.bodyText;
+        }
+        return opts.body === undefined ? '' : JSON.stringify(opts.body);
+      },
       json: async () => {
         if (opts.body === undefined) {
           throw new Error('no body');
@@ -114,5 +121,67 @@ describe('toHonoHandler', () => {
     const c = fakeContext({ body: {} });
     await handler(c);
     expect(c.calls.redirect).toEqual({ url: '/dashboard', code: 301 });
+  });
+});
+
+describe('hono adapter options (Findings P1-5, P2-12.2)', () => {
+  const okStages = {
+    sanitizeInputs: (i: any) => i,
+    preAuthorize: () => true,
+    finalAuthorize: () => true,
+    execute: () => ({ ok: true }),
+    redactResponse: (u: any) => u,
+  };
+
+  it('a malformed JSON body responds 422 by default', async () => {
+    const handler = toHonoHandler(okStages, {});
+    const c = fakeContext({ bodyText: '{not json' });
+    await handler(c);
+    expect(c.calls.json.status).toBe(422);
+    expect(c.calls.json.body.error).toBe('Malformed JSON body');
+  });
+
+  it('allowMalformedBody restores the old coerce-to-{} behavior', async () => {
+    const handler = toHonoHandler(okStages, { allowMalformedBody: true });
+    const c = fakeContext({ bodyText: '{not json' });
+    await handler(c);
+    expect(c.calls.json.status).toBe(200);
+  });
+
+  it('onError fires with the converted error and a throwing hook is harmless', async () => {
+    const seen: unknown[] = [];
+    const boom = new Error('db down');
+    const handler = toHonoHandler(
+      {
+        ...okStages,
+        execute: () => {
+          throw boom;
+        },
+      },
+      {
+        onError: (e) => {
+          seen.push(e);
+          throw new Error('broken logger');
+        },
+      }
+    );
+    const c = fakeContext({ body: {} });
+    await handler(c);
+    expect(c.calls.json.status).toBe(500);
+    expect((seen[0] as Error).cause).toBe(boom);
+  });
+
+  it('afterResponse receives the final context', async () => {
+    let ctx: any;
+    const handler = toHonoHandler(okStages, {
+      afterResponse: (c2) => {
+        ctx = c2;
+      },
+    });
+    const c = fakeContext({ body: { x: 1 } });
+    await handler(c);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(ctx.response).toEqual({ ok: true });
+    expect(ctx.inputs.body).toEqual({ x: 1 });
   });
 });

@@ -73,7 +73,15 @@ type TrpcHandlerConfig<
       Awaited<TLoadResourcesOut> &
       Awaited<TFinalAuthOut>
   ) => PromiseOrSync<TUnsafeResponse>;
-  redactResponse: (unsafe: Awaited<TUnsafeResponse>) => TResponse;
+  redactResponse: (
+    unsafe: Awaited<TUnsafeResponse>,
+    context: { inputs: Awaited<TSafeInputs> } & ([TAmbient] extends [never]
+      ? {}
+      : { ambient: TAmbient }) &
+      Awaited<TPreAuthOut> &
+      Awaited<TLoadResourcesOut> &
+      Awaited<TFinalAuthOut>
+  ) => TResponse;
 };
 
 type InferredTrpcConfig = OptionalStagesShape & HasRequiredStages;

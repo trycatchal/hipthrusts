@@ -3,7 +3,6 @@ import {
   HipError,
   HipForbidden,
   HipInternal,
-  HipNotFound,
   HipRedirect,
   isHipError,
 } from './errors.js';
@@ -34,6 +33,7 @@ import {
   PromiseOrSync,
   PromiseResolveOrSync,
   RedactResponseDepsMet,
+  UNSAFE_SLICES,
 } from './types.js';
 
 export function withDefaultImplementations<
@@ -124,7 +124,7 @@ export function authorizationPassed<TAuthOut extends boolean | object>(
 }
 
 function transformThrowSync<TOrigFn extends (param: any) => any>(
-  toThrow: HipError,
+  toThrow: (cause: unknown) => HipError,
   origFn: TOrigFn,
   origParam: Parameters<TOrigFn>[0]
 ): ReturnType<TOrigFn> {
@@ -134,7 +134,7 @@ function transformThrowSync<TOrigFn extends (param: any) => any>(
     if (exception instanceof HipRedirect || isHipError(exception)) {
       throw exception;
     } else {
-      throw toThrow;
+      throw toThrow(exception);
     }
   }
 }
@@ -142,7 +142,7 @@ function transformThrowSync<TOrigFn extends (param: any) => any>(
 async function transformThrowPossiblyAsync<
   TOrigFn extends (param: any) => PromiseOrSync<any>,
 >(
-  toThrow: HipError,
+  toThrow: (cause: unknown) => HipError,
   origFn: TOrigFn,
   origParam: Parameters<TOrigFn>[0]
 ): Promise<PromiseResolveOrSync<ReturnType<TOrigFn>>> {
@@ -152,10 +152,17 @@ async function transformThrowPossiblyAsync<
     if (exception instanceof HipRedirect || isHipError(exception)) {
       throw exception;
     } else {
-      throw toThrow;
+      throw toThrow(exception);
     }
   }
 }
+
+// One scrub message for every unexpected (non-HipError) failure, shared with
+// the adapters' outer catch so clients see a single vocabulary.
+export const INTERNAL_ERROR_MESSAGE = 'Internal server error';
+
+const internalFrom = (cause: unknown) =>
+  new HipInternal(INTERNAL_ERROR_MESSAGE, undefined, { cause });
 
 // Runs the full lifecycle and returns the safe response plus the final context
 // (inputs/ambient/loaded resources/auth output/execute output/response). The
@@ -170,7 +177,11 @@ export async function executeHipthrustable<
     RedactResponseDepsMet<TConf>,
   TRaw,
 >(requestHandler: TConf, raw: TRaw) {
-  const badDataThrow = new HipBadInputs('User input sanitization failure');
+  // Unknown throws during input handling stay 422: these stages exist to
+  // reject untrusted input, and validators (zod .parse etc.) throw their own
+  // library errors. The original error is chained as `cause` for logging.
+  const badDataThrow = (cause: unknown) =>
+    new HipBadInputs('User input sanitization failure', undefined, { cause });
 
   const safeAmbient = transformThrowSync(
     badDataThrow,
@@ -186,11 +197,24 @@ export async function executeHipthrustable<
     { ...(raw as any), ...ambientSlot }
   );
 
-  const safeInputs = transformThrowSync(
+  const sanitizeOutput = transformThrowSync(
     badDataThrow,
     requestHandler.sanitizeInputs,
     unsafeInputs
   );
+
+  // The strictness guarantee: slice-style sanitizers pass the raw remainder
+  // to each other under UNSAFE_SLICES, and it dies HERE — nothing reaches
+  // later stages except what a sanitizer explicitly returned.
+  let safeInputs = sanitizeOutput;
+  if (
+    safeInputs !== null &&
+    typeof safeInputs === 'object' &&
+    UNSAFE_SLICES in safeInputs
+  ) {
+    safeInputs = { ...(safeInputs as object) };
+    delete (safeInputs as Record<PropertyKey, unknown>)[UNSAFE_SLICES];
+  }
 
   const inputsContext = {
     ambient: safeAmbient,
@@ -201,8 +225,11 @@ export async function executeHipthrustable<
     'General pre-authorization lacking for this resource'
   );
 
+  // Denial (returning/throwing an authorization outcome) is 403; an UNKNOWN
+  // throw here is an app bug or infra failure, not a denial — route it to 500
+  // so outages don't masquerade as authorization results.
   const preAuthorizeResult = transformThrowSync(
-    forbiddenPreAuthThrow,
+    internalFrom,
     requestHandler.preAuthorize,
     inputsContext
   );
@@ -221,10 +248,13 @@ export async function executeHipthrustable<
     ...preAuthorizeContextOut,
   };
 
-  const notFoundThrow = new HipNotFound('Resource not found');
+  // 404 is a DELIBERATE signal: throw HipNotFound (e.g. via findByIdRequired)
+  // when a required resource is missing. An unknown throw here — a dropped DB
+  // connection, a bug — becomes a 500 with the original error chained as
+  // `cause`, so infra failures no longer masquerade as "not found".
   const attachedDataContextOnly =
     (await transformThrowPossiblyAsync(
-      notFoundThrow,
+      internalFrom,
       requestHandler.loadResources,
       preAuthContext
     )) || {};
@@ -235,7 +265,7 @@ export async function executeHipthrustable<
   );
 
   const finalAuthorizeResult = await transformThrowPossiblyAsync(
-    forbiddenFinalAuthThrow,
+    internalFrom,
     requestHandler.finalAuthorize,
     attachedDataContext
   );
@@ -261,7 +291,10 @@ export async function executeHipthrustable<
       requestHandler.execute(finalAuthContext)
     );
 
-    const safeResponse = requestHandler.redactResponse(unsafeResponse);
+    const safeResponse = requestHandler.redactResponse(
+      unsafeResponse,
+      finalAuthContext
+    );
 
     const context =
       unsafeResponse !== null && typeof unsafeResponse === 'object'
@@ -277,7 +310,7 @@ export async function executeHipthrustable<
     if (exception instanceof HipRedirect || isHipError(exception)) {
       throw exception;
     } else {
-      throw new HipInternal('Uncaught exception');
+      throw internalFrom(exception);
     }
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "hipthrusts",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/trycatchal/hipthrusts.git"
@@ -67,12 +67,12 @@
     "check:exports": "attw --pack . --profile node16",
     "smoke": "node scripts/smoke.cjs && node scripts/smoke.mjs",
     "docs:build": "typedoc",
-    "prepublishOnly": "pnpm clean && pnpm build && pnpm check:exports && pnpm smoke"
+    "prepublishOnly": "pnpm clean && pnpm build && pnpm check:exports && pnpm smoke",
+    "prepack": "pnpm clean && pnpm build"
   },
   "license": "MIT",
   "packageManager": "pnpm@10.33.0",
   "peerDependencies": {
-    "@hapi/boom": "^10.0.0",
     "express": "^5.1.0",
     "fastify": "^5.0.0",
     "hono": "^4.0.0",
@@ -82,9 +82,6 @@
     "zod": "^4.0.0"
   },
   "peerDependenciesMeta": {
-    "@hapi/boom": {
-      "optional": true
-    },
     "express": {
       "optional": true
     },
@@ -110,7 +107,6 @@
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
     "@eslint/js": "^10.0.1",
-    "@hapi/boom": "^10.0.1",
     "@hono/node-server": "^2.0.4",
     "@types/express": "^5.0.6",
     "@types/node": "^25.9.1",

@@ -1,6 +1,9 @@
 import { NextRequest } from 'next/server';
 import { describe, expect, it } from 'vitest';
-import { HipForbidden, HipRedirect } from '../src/errors';
+import { z } from 'zod';
+import { HTPipe } from '../src';
+import { HipConflict, HipForbidden, HipRedirect } from '../src/errors';
+import { htZodFactory } from '../src/zod';
 import { defineNextHandler, toNextHandler } from '../src/next';
 
 function postReq(url: string, body: any): NextRequest {
@@ -101,7 +104,7 @@ describe('toNextHandler', () => {
     expect(await res.json()).toEqual({ error: 'denied' });
   });
 
-  it('returns a 500 with the uncaught-exception message on an unexpected throw', async () => {
+  it('returns a 500 with the standard scrub message on an unexpected throw', async () => {
     const handler = toNextHandler({
       sanitizeInputs: (i: any) => i,
       preAuthorize: () => true,
@@ -116,7 +119,7 @@ describe('toNextHandler', () => {
       routeCtx({})
     );
     expect(res.status).toBe(500);
-    expect(await res.json()).toEqual({ error: 'Uncaught exception' });
+    expect(await res.json()).toEqual({ error: 'Internal server error' });
   });
 
   it('issues a redirect on a HipRedirect', async () => {
@@ -135,5 +138,196 @@ describe('toNextHandler', () => {
     );
     expect([302, 307]).toContain(res.status);
     expect(res.headers.get('location')).toBe('http://localhost/login');
+  });
+});
+
+describe('error detail on the wire (Finding P0-3)', () => {
+  it('a zod sanitize failure responds 422 with issues (paths+messages only)', async () => {
+    const { SanitizeInputsSlicesWithZod } = htZodFactory();
+    const handler = toNextHandler(
+      HTPipe(
+        SanitizeInputsSlicesWithZod({ body: z.object({ name: z.string() }) }),
+        {
+          sanitizeInputs: (i: any) => i,
+          preAuthorize: () => true,
+          finalAuthorize: () => true,
+          execute: () => ({}),
+          redactResponse: (u: any) => u,
+        }
+      ) as any
+    );
+    const res = await handler(
+      postReq('http://localhost/api/x', { name: 12345678901 }),
+      routeCtx({})
+    );
+    expect(res.status).toBe(422);
+    const body = await res.json();
+    expect(body.error).toBe('body not valid');
+    expect(body.issues[0].path).toEqual(['name']);
+    expect(typeof body.issues[0].message).toBe('string');
+    expect(JSON.stringify(body)).not.toContain('12345678901');
+  });
+
+  it('an exposed HipConflict detail reaches the client', async () => {
+    const handler = toNextHandler({
+      sanitizeInputs: (i: any) => i,
+      preAuthorize: () => true,
+      finalAuthorize: () => true,
+      execute: () => {
+        throw new HipConflict(
+          'blocked',
+          { blockedBy: ['a'] },
+          { expose: true }
+        );
+      },
+      redactResponse: (u: any) => u,
+    });
+    const res = await handler(
+      postReq('http://localhost/api/x', {}),
+      routeCtx({})
+    );
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      error: 'blocked',
+      detail: { blockedBy: ['a'] },
+    });
+  });
+});
+
+describe('adapter options (Findings P1-5, P1-6, P2-12.2)', () => {
+  const okStages = {
+    sanitizeInputs: (i: any) => i,
+    preAuthorize: () => true,
+    loadResources: () => ({ thing: { id: 't1' } }),
+    finalAuthorize: () => true,
+    execute: () => ({ made: true }),
+    redactResponse: (u: any) => u,
+  };
+
+  it('onError receives the original error (via cause) on a 500 path', async () => {
+    const seen: unknown[] = [];
+    const dbDown = new Error('db down');
+    const handler = toNextHandler(
+      {
+        ...okStages,
+        loadResources: () => {
+          throw dbDown;
+        },
+      },
+      { onError: (e) => seen.push(e) }
+    );
+    const res = await handler(
+      postReq('http://localhost/api/x', {}),
+      routeCtx({})
+    );
+    expect(res.status).toBe(500);
+    expect(seen).toHaveLength(1);
+    expect((seen[0] as Error).cause).toBe(dbDown);
+  });
+
+  it('a throwing onError does not change the response', async () => {
+    const handler = toNextHandler(
+      {
+        ...okStages,
+        execute: () => {
+          throw new Error('boom');
+        },
+      },
+      {
+        onError: () => {
+          throw new Error('logging is broken too');
+        },
+      }
+    );
+    const res = await handler(
+      postReq('http://localhost/api/x', {}),
+      routeCtx({})
+    );
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: 'Internal server error' });
+  });
+
+  it('afterResponse receives the final context (inputs, resources, response)', async () => {
+    let ctx: any;
+    const handler = toNextHandler(okStages, {
+      afterResponse: (c) => {
+        ctx = c;
+      },
+    });
+    const res = await handler(
+      postReq('http://localhost/api/x?q=1', { name: 'n' }),
+      routeCtx({ id: '9' })
+    );
+    expect(res.status).toBe(200);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(ctx).toBeDefined();
+    expect(ctx.inputs.body).toEqual({ name: 'n' });
+    expect(ctx.inputs.params).toEqual({ id: '9' });
+    expect(ctx.thing).toEqual({ id: 't1' });
+    expect(ctx.response).toEqual({ made: true });
+  });
+
+  it('afterResponse does not fire on a failed request', async () => {
+    let fired = false;
+    const handler = toNextHandler(
+      {
+        ...okStages,
+        finalAuthorize: () => false,
+      },
+      {
+        afterResponse: () => {
+          fired = true;
+        },
+      }
+    );
+    const res = await handler(
+      postReq('http://localhost/api/x', {}),
+      routeCtx({})
+    );
+    expect(res.status).toBe(403);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(fired).toBe(false);
+  });
+
+  it('a malformed JSON body responds 422 by default', async () => {
+    const handler = toNextHandler(okStages);
+    const res = await handler(
+      new NextRequest('http://localhost/api/x', {
+        method: 'POST',
+        body: '{not json',
+        headers: { 'content-type': 'application/json' },
+      }),
+      routeCtx({})
+    );
+    expect(res.status).toBe(422);
+    expect((await res.json()).error).toBe('Malformed JSON body');
+  });
+
+  it('allowMalformedBody restores coerce-to-{} and an empty body still passes', async () => {
+    const seenBodies: any[] = [];
+    const strategy = {
+      ...okStages,
+      sanitizeInputs: (i: any) => {
+        seenBodies.push(i.body);
+        return i;
+      },
+    };
+    const lenient = toNextHandler(strategy, { allowMalformedBody: true });
+    const malformed = await lenient(
+      new NextRequest('http://localhost/api/x', {
+        method: 'POST',
+        body: '{not json',
+        headers: { 'content-type': 'application/json' },
+      }),
+      routeCtx({})
+    );
+    expect(malformed.status).toBe(200);
+    const strict = toNextHandler(strategy);
+    const empty = await strict(
+      new NextRequest('http://localhost/api/x', { method: 'POST' }),
+      routeCtx({})
+    );
+    expect(empty.status).toBe(200);
+    expect(seenBodies).toEqual([{}, {}]);
   });
 });

@@ -1,12 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server.js';
 import { executeHipthrustable } from './core.js';
-import { hipErrorToStatus, HipRedirect, isHipError } from './errors.js';
+import {
+  hipErrorToBody,
+  hipErrorToStatus,
+  HipRedirect,
+  isHipError,
+} from './errors.js';
+import { HipBadInputs } from './errors.js';
 import {
   composeHttpHipthrustable,
   HasResponseMeta,
+  HttpAdapterOptions,
   HttpHandlerConfig,
   HttpRawInputs,
   resolveResponseMeta,
+  safeInvokeAfterResponse,
+  safeInvokeOnError,
 } from './http-adapter.js';
 import {
   ExecuteDepsMet,
@@ -31,12 +40,15 @@ export interface NextRaw extends HttpRawInputs {
   [key: string]: unknown;
 }
 
-export interface HipNextHandlerOptions {
+export interface HipNextHandlerOptions extends HttpAdapterOptions {
   // Async setup run before the lifecycle; its result is merged into the raw
   // envelope so the handler's extractAmbient can read it (e.g. auth principal).
   gatherContext?: (req: NextRequest) => Promise<Record<string, unknown>>;
-  // Scheduled via Next's `after()` to run once the response is sent.
-  afterResponse?: () => void;
+  // A non-empty request body that fails to parse as JSON responds 422 by
+  // default (previously it silently became `{}`, which lets garbage bodies
+  // "succeed" against fully-optional schemas). Set true to restore the old
+  // coerce-to-{} behavior.
+  allowMalformedBody?: boolean;
 }
 
 const BODYLESS_METHODS = ['GET', 'HEAD', 'DELETE'];
@@ -100,22 +112,21 @@ export function toNextHandler<
     req: NextRequest,
     routeContext?: NextRouteContext
   ): Promise<NextResponse> => {
+    let raw: NextRaw | undefined;
     try {
-      if (options.afterResponse) {
-        try {
-          const { after } = await import('next/server.js');
-          after(options.afterResponse);
-        } catch {
-          // `after` unavailable (older Next.js); skip scheduling.
-        }
-      }
-
       let body: any = {};
       if (!BODYLESS_METHODS.includes(req.method)) {
-        try {
-          body = await req.json();
-        } catch {
-          body = {};
+        const text = await req.text();
+        if (text.trim() !== '') {
+          try {
+            body = JSON.parse(text);
+          } catch {
+            if (options.allowMalformedBody) {
+              body = {};
+            } else {
+              throw new HipBadInputs('Malformed JSON body');
+            }
+          }
         }
       }
 
@@ -126,7 +137,7 @@ export function toNextHandler<
         ? await options.gatherContext(req)
         : {};
 
-      const raw: NextRaw = {
+      raw = {
         req,
         params,
         query,
@@ -139,12 +150,29 @@ export function toNextHandler<
         fullHipthrustable as any,
         raw
       );
+      if (options.afterResponse) {
+        // Scheduled AFTER the lifecycle resolves so the callback receives the
+        // final context, via Next's `after()` (runs once the response is
+        // sent). Failed requests never fire it.
+        const runAfterResponse = () =>
+          safeInvokeAfterResponse(options.afterResponse, context);
+        try {
+          const { after } = await import('next/server.js');
+          after(runAfterResponse);
+        } catch {
+          // `after` unavailable (older Next.js); run fire-and-forget instead.
+          runAfterResponse();
+        }
+      }
       const meta = resolveResponseMeta(responseMeta, context);
       return NextResponse.json(response, {
         status: meta.status || 200,
         headers: meta.headers,
       });
     } catch (exception) {
+      if (!(exception instanceof HipRedirect)) {
+        safeInvokeOnError(options.onError, exception, { raw });
+      }
       if (exception instanceof HipRedirect) {
         const code = REDIRECT_CODES.includes(exception.redirectCode)
           ? exception.redirectCode
@@ -154,10 +182,9 @@ export function toNextHandler<
           code as 301 | 302 | 303 | 307 | 308
         );
       } else if (isHipError(exception)) {
-        return NextResponse.json(
-          { error: exception.message },
-          { status: hipErrorToStatus(exception) }
-        );
+        return NextResponse.json(hipErrorToBody(exception), {
+          status: hipErrorToStatus(exception),
+        });
       }
       return NextResponse.json(
         { error: 'Internal server error' },

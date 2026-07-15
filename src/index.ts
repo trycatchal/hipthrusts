@@ -21,7 +21,9 @@ import {
 } from './lifecycle-functions.js';
 import {
   AllStageKeys,
+  AllStagesOptionalShape,
   HasExecute,
+  HasUnsafeSlices,
   HasExtractAmbient,
   HasExtractInputs,
   HasFinalAuthorize,
@@ -38,6 +40,7 @@ import {
   OptionallyHasRedactResponse,
   OptionallyHasSanitizeInputs,
   PromiseResolveOrSync,
+  UNSAFE_SLICES,
 } from './types.js';
 
 type FunctionTaking<TIn> = (param: TIn) => any;
@@ -177,26 +180,38 @@ export function SanitizeInputsFromTo<
   });
 }
 
-// Per-slot composer: writes to sanitizeInputs under a chosen key, preserving any other
-// slices already present. This restores per-slot ergonomics on top of the single-slot core.
-// Example: WithInputSlice('params', IdSchema.parse) becomes the new WithParamsSanitized.
-// Input type is intentionally loose (Record<string, any>) so multiple WithInputSlice mixins
-// can chain freely; the sanitizer enforces the slice's own runtime shape.
-export function WithInputSlice<
-  TSliceName extends string,
-  TUnsafeSlice,
-  TSafeSlice,
->(sliceName: TSliceName, sanitizer: (unsafeSlice: TUnsafeSlice) => TSafeSlice) {
+// Per-slice sanitization for HTTP-style handlers whose inputs are the
+// canonical { params, query, body, headers } object. Each named slice is
+// sanitized by its function; the RAW remainder travels to the next chained
+// sanitizer under UNSAFE_SLICES only — core deletes that key after the
+// sanitize stage, so ONLY explicitly-sanitized slices reach later stages
+// (want a raw slice through? say so: `{ query: (q) => q }`). Fragments chain
+// via HTPipe: a later fragment's slices are added (right wins on a clash,
+// re-sanitizing from the raw slice), and its output carries the union of all
+// named slices.
+export function SanitizeInputsSlices<
+  TSanitizers extends Record<string, (unsafeSlice: any) => any>,
+>(sanitizers: TSanitizers) {
+  type SafeSlices = {
+    [K in keyof TSanitizers]: ReturnType<TSanitizers[K]>;
+  };
   return SanitizeInputs(
-    (
-      unsafeInputs: Record<string, any>
-    ): {
-      [K in TSliceName]: TSafeSlice;
-    } & Record<string, any> => {
-      return {
-        ...unsafeInputs,
-        [sliceName]: sanitizer(unsafeInputs[sliceName] as TUnsafeSlice),
-      } as { [K in TSliceName]: TSafeSlice } & Record<string, any>;
+    (unsafeInputs: Record<string, any>): SafeSlices & HasUnsafeSlices => {
+      const chained =
+        unsafeInputs !== null &&
+        typeof unsafeInputs === 'object' &&
+        UNSAFE_SLICES in unsafeInputs;
+      // First fragment in a chain receives the raw inputs; later fragments
+      // receive the previous fragment's { ...safe, [UNSAFE_SLICES]: raw }.
+      const rawSlices: Record<string, any> = chained
+        ? (unsafeInputs as Record<PropertyKey, any>)[UNSAFE_SLICES]
+        : unsafeInputs;
+      const out: Record<PropertyKey, any> = chained ? { ...unsafeInputs } : {};
+      for (const sliceName of Object.keys(sanitizers)) {
+        out[sliceName] = sanitizers[sliceName](rawSlices[sliceName]);
+      }
+      out[UNSAFE_SLICES] = rawSlices;
+      return out as SafeSlices & HasUnsafeSlices;
     }
   );
 }
@@ -506,13 +521,44 @@ type PipedExtractInputs<TLeft, TRight> = [TLeft] extends [
     ? { extractInputs: TRight['extractInputs'] }
     : {};
 
+// Strips index signatures, keeping only statically-known keys, so merging a
+// legacy `X & Record<string, any>`-shaped return can't omit everything.
+type KnownKeys<T> = {
+  [K in keyof T as string extends K
+    ? never
+    : number extends K
+      ? never
+      : symbol extends K
+        ? never
+        : K]: T[K];
+};
+
+// Sanitize stages CHAIN (the right one consumes the left one's output), so the
+// composed return type depends on the right fragment's style:
+// - slice style (carries the UNSAFE_SLICES raw-remainder channel, i.e.
+//   SanitizeInputsSlices): the left fragment's named slices survive — merge
+//   them in (right wins on clashes).
+// - full-replace style (no UNSAFE_SLICES key): the right return describes the
+//   entire output; the left's keys are gone.
+type ChainedSanitizeReturn<TLeftReturn, TRightReturn> =
+  typeof UNSAFE_SLICES extends keyof TRightReturn
+    ? TRightReturn &
+        Omit<
+          KnownKeys<Omit<TLeftReturn, typeof UNSAFE_SLICES>>,
+          keyof KnownKeys<TRightReturn>
+        >
+    : TRightReturn;
+
 type PipedSanitizeInputs<TLeft, TRight> = [TLeft] extends [
   HasSanitizeInputs<any, any>,
 ]
   ? [TRight] extends [HasSanitizeInputs<any, any>]
     ? HasSanitizeInputs<
         SanitizeInputsContextIn<TLeft>,
-        SanitizeInputsReturn<TRight>
+        ChainedSanitizeReturn<
+          SanitizeInputsReturn<TLeft>,
+          SanitizeInputsReturn<TRight>
+        >
       >
     : { sanitizeInputs: TLeft['sanitizeInputs'] }
   : [TRight] extends [HasSanitizeInputs<any, any>]
@@ -726,6 +772,58 @@ type ClashlessRedactResponse<_TLeft, TRight> = OptionallyHasRedactResponse<
     : any
 >;
 
+// Non-stage keys (e.g. the HTTP adapters' `responseMeta`) pass through HTPipe
+// untouched with right-wins semantics, so adapter-level configuration can live
+// on any fragment. Core stays ignorant of what the keys mean.
+type NonStageKeys<T> = Omit<KnownKeys<T>, AllStageKeys>;
+type PipedPassthrough<TLeft, TRight> = NonStageKeys<TRight> &
+  Omit<NonStageKeys<TLeft>, keyof NonStageKeys<TRight>>;
+
+// Flat variant for the 5+-arity overloads: folds right-wins passthrough over
+// the raw fragment tuple (first fragment = leftmost = lowest precedence).
+// Operating on plain fragments instead of nested PipedAll folds keeps the
+// mapped-type instantiation cost linear.
+type PipedPassthroughAll<Ts extends readonly any[]> = Ts extends [
+  infer THead,
+  ...infer TRest,
+]
+  ? TRest extends []
+    ? NonStageKeys<THead>
+    : PipedPassthrough<THead, PipedPassthroughAll<TRest>>
+  : {};
+
+const ALL_STAGE_KEYS: AllStageKeys[] = [
+  'extractAmbient',
+  'extractInputs',
+  'sanitizeInputs',
+  'preAuthorize',
+  'loadResources',
+  'finalAuthorize',
+  'execute',
+  'redactResponse',
+];
+
+// Compact aliases for the higher arities: the intersection composes the same
+// way per-stage folds do, because each PipedX contributes a disjoint key.
+type PipedAll<TLeft, TRight> = PipedExtractAmbient<TLeft, TRight> &
+  PipedExtractInputs<TLeft, TRight> &
+  PipedSanitizeInputs<TLeft, TRight> &
+  PipedPreAuthorize<TLeft, TRight> &
+  PipedLoadResources<TLeft, TRight> &
+  PipedFinalAuthorize<TLeft, TRight> &
+  PipedExecute<TLeft, TRight> &
+  PipedRedactResponse<TLeft, TRight>;
+
+function nonStageKeysOf(obj: Record<string, any>) {
+  const out: Record<string, any> = {};
+  for (const key of Object.keys(obj)) {
+    if (!(ALL_STAGE_KEYS as string[]).includes(key)) {
+      out[key] = obj[key];
+    }
+  }
+  return out;
+}
+
 // no parameter - returns empty object
 export function HTPipe(): {};
 
@@ -739,7 +837,7 @@ export function HTPipe<
     OptionallyHasFinalAuthorize<any, any> &
     OptionallyHasExecute<any, any> &
     OptionallyHasRedactResponse<any, any>,
->(obj: T): Pick<T, AllStageKeys>;
+>(obj: T): Pick<T, AllStageKeys> & NonStageKeys<T>;
 
 // two parameters with automatic type guessing of right - all or nothing!
 export function HTPipe<
@@ -794,7 +892,8 @@ export function HTPipe<
   PipedLoadResources<TLeft, TRight> &
   PipedFinalAuthorize<TLeft, TRight> &
   PipedExecute<TLeft, TRight> &
-  PipedRedactResponse<TLeft, TRight>;
+  PipedRedactResponse<TLeft, TRight> &
+  PipedPassthrough<TLeft, TRight>;
 
 // two parameters with possibly added inputs
 export function HTPipe<
@@ -824,7 +923,8 @@ export function HTPipe<
   PipedLoadResources<TLeft, TRight> &
   PipedFinalAuthorize<TLeft, TRight> &
   PipedExecute<TLeft, TRight> &
-  PipedRedactResponse<TLeft, TRight>;
+  PipedRedactResponse<TLeft, TRight> &
+  PipedPassthrough<TLeft, TRight>;
 
 // three parameters with possibly added inputs
 export function HTPipe<
@@ -863,7 +963,8 @@ export function HTPipe<
   PipedLoadResources<T3, PipedLoadResources<T2, T1>> &
   PipedFinalAuthorize<T3, PipedFinalAuthorize<T2, T1>> &
   PipedExecute<T3, PipedExecute<T2, T1>> &
-  PipedRedactResponse<T3, PipedRedactResponse<T2, T1>>;
+  PipedRedactResponse<T3, PipedRedactResponse<T2, T1>> &
+  PipedPassthrough<T3, PipedPassthrough<T2, T1>>;
 
 // four parameters with possibly added inputs
 export function HTPipe<
@@ -941,7 +1042,96 @@ export function HTPipe<
     PipedFinalAuthorize<T3, PipedFinalAuthorize<T2, T1>>
   > &
   PipedExecute<T4, PipedExecute<T3, PipedExecute<T2, T1>>> &
-  PipedRedactResponse<T4, PipedRedactResponse<T3, PipedRedactResponse<T2, T1>>>;
+  PipedRedactResponse<
+    T4,
+    PipedRedactResponse<T3, PipedRedactResponse<T2, T1>>
+  > &
+  PipedPassthrough<T4, PipedPassthrough<T3, PipedPassthrough<T2, T1>>>;
+
+// five parameters with possibly added inputs
+export function HTPipe<
+  T5 extends AllStagesOptionalShape,
+  T4 extends AllStagesOptionalShape,
+  T3 extends AllStagesOptionalShape,
+  T2 extends AllStagesOptionalShape,
+  T1 extends AllStagesOptionalShape,
+>(
+  obj5: T5,
+  obj4: T4,
+  obj3: T3,
+  obj2: T2,
+  obj1: T1
+): PipedAll<T5, PipedAll<T4, PipedAll<T3, PipedAll<T2, T1>>>> &
+  PipedPassthroughAll<[T5, T4, T3, T2, T1]>;
+
+// six parameters with possibly added inputs
+export function HTPipe<
+  T6 extends AllStagesOptionalShape,
+  T5 extends AllStagesOptionalShape,
+  T4 extends AllStagesOptionalShape,
+  T3 extends AllStagesOptionalShape,
+  T2 extends AllStagesOptionalShape,
+  T1 extends AllStagesOptionalShape,
+>(
+  obj6: T6,
+  obj5: T5,
+  obj4: T4,
+  obj3: T3,
+  obj2: T2,
+  obj1: T1
+): PipedAll<T6, PipedAll<T5, PipedAll<T4, PipedAll<T3, PipedAll<T2, T1>>>>> &
+  PipedPassthroughAll<[T6, T5, T4, T3, T2, T1]>;
+
+// seven parameters with possibly added inputs
+export function HTPipe<
+  T7 extends AllStagesOptionalShape,
+  T6 extends AllStagesOptionalShape,
+  T5 extends AllStagesOptionalShape,
+  T4 extends AllStagesOptionalShape,
+  T3 extends AllStagesOptionalShape,
+  T2 extends AllStagesOptionalShape,
+  T1 extends AllStagesOptionalShape,
+>(
+  obj7: T7,
+  obj6: T6,
+  obj5: T5,
+  obj4: T4,
+  obj3: T3,
+  obj2: T2,
+  obj1: T1
+): PipedAll<
+  T7,
+  PipedAll<T6, PipedAll<T5, PipedAll<T4, PipedAll<T3, PipedAll<T2, T1>>>>>
+> &
+  PipedPassthroughAll<[T7, T6, T5, T4, T3, T2, T1]>;
+
+// eight parameters with possibly added inputs
+export function HTPipe<
+  T8 extends AllStagesOptionalShape,
+  T7 extends AllStagesOptionalShape,
+  T6 extends AllStagesOptionalShape,
+  T5 extends AllStagesOptionalShape,
+  T4 extends AllStagesOptionalShape,
+  T3 extends AllStagesOptionalShape,
+  T2 extends AllStagesOptionalShape,
+  T1 extends AllStagesOptionalShape,
+>(
+  obj8: T8,
+  obj7: T7,
+  obj6: T6,
+  obj5: T5,
+  obj4: T4,
+  obj3: T3,
+  obj2: T2,
+  obj1: T1
+): PipedAll<
+  T8,
+  PipedAll<
+    T7,
+    PipedAll<T6, PipedAll<T5, PipedAll<T4, PipedAll<T3, PipedAll<T2, T1>>>>>
+  >
+> &
+  PipedPassthroughAll<[T8, T7, T6, T5, T4, T3, T2, T1]>;
 
 export function HTPipe(...objs: any[]) {
   if (objs.length === 0) {
@@ -954,6 +1144,10 @@ export function HTPipe(...objs: any[]) {
     const left = objs[0];
     const right = objs[1];
     return {
+      // Non-stage keys (adapter config like responseMeta) pass through,
+      // right-wins. Stage keys are rebuilt below and never leak through here.
+      ...nonStageKeysOf(left),
+      ...nonStageKeysOf(right),
       ...((isHasExtractAmbient(left) && isHasExtractAmbient(right)
         ? {
             extractAmbient: (context: any) => {
@@ -1126,9 +1320,10 @@ export function HTPipe(...objs: any[]) {
             : {}) as PipedExecute<any, any>),
       ...((isHasRedactResponse(left) && isHasRedactResponse(right)
         ? {
-            redactResponse: (context: any) => {
-              const leftOut = left.redactResponse(context) || {};
-              const rightOut = right.redactResponse(leftOut) || {};
+            redactResponse: (unsafeResponse: any, context: any) => {
+              const leftOut =
+                left.redactResponse(unsafeResponse, context) || {};
+              const rightOut = right.redactResponse(leftOut, context) || {};
               return rightOut;
             },
           }
@@ -1143,6 +1338,8 @@ export function HTPipe(...objs: any[]) {
   return objs.reduce((prev: any, curr: any) => HTPipe(prev, curr), {});
 }
 
+export { UNSAFE_SLICES } from './types.js';
+export type { HasUnsafeSlices, SanitizedOnly } from './types.js';
 export * from './core.js';
 export * from './errors.js';
 export * from './http-adapter.js';

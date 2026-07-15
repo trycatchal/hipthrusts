@@ -2,7 +2,12 @@
 // Then:     curl -X POST localhost:4000/greet/world
 // (In your own project, import from 'hipthrusts/...' instead of '../src/...'.)
 import express, { NextFunction, Request, Response } from 'express';
-import { HipBadInputs } from '../src/errors';
+import {
+  HipBadInputs,
+  hipErrorToBody,
+  hipErrorToStatus,
+  isHipError,
+} from '../src/errors';
 import { defineExpressHandler, toExpressHandler } from '../src/express';
 
 const greet = defineExpressHandler({
@@ -23,12 +28,15 @@ const greet = defineExpressHandler({
 
 const app = express();
 app.use(express.json());
-app.post('/greet/:name', toExpressHandler(greet));
+// By default the adapter responds to errors directly
+// (status + { error, issues?, detail? }) — no error middleware needed.
+// This example opts into `delegateErrors` to show the middleware route:
+app.post('/greet/:name', toExpressHandler(greet, { delegateErrors: true }));
 
-// Express error middleware: hipthrusts hands Boom errors to next().
-app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
-  if (err && err.isBoom) {
-    res.status(err.output.statusCode).json(err.output.payload);
+// With delegateErrors, every error reaches next(); translate it yourself:
+app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
+  if (isHipError(err)) {
+    res.status(hipErrorToStatus(err)).json(hipErrorToBody(err));
   } else {
     res.status(500).json({ error: 'Internal server error' });
   }

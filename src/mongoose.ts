@@ -1,5 +1,5 @@
 import { HipBadInputs, HipNotFound } from './errors.js';
-import { WithInputSlice } from './index.js';
+import { SanitizeInputsSlices } from './index.js';
 import {
   Execute,
   LoadResources,
@@ -16,6 +16,18 @@ interface ModelWithFindById<TInstance = any> {
 
 interface ModelWithFindOne<TInstance = any> {
   findOne(options: any): { exec(): Promise<TInstance> };
+}
+
+interface ModelWithFind<TInstance = any> {
+  find(filter: any): { exec(): Promise<TInstance[]> };
+}
+
+// The context contribution/requirement for tenant-scoped list endpoints: some
+// fragment contributes `queryScope` (a mongo filter restricting what the
+// caller may see) and the scoped finders below type-REQUIRE it, so forgetting
+// the scope is a compile error instead of a cross-tenant data leak.
+export interface HasQueryScope {
+  queryScope: Record<string, unknown>;
 }
 
 interface HasValidateSync {
@@ -130,35 +142,74 @@ export function htMongooseFactory(mongoose: any) {
     });
   }
 
-  // Per-slice mongoose validation; composes via WithInputSlice for per-slot ergonomics.
-  // Example: SanitizeInputsSliceWithMongoose('params', ThingByIdParamFactory)
-  function SanitizeInputsSliceWithMongoose<
-    TSliceName extends string,
-    TSafeSlice extends ReturnType<TInstance['toObject']>,
-    TDocFactory extends DocumentFactory<any>,
-    TInstance extends ReturnType<TDocFactory>,
-    TUnsafeSlice extends object,
-  >(
-    sliceName: TSliceName,
-    DocFactory: TDocFactory,
-    options?: { validateModifiedOnly?: boolean }
+  // Per-slice mongoose validation for one or more named slices; composes via
+  // SanitizeInputsSlices, so only explicitly-sanitized slices survive the
+  // sanitize stage. Example:
+  //   SanitizeInputsSlicesWithMongoose({ params: ThingByIdParamFactory })
+  function SanitizeInputsSlicesWithMongoose<
+    TFactories extends Record<string, DocumentFactory<any>>,
+  >(factories: TFactories, options?: { validateModifiedOnly?: boolean }) {
+    const sanitizers = Object.fromEntries(
+      Object.keys(factories).map((sliceName) => [
+        sliceName,
+        (unsafeSlice: unknown) => {
+          const doc = factories[sliceName](unsafeSlice);
+          const validateErrors = doc.validateSync(
+            undefined,
+            options?.validateModifiedOnly
+              ? { validateModifiedOnly: true }
+              : undefined
+          );
+          if (validateErrors !== undefined) {
+            throw new HipBadInputs(`${sliceName} not valid`);
+          }
+          return doc.toObject({ transform: stripIdTransform });
+        },
+      ])
+    ) as {
+      [K in keyof TFactories & string]: (
+        unsafeSlice: unknown
+      ) => ReturnType<ReturnType<TFactories[K]>['toObject']>;
+    };
+    return SanitizeInputsSlices(sanitizers);
+  }
+
+  // LoadResources fragment: fetches Model.find with the composed filter
+  // `{ ...ctx.queryScope, ...extraFilter }` and stores the rows under
+  // `docsKey`. `queryScope` is REQUIRED in the context type, so the deps-met
+  // machinery forces some earlier fragment (e.g. a LoadResources contributing
+  // the caller's tenant filter) to provide it — authorization-as-query-scope
+  // by construction.
+  function loadScopedTo<TKey extends string>(
+    Model: ModelWithFind,
+    docsKey: TKey,
+    extraFilter?: object
   ) {
-    return WithInputSlice<TSliceName, TUnsafeSlice, TSafeSlice>(
-      sliceName,
-      (unsafeSlice: TUnsafeSlice) => {
-        const doc = DocFactory(unsafeSlice);
-        const validateErrors = doc.validateSync(
-          undefined,
-          options?.validateModifiedOnly
-            ? { validateModifiedOnly: true }
-            : undefined
-        );
-        if (validateErrors !== undefined) {
-          throw new HipBadInputs(`${sliceName} not valid`);
-        }
-        return doc.toObject({ transform: stripIdTransform }) as TSafeSlice;
-      }
-    );
+    return LoadResources(async (context: HasQueryScope) => {
+      return {
+        [docsKey]: await Model.find({
+          ...context.queryScope,
+          ...(extraFilter || {}),
+        }).exec(),
+      } as Record<TKey, any[]>;
+    });
+  }
+
+  // The plain list endpoint in one fragment: loadScopedTo on the load stage
+  // (so the rows sit in context for finalAuthorize / redactResponse /
+  // downstream execute stages) plus a trivial execute that returns them.
+  // Fetching lives on the LOAD stage — piping your own execute after this one
+  // overrides the response without re-running or wasting the query.
+  function findScoped<TKey extends string = 'scopedDocs'>(
+    Model: ModelWithFind,
+    extraFilter?: object,
+    docsKey?: TKey
+  ) {
+    const key = (docsKey ?? 'scopedDocs') as TKey;
+    return {
+      ...loadScopedTo(Model, key, extraFilter),
+      ...Execute((context: Record<TKey, any[]>) => context[key]),
+    };
   }
 
   function SaveOnDocumentFrom(propertyKeyOfDocument: string) {
@@ -225,7 +276,7 @@ export function htMongooseFactory(mongoose: any) {
 
   return {
     SanitizeInputsWithMongoose,
-    SanitizeInputsSliceWithMongoose,
+    SanitizeInputsSlicesWithMongoose,
     PojoToDocument,
     RedactResponseWithMongoose,
     UpdateDocumentFromTo,
@@ -235,6 +286,8 @@ export function htMongooseFactory(mongoose: any) {
     dtoSchemaObj,
     findByIdRequired,
     findOneByRequired,
+    findScoped,
+    loadScopedTo,
     stripIdTransform,
   };
 }

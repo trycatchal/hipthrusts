@@ -1,7 +1,6 @@
-import Boom from '@hapi/boom';
 import { describe, expect, it } from 'vitest';
 
-import { HTPipe, WithInputSlice } from '../src';
+import { HTPipe, SanitizeInputsSlices, UNSAFE_SLICES } from '../src';
 import { executeHipthrustable, withDefaultImplementations } from '../src/core';
 import { HipForbidden } from '../src/errors';
 import { toExpressHandler } from '../src/express';
@@ -291,31 +290,35 @@ describe('HipThrusTS', () => {
       });
     });
 
-    describe('WithInputSlice', () => {
-      it('writes to sanitizeInputs under named slice and preserves others', () => {
-        const params = WithInputSlice('params', (p: { id: string }) => ({
-          id: p.id.trim(),
-        }));
+    describe('SanitizeInputsSlices', () => {
+      it('names only sanitized slices; the raw rest rides the UNSAFE_SLICES channel', () => {
+        const params = SanitizeInputsSlices({
+          params: (p: { id: string }) => ({ id: p.id.trim() }),
+        });
         const out = params.sanitizeInputs({
           params: { id: '  abc  ' },
           body: { keep: true },
           query: {},
           headers: {},
         });
-        expect(out).toEqual({
-          params: { id: 'abc' },
+        expect(out.params).toEqual({ id: 'abc' });
+        expect(Object.keys(out)).toEqual(['params']);
+        expect((out as any)[UNSAFE_SLICES]).toEqual({
+          params: { id: '  abc  ' },
           body: { keep: true },
           query: {},
           headers: {},
         });
       });
 
-      it('composes with HTPipe so multiple slices coexist', () => {
+      it('composes with HTPipe so multiple slices coexist (unsanitized ones stay raw-channel-only)', () => {
         const both = HTPipe(
-          WithInputSlice('params', (p: { id: string }) => ({ id: p.id })),
-          WithInputSlice('body', (b: { name: string }) => ({
-            name: b.name.toUpperCase(),
-          }))
+          SanitizeInputsSlices({
+            params: (p: { id: string }) => ({ id: p.id }),
+          }),
+          SanitizeInputsSlices({
+            body: (b: { name: string }) => ({ name: b.name.toUpperCase() }),
+          })
         );
         const out = both.sanitizeInputs({
           params: { id: '42' },
@@ -323,12 +326,17 @@ describe('HipThrusTS', () => {
           query: { ignored: true },
           headers: {},
         });
-        expect(out).toEqual({
-          params: { id: '42' },
-          body: { name: 'FOO' },
-          query: { ignored: true },
-          headers: {},
-        });
+        expect(out.params).toEqual({ id: '42' });
+        expect(out.body).toEqual({ name: 'FOO' });
+        expect(Object.keys(out).sort()).toEqual(['body', 'params']);
+        expect((out as any)[UNSAFE_SLICES].query).toEqual({ ignored: true });
+      });
+
+      it('an explicit no-op slice is the way to pass raw data through', () => {
+        const frag = SanitizeInputsSlices({ query: (q: unknown) => q });
+        const out = frag.sanitizeInputs({ query: { raw: 1 }, body: { x: 2 } });
+        expect(out.query).toEqual({ raw: 1 });
+        expect(Object.keys(out)).toEqual(['query']);
       });
     });
 
@@ -584,7 +592,7 @@ describe('HipThrusTS', () => {
         expect(resUpdated.statusCode).toBe(200);
       });
 
-      it('translates a denied authorization to a Boom 403 via next', async () => {
+      it('translates a denied authorization to a direct 403 response', async () => {
         const handler = toExpressHandler({
           sanitizeInputs: (i: any) => i,
           preAuthorize: () => false,
@@ -592,14 +600,10 @@ describe('HipThrusTS', () => {
           execute: () => ({}),
           redactResponse: (u: any) => u,
         });
-        let nextErr: any;
         const res = fakeRes();
-        await handler(rawReq as any, res, ((e: any) => {
-          nextErr = e;
-        }) as any);
-        expect(nextErr).toBeDefined();
-        expect(Boom.isBoom(nextErr)).toBe(true);
-        expect(nextErr.output.statusCode).toBe(403);
+        await handler(rawReq as any, res, (() => undefined) as any);
+        expect(res.statusCode).toBe(403);
+        expect(res.body.error).toBeDefined();
       });
     });
 
@@ -663,5 +667,68 @@ describe('HipThrusTS', () => {
         );
       });
     });
+  });
+});
+
+describe('HTPipe non-stage key passthrough (Finding P0-2)', () => {
+  const requiredStages = {
+    sanitizeInputs: (i: any) => i,
+    preAuthorize: () => true,
+    finalAuthorize: () => true,
+    execute: () => ({ made: true }),
+    redactResponse: (u: any) => u,
+  };
+
+  it('carries responseMeta through HTPipe', () => {
+    const piped = HTPipe(
+      { preAuthorize: () => true },
+      { ...requiredStages, responseMeta: { status: 201 } }
+    );
+    expect((piped as any).responseMeta).toEqual({ status: 201 });
+  });
+
+  it('right fragment responseMeta wins over the left one', () => {
+    const piped = HTPipe(
+      { preAuthorize: () => true, responseMeta: { status: 200 } },
+      { ...requiredStages, responseMeta: { status: 201 } }
+    );
+    expect((piped as any).responseMeta).toEqual({ status: 201 });
+  });
+
+  it('passes non-stage keys through multi-fragment pipes and single-fragment pipes', () => {
+    const single = HTPipe({ ...requiredStages, responseMeta: { status: 202 } });
+    expect((single as any).responseMeta).toEqual({ status: 202 });
+    const triple = HTPipe(
+      { preAuthorize: () => true, responseMeta: { status: 200 } },
+      { loadResources: () => ({}) },
+      { ...requiredStages, responseMeta: { status: 201 } }
+    );
+    expect((triple as any).responseMeta).toEqual({ status: 201 });
+  });
+
+  it('a piped responseMeta reaches the wire through an HTTP adapter', async () => {
+    const handler = toExpressHandler(
+      HTPipe(
+        { preAuthorize: () => true },
+        { ...requiredStages, responseMeta: { status: 201 } }
+      ) as any
+    );
+    const res: any = {
+      statusCode: 200,
+      status(code: number) {
+        this.statusCode = code;
+        return this;
+      },
+      json() {
+        return this;
+      },
+      setHeader() {},
+    };
+    await handler(
+      { params: {}, query: {}, body: {}, headers: {} } as any,
+      res,
+      (() => undefined) as any
+    );
+    expect(res.statusCode).toBe(201);
   });
 });
