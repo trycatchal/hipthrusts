@@ -1303,9 +1303,10 @@ export function HTPipe(...objs: any[]) {
             : {}) as PipedExecute<any, any>),
       ...((isHasRedactResponse(left) && isHasRedactResponse(right)
         ? {
-            redactResponse: (context: any) => {
-              const leftOut = left.redactResponse(context) || {};
-              const rightOut = right.redactResponse(leftOut) || {};
+            redactResponse: (unsafeResponse: any, context: any) => {
+              const leftOut =
+                left.redactResponse(unsafeResponse, context) || {};
+              const rightOut = right.redactResponse(leftOut, context) || {};
               return rightOut;
             },
           }

@@ -277,7 +277,10 @@ export async function executeHipthrustable<
       requestHandler.execute(finalAuthContext)
     );
 
-    const safeResponse = requestHandler.redactResponse(unsafeResponse);
+    const safeResponse = requestHandler.redactResponse(
+      unsafeResponse,
+      finalAuthContext
+    );
 
     const context =
       unsafeResponse !== null && typeof unsafeResponse === 'object'

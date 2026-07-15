@@ -68,12 +68,18 @@ export interface HasExecute<TContextIn, TUnsafeResponse> {
   execute: (context: TContextIn) => PromiseOrSync<TUnsafeResponse>;
 }
 
+// The second parameter is the final lifecycle context (everything execute
+// saw), so redaction can depend on e.g. the caller's role without smuggling
+// authz flags through the execute return value. The runtime always passes it;
+// it is declared optional so existing one-argument call sites keep compiling,
+// and TS's parameter-optionality laxity means two-parameter redactors with a
+// required, precisely-typed context still satisfy the shape.
 export interface OptionallyHasRedactResponse<TUnsafeResponse, TResponse> {
-  redactResponse?: (unsafe: TUnsafeResponse) => TResponse;
+  redactResponse?: (unsafe: TUnsafeResponse, context?: any) => TResponse;
 }
 
 export interface HasRedactResponse<TUnsafeResponse, TResponse> {
-  redactResponse: (unsafe: TUnsafeResponse) => TResponse;
+  redactResponse: (unsafe: TUnsafeResponse, context?: any) => TResponse;
 }
 
 export type HasRequiredStages = HasSanitizeInputs<any, any> &
@@ -212,6 +218,14 @@ type ReturnedSomewhereUpToRedactResponse<TOut, TValue> = [TOut] extends [
   ? HasExecute<any, TValue>
   : never;
 
+// Infers the declared type of a redactor's optional context parameter; for a
+// one-parameter redactor this resolves to `unknown` (no context requirements).
+type RedactResponseCtxParam<T> = T extends {
+  redactResponse: (unsafe: any, context: infer C) => any;
+}
+  ? C
+  : unknown;
+
 export type RedactResponseDepsMet<T extends HasRedactResponse<any, any>> =
   IntersectProperties<{
     [P in keyof Parameters<
@@ -220,4 +234,12 @@ export type RedactResponseDepsMet<T extends HasRedactResponse<any, any>> =
       T,
       Record<P, Parameters<T['redactResponse']>[0][P]>
     >;
-  }>;
+  }> &
+    // A two-parameter redactor's declared context keys participate in the
+    // deps-met machinery like execute's do (the runtime passes execute's
+    // context to redactResponse).
+    IntersectProperties<{
+      [P in keyof RedactResponseCtxParam<T>]: [P] extends [AllInitKeys]
+        ? ReturnedTypeUpToPreAuthorize<RedactResponseCtxParam<T>[P], P>
+        : ReturnedSomewhereUpToExecute<T, RedactResponseCtxParam<T>[P], P>;
+    }>;

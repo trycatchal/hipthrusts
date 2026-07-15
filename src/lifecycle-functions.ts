@@ -60,8 +60,11 @@ export function Execute<TContextIn extends object, TUnsafeResponse>(
   };
 }
 
-export function RedactResponse<TUnsafeResponse, TResponse>(
-  projector: (unsafe: TUnsafeResponse) => TResponse
+// The projector may take the final lifecycle context as an optional second
+// argument (e.g. to redact by caller role); one-parameter projectors work
+// unchanged.
+export function RedactResponse<TUnsafeResponse, TResponse, TContext = any>(
+  projector: (unsafe: TUnsafeResponse, context?: TContext) => TResponse
 ) {
   return {
     redactResponse: projector,

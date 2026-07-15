@@ -123,7 +123,17 @@ type ExpressHandlerConfig<
       PromiseResolveOrSync<TLoadResourcesOut> &
       PromiseResolveOrSync<TFinalAuthOut>
   ) => PromiseOrSync<TUnsafeResponse>;
-  redactResponse: (unsafe: PromiseResolveOrSync<TUnsafeResponse>) => TResponse;
+  redactResponse: (
+    unsafe: PromiseResolveOrSync<TUnsafeResponse>,
+    context: { inputs: PromiseResolveOrSync<TSafeInputs> } & ([
+      TAmbient,
+    ] extends [never]
+      ? {}
+      : { ambient: TAmbient }) &
+      PromiseResolveOrSync<TPreAuthOut> &
+      PromiseResolveOrSync<TLoadResourcesOut> &
+      PromiseResolveOrSync<TFinalAuthOut>
+  ) => TResponse;
   responseMeta?: ResponseMeta | ((ctx: any) => ResponseMeta);
 };
 

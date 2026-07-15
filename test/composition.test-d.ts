@@ -108,3 +108,35 @@ describe('HTPipe arity beyond 4 (P1-7)', () => {
     expectTypeOf(piped.execute).toBeFunction();
   });
 });
+
+describe('redactResponse context deps-met (P2-11)', () => {
+  const baseStages = {
+    sanitizeInputs: (i: any) => i,
+    preAuthorize: () => true,
+    execute: () => ({ rows: [] as { name: string; email: string }[] }),
+  };
+
+  it('a two-param redactor whose ctx key IS contributed compiles', () => {
+    const handler = toNextHandler({
+      ...baseStages,
+      finalAuthorize: () => ({ canSeeEmails: true }),
+      redactResponse: (
+        unsafe: { rows: { name: string; email: string }[] },
+        ctx: { canSeeEmails: boolean }
+      ) => (ctx.canSeeEmails ? unsafe.rows : []),
+    });
+    expectTypeOf(handler).toBeFunction();
+  });
+
+  it('a two-param redactor requiring an un-contributed ctx key fails deps-met', () => {
+    // @ts-expect-error - nothing contributes `canSeeEmails` to the context
+    toNextHandler({
+      ...baseStages,
+      finalAuthorize: () => true,
+      redactResponse: (
+        unsafe: { rows: { name: string; email: string }[] },
+        ctx: { canSeeEmails: boolean }
+      ) => (ctx.canSeeEmails ? unsafe.rows : []),
+    });
+  });
+});

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { HTPipe } from '../src';
 import { executeHipthrustable, withDefaultImplementations } from '../src/core';
 import {
   HipBadInputs,
@@ -219,5 +220,57 @@ describe('unknown-error routing (Finding P0-4)', () => {
     expect(pre).toBeInstanceOf(HipForbidden);
     const fin = await run({ finalAuthorize: () => false });
     expect(fin).toBeInstanceOf(HipForbidden);
+  });
+});
+
+describe('redactResponse receives the final context (Finding P2-11)', () => {
+  it('a two-param redactor can branch on an authz flag from finalAuthorize', async () => {
+    const handler = withDefaultImplementations({
+      sanitizeInputs: (i: any) => i,
+      preAuthorize: () => true,
+      finalAuthorize: () => ({ canSeeEmails: false }),
+      execute: () => ({ rows: [{ name: 'a', email: 'a@x.com' }] }),
+      redactResponse: (
+        unsafe: { rows: { name: string; email: string }[] },
+        ctx: { canSeeEmails: boolean }
+      ) =>
+        ctx.canSeeEmails
+          ? unsafe.rows
+          : unsafe.rows.map(({ name }) => ({ name })),
+    } as any);
+    const { response } = await executeHipthrustable(handler as any, {});
+    expect(response).toEqual([{ name: 'a' }]);
+  });
+
+  it('one-param redactors keep working unchanged', async () => {
+    const handler = withDefaultImplementations({
+      sanitizeInputs: (i: any) => i,
+      preAuthorize: () => true,
+      finalAuthorize: () => true,
+      execute: () => ({ a: 1, secret: 's' }),
+      redactResponse: (u: { a: number; secret: string }) => ({ a: u.a }),
+    } as any);
+    const { response } = await executeHipthrustable(handler as any, {});
+    expect(response).toEqual({ a: 1 });
+  });
+
+  it('piped redactors both receive the context', async () => {
+    const seen: any[] = [];
+    const piped = HTPipe(
+      {
+        redactResponse: (u: any, ctx: any) => {
+          seen.push(ctx.role);
+          return u;
+        },
+      },
+      {
+        redactResponse: (u: any, ctx: any) => {
+          seen.push(ctx.role);
+          return u;
+        },
+      }
+    );
+    (piped as any).redactResponse({ x: 1 }, { role: 'admin' });
+    expect(seen).toEqual(['admin', 'admin']);
   });
 });
