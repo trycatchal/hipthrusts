@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { HipBadInputs, HipInternal } from '../src/errors';
+import { RedactResponseSwitch, SanitizeInputsSwitch } from '../src/index.js';
 import { htZodFactory } from '../src/zod';
 
 const {
   SanitizeInputsWithZod,
   SanitizeInputsSlicesWithZod,
   RedactResponseWithZod,
-  RedactResponseByRoleWithZod,
   PojoToValidated,
   stripIdTransform,
 } = htZodFactory();
@@ -146,7 +146,7 @@ describe('SanitizeInputsSlicesWithZod', () => {
   });
 });
 
-describe('RedactResponseByRoleWithZod', () => {
+describe('RedactResponseSwitch layered over RedactResponseWithZod', () => {
   const memberSchema = z.object({ names: z.array(z.string()) });
   const adminSchema = z.object({
     names: z.array(z.string()),
@@ -158,11 +158,11 @@ describe('RedactResponseByRoleWithZod', () => {
     internalFlag: true,
   };
 
-  it('picks the schema by a boolean context flag', () => {
-    const { redactResponse } = RedactResponseByRoleWithZod(
-      (ctx: { canSeeEmails: boolean }) => ctx.canSeeEmails,
-      { true: adminSchema, false: memberSchema }
-    );
+  it('picks the zod redactor by a boolean context flag', () => {
+    const { redactResponse } = RedactResponseSwitch('canSeeEmails', {
+      true: RedactResponseWithZod(adminSchema),
+      false: RedactResponseWithZod(memberSchema),
+    });
     expect(redactResponse(unsafe, { canSeeEmails: true })).toEqual({
       names: ['a', 'b'],
       emails: ['a@x.co', 'b@x.co'],
@@ -172,33 +172,43 @@ describe('RedactResponseByRoleWithZod', () => {
     });
   });
 
-  it('picks the schema by a string role key', () => {
-    const { redactResponse } = RedactResponseByRoleWithZod(
-      (ctx: { role: 'admin' | 'member' }) => ctx.role,
-      { admin: adminSchema, member: memberSchema }
-    );
-    expect(redactResponse(unsafe, { role: 'member' })).toEqual({
-      names: ['a', 'b'],
-    });
-  });
-
-  it('throws HipInternal when no schema is registered for the key', () => {
-    const { redactResponse } = RedactResponseByRoleWithZod(
-      (ctx: { role: string }) => ctx.role,
-      { admin: adminSchema } as Record<string, typeof adminSchema>
-    );
-    expect(() => redactResponse(unsafe, { role: 'ghost' })).toThrow(
-      HipInternal
-    );
-  });
-
   it('throws HipInternal when the chosen schema rejects the response', () => {
-    const { redactResponse } = RedactResponseByRoleWithZod(
-      (ctx: { canSeeEmails: boolean }) => ctx.canSeeEmails,
-      { true: adminSchema, false: memberSchema }
-    );
+    const { redactResponse } = RedactResponseSwitch('canSeeEmails', {
+      true: RedactResponseWithZod(adminSchema),
+      false: RedactResponseWithZod(memberSchema),
+    });
     expect(() =>
       redactResponse({ nope: true }, { canSeeEmails: true })
     ).toThrow(HipInternal);
+  });
+});
+
+describe('SanitizeInputsSwitch layered over SanitizeInputsSlicesWithZod', () => {
+  const emailCase = SanitizeInputsSlicesWithZod({
+    body: z.object({ kind: z.literal('email'), address: z.string() }),
+  });
+  const smsCase = SanitizeInputsSlicesWithZod({
+    body: z.object({ kind: z.literal('sms'), number: z.string() }),
+  });
+
+  it('routes to the matching zod slice sanitizer by a body discriminator', () => {
+    const { sanitizeInputs } = SanitizeInputsSwitch('body.kind', {
+      email: emailCase,
+      sms: smsCase,
+    });
+    const out: any = sanitizeInputs({
+      body: { kind: 'email', address: 'a@b.c', evil: 'x' },
+    });
+    expect(out.body).toEqual({ kind: 'email', address: 'a@b.c' });
+  });
+
+  it('rejects an unknown discriminator with HipBadInputs', () => {
+    const { sanitizeInputs } = SanitizeInputsSwitch('body.kind', {
+      email: emailCase,
+      sms: smsCase,
+    });
+    expect(() => sanitizeInputs({ body: { kind: 'carrier-pigeon' } })).toThrow(
+      HipBadInputs
+    );
   });
 });

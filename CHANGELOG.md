@@ -45,10 +45,15 @@ up._
   canonical (matching every other fragment factory); the camelCase
   `findScoped`/`loadScopedTo` factory entries remain as aliases, and a bare
   string third argument to `FindScoped` is still accepted as the docs key.
-- `RedactResponseByRoleWithZod(selector, schemas)` (`hipthrusts/zod`): picks
-  the wire schema by a context-derived key (boolean flag or role string), so
-  role-dependent response shapes are one declarative fragment. The selector's
-  context requirement participates in deps-met.
+- Switch composers (core): `RedactResponseSwitch(ctxKeyPath, cases)` picks
+  ONE simple redact fragment by the value at a context dot path ("a key of a
+  key": `'principal.role'`) — the composed fragment type-REQUIRES that
+  context key via deps-met, and cases are ordinary fragments
+  (`RedactResponse`, `RedactResponseWithZod`, ...), so contextual redaction
+  is a layer over the basic redactors, not a separate mechanism.
+  `SanitizeInputsSwitch(inputsKeyPath, cases)` is the sanitize-stage twin;
+  its discriminator lives in the unsafe inputs (sanitization runs before any
+  context exists) and an unmatched key rejects with `HipBadInputs`.
 - Adapter preset factories: `makeExpressHandlerFactory`,
   `makeHonoHandlerFactory`, `makeFastifyHandlerFactory`,
   `makeNextHandlerFactory` — bake shared adapter options (e.g.
@@ -67,8 +72,8 @@ up._
 ### Docs
 
 - README: partial pipelines as the reuse unit; `finishPipe`; everyday
-  loaders + `ctxRef`; codec-style zod wire schemas; role-dependent
-  redaction; deriving update schemas from doc schemas (the
+  loaders + `ctxRef`; codec-style zod wire schemas; switch-style
+  redaction/sanitization; deriving update schemas from doc schemas (the
   `.default()`-under-`.partial()` trap); adapter preset factories;
   `defineXHandler` vs `finishPipe` division of labor.
 

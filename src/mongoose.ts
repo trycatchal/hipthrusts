@@ -14,7 +14,7 @@ import {
   SanitizeInputs,
 } from './lifecycle-functions.js';
 import { JsonMaskFn, loadJsonMask } from './load-json-mask.js';
-import { Constructor } from './types.js';
+import { Constructor, NestedPathReq } from './types.js';
 
 let jsonMaskFn: JsonMaskFn | undefined;
 
@@ -74,12 +74,9 @@ function readCtxPath(context: any, path: string) {
     .reduce((acc, segment) => (acc == null ? acc : acc[segment]), context);
 }
 
-// Derives the nested context requirement from a ctxRef dot path:
+// The nested context requirement derived from a ctxRef dot path:
 // "inputs.body.user" -> { inputs: { body: { user: unknown } } }.
-export type CtxRefReq<TPath extends string> =
-  TPath extends `${infer THead}.${infer TRest}`
-    ? { [K in THead]: CtxRefReq<TRest> }
-    : { [K in TPath]: unknown };
+export type CtxRefReq<TPath extends string> = NestedPathReq<TPath>;
 
 type UnionToIntersection<U> = (
   U extends any ? (arg: U) => void : never

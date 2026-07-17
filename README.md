@@ -617,31 +617,48 @@ const wireCodecSchema = z
 const RedactAsWire = RedactResponseWithZod(wireCodecSchema);
 ```
 
-#### Role-dependent redaction
+#### Switch-style redaction & sanitization
 
-When different callers get different shapes ("members see `{names}`,
-admins see `{names, emails}`"), pick the schema by a context key instead
-of hand-branching:
+When different requests get different shapes, don't hand-branch inside
+one stage — compose *simple* fragments with a switch. The core
+`RedactResponseSwitch(ctxKeyPath, cases)` picks one ordinary redact
+fragment by the value found at a context dot path (a key of a key works:
+`'principal.role'`), and the chosen case receives the unsafe response
+and the context exactly as if it were the handler's own redactor:
 
 ```ts
-const { RedactResponseByRoleWithZod } = htZodFactory();
+import { RedactResponseSwitch } from 'hipthrusts';
 
-// By a boolean flag some auth stage contributed:
-RedactResponseByRoleWithZod((ctx: { canSeeEmails: boolean }) => ctx.canSeeEmails, {
-  true: adminWireSchema,
-  false: memberWireSchema,
-});
-
-// ...or keyed by a role string:
-RedactResponseByRoleWithZod((ctx: { role: 'admin' | 'member' }) => ctx.role, {
-  admin: adminWireSchema,
-  member: memberWireSchema,
+// "members see {names}, admins see {names, emails}" — but the switch is
+// general-purpose: any context key, any simple redact fragments.
+RedactResponseSwitch('canSeeEmails', {
+  true: RedactResponseWithZod(adminWireSchema),
+  false: RedactResponseWithZod(memberWireSchema),
 });
 ```
 
-The selector's context requirement participates in deps-met like any
-two-parameter redactor's: if nothing contributes `canSeeEmails`, the
-handler doesn't compile.
+The composed fragment type-REQUIRES the context key (derived from the
+path string): if nothing contributes `canSeeEmails`, the handler doesn't
+compile. An unmatched key at runtime is a `HipInternal` (server bug).
+
+`SanitizeInputsSwitch(inputsKeyPath, cases)` is the same idea for the
+sanitize stage. Sanitization runs before any context exists, so the
+discriminator lives in the unsafe inputs themselves — the
+discriminated-union endpoint story:
+
+```ts
+import { SanitizeInputsSwitch } from 'hipthrusts';
+
+SanitizeInputsSwitch('body.kind', {
+  email: SanitizeInputsSlicesWithZod({ body: EmailBody }),
+  sms:   SanitizeInputsSlicesWithZod({ body: SmsBody }),
+});
+```
+
+An unmatched discriminator rejects the request with `HipBadInputs`
+(422). Both switches work with ANY simple fragments — zod-backed,
+mongoose-backed, or hand-written `RedactResponse`/`SanitizeInputs` — the
+switch is just a layer over them.
 
 #### Deriving input schemas from document schemas
 

@@ -66,48 +66,6 @@ export function htZodFactory() {
     });
   }
 
-  // Role-dependent redaction: picks the wire schema by a context-derived key
-  // (a boolean flag or a role string), so "members see {names}, admins see
-  // {names, emails}" is one declarative fragment instead of a hand-branching
-  // redactor:
-  //   RedactResponseByRoleWithZod((ctx) => ctx.canSeeEmails, {
-  //     true: adminWireSchema,
-  //     false: memberWireSchema,
-  //   })
-  // The selector's context requirement participates in deps-met like any
-  // two-parameter redactor's, so an un-contributed key is a compile error.
-  function RedactResponseByRoleWithZod<
-    TCtx extends object,
-    TKey extends string | number | boolean,
-    TSchemas extends Record<`${TKey}`, z.ZodType<any, any, any>>,
-  >(selector: (context: TCtx) => TKey, schemas: TSchemas) {
-    // Built as a literal (not via RedactResponse) so the context parameter can
-    // stay REQUIRED and precisely typed — that is what makes the selector's
-    // context requirement participate in deps-met.
-    return {
-      redactResponse: (
-        unsafeResponse: any,
-        context: TCtx
-      ): z.output<TSchemas[`${TKey}`]> => {
-        const key = String(selector(context)) as `${TKey}`;
-        const schema: z.ZodType<any, any, any> | undefined = schemas[key];
-        if (!schema) {
-          throw new HipInternal(
-            `No response schema registered for role key "${key}"`
-          );
-        }
-        const parseResult = schema.safeParse(unsafeResponse);
-        if (!parseResult.success) {
-          throw new HipInternal(
-            'Response validation failed',
-            parseResult.error
-          );
-        }
-        return parseResult.data;
-      },
-    };
-  }
-
   function PojoToValidated<
     TPojoKey extends string,
     TSchema extends z.ZodType<any, any, any>,
@@ -128,7 +86,6 @@ export function htZodFactory() {
     SanitizeInputsWithZod,
     SanitizeInputsSlicesWithZod,
     RedactResponseWithZod,
-    RedactResponseByRoleWithZod,
     PojoToValidated,
     stripIdTransform,
   };
