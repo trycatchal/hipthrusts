@@ -1,12 +1,12 @@
 # Roadmap
 
-## Road to 1.0
+## 1.x hardening
 
-The API has stabilized substantially (transport-agnostic lifecycle, HipError
-hierarchy, five adapters). Remaining before committing to 1.0 semver:
+1.0.0 shipped the semver commitment: the exported names that survived to
+1.0 are frozen, and the README now states the policy. These items carried
+over from the road-to-1.0 list — all internal or additive, so none of them
+need a major release:
 
-- [ ] **API naming pass** — final review of exported names; anything that
-      survives to 1.0 is frozen.
 - [ ] **Brand-based `isHipError`** — today the check is `instanceof`-based.
       Within one module format that's safe (the build keeps a single class
       copy per format), but an app that mixes `require('hipthrusts')` and
@@ -19,9 +19,8 @@ hierarchy, five adapters). Remaining before committing to 1.0 semver:
 - [ ] **Type-level test expansion** — the TYPESCRIPT-KOSHERNESS checks from
       the old TODO: `ModelWithFindById` instance-member typing and
       `fromWrappedInstanceMethod` in/out inference guarantees.
-- [ ] **Semver commitment statement** in the README.
 
-## Post-1.0 / exploratory
+## Exploratory
 
 - More adapters: Koa, others by request.
 - More ODM integrations with injection-safe finders: Prisma, Drizzle,

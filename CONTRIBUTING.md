@@ -47,7 +47,7 @@ saves you a round trip.
 
 ## Pull requests
 
-1. Fork and branch from `master`.
+1. Fork and branch from `main`.
 2. Make your change with tests.
 3. Ensure the full local gate passes.
 4. Open a PR describing the motivation and the approach.
