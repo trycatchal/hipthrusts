@@ -202,7 +202,15 @@ export function toExpressHandler<
       }
       if (options.afterResponse) {
         res.on('finish', () =>
-          safeInvokeAfterResponse(options.afterResponse, context)
+          safeInvokeAfterResponse(
+            options.afterResponse,
+            context,
+            options.onError,
+            {
+              req,
+              res,
+            }
+          )
         );
       }
       res.status(meta.status || 200).json(response);
@@ -220,5 +228,23 @@ export function toExpressHandler<
         res.status(500).json({ error: 'Internal server error' });
       }
     }
+  };
+}
+
+// Adapter preset factory: bakes shared options into a reusable handler
+// converter (mirrors makeNextHandlerFactory); per-call options merge OVER
+// the defaults.
+export function makeExpressHandlerFactory(defaults: HipExpressHandlerOptions) {
+  return function toExpressHandlerWithDefaults<
+    TConf extends OptionalStagesShape &
+      HasRequiredStages &
+      PreAuthorizeDepsMet<TConf> &
+      LoadResourcesDepsMet<TConf> &
+      FinalAuthorizeDepsMet<TConf> &
+      ExecuteDepsMet<TConf> &
+      RedactResponseDepsMet<TConf> &
+      HasResponseMeta,
+  >(handlingStrategy: TConf, options: HipExpressHandlerOptions = {}) {
+    return toExpressHandler(handlingStrategy, { ...defaults, ...options });
   };
 }

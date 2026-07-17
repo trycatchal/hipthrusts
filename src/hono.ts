@@ -128,7 +128,12 @@ export function toHonoHandler<
       );
       if (options.afterResponse) {
         const runAfterResponse = () =>
-          safeInvokeAfterResponse(options.afterResponse, context);
+          safeInvokeAfterResponse(
+            options.afterResponse,
+            context,
+            options.onError,
+            raw
+          );
         try {
           // On edge runtimes waitUntil keeps the worker alive for the side
           // effect; on Node hono has no executionCtx, so fall back to a task.
@@ -158,5 +163,23 @@ export function toHonoHandler<
       }
       return c.json({ error: 'Internal server error' }, 500);
     }
+  };
+}
+
+// Adapter preset factory: bakes shared options into a reusable handler
+// converter (mirrors makeNextHandlerFactory); per-call options merge OVER
+// the defaults.
+export function makeHonoHandlerFactory(defaults: HipHonoHandlerOptions) {
+  return function toHonoHandlerWithDefaults<
+    TConf extends OptionalStagesShape &
+      HasRequiredStages &
+      PreAuthorizeDepsMet<TConf> &
+      LoadResourcesDepsMet<TConf> &
+      FinalAuthorizeDepsMet<TConf> &
+      ExecuteDepsMet<TConf> &
+      RedactResponseDepsMet<TConf> &
+      HasResponseMeta,
+  >(handlingStrategy: TConf, options: HipHonoHandlerOptions = {}) {
+    return toHonoHandler(handlingStrategy, { ...defaults, ...options });
   };
 }

@@ -23,17 +23,29 @@ export interface HasResponseMeta<TCtx = any> {
   responseMeta?: ResponseMeta | ((ctx: TCtx) => ResponseMeta);
 }
 
+// Info the adapters hand to onError alongside the error itself. `phase` is
+// 'afterResponse' when the error escaped the afterResponse side-effect hook
+// (the response was already sent); absent for request-lifecycle errors.
+export interface OnErrorInfo {
+  raw?: unknown;
+  phase?: 'afterResponse';
+}
+
 // Options shared by every HTTP adapter.
 export interface HttpAdapterOptions {
   // Observability seam: called with every error the adapter converts to an
-  // error response (HipErrors and unknown failures alike; redirects excluded).
-  // With unknown-error cause-chaining, `error.cause` holds the real underlying
-  // failure. A throwing onError never affects the response.
-  onError?: (error: unknown, info: { raw?: unknown }) => void;
+  // error response (HipErrors and unknown failures alike; redirects excluded),
+  // AND with errors thrown from afterResponse (identified by
+  // info.phase === 'afterResponse') — a failed audit write is observable even
+  // though it can never affect the already-sent response. With unknown-error
+  // cause-chaining, `error.cause` holds the real underlying failure. A
+  // throwing onError never affects the response.
+  onError?: (error: unknown, info: OnErrorInfo) => void;
   // Post-response side effects (audit logs, notifications) with access to the
   // full final lifecycle context (inputs, ambient, loaded resources, response).
   // Runs only after a SUCCESSFUL lifecycle; failures never fire it. Errors
-  // thrown from it never affect the response.
+  // thrown from it never affect the response, but they are routed to onError
+  // with phase 'afterResponse'.
   afterResponse?: (context: Record<string, unknown>) => void | Promise<void>;
 }
 
@@ -41,7 +53,7 @@ export interface HttpAdapterOptions {
 export function safeInvokeOnError(
   onError: HttpAdapterOptions['onError'],
   error: unknown,
-  info: { raw?: unknown }
+  info: OnErrorInfo
 ) {
   if (!onError) {
     return;
@@ -53,19 +65,24 @@ export function safeInvokeOnError(
   }
 }
 
-// Fire-and-forget afterResponse; sync throws and async rejections are both
-// swallowed so side effects can never affect the (already sent) response.
+// Fire-and-forget afterResponse; sync throws and async rejections can never
+// affect the (already sent) response — they are routed to onError with
+// phase 'afterResponse' so failed side effects stay observable.
 export function safeInvokeAfterResponse(
   afterResponse: HttpAdapterOptions['afterResponse'],
-  context: Record<string, unknown>
+  context: Record<string, unknown>,
+  onError?: HttpAdapterOptions['onError'],
+  raw?: unknown
 ) {
   if (!afterResponse) {
     return;
   }
+  const report = (error: unknown) =>
+    safeInvokeOnError(onError, error, { raw, phase: 'afterResponse' });
   try {
-    Promise.resolve(afterResponse(context)).catch(() => {});
-  } catch {
-    // Side-effect failures are intentionally swallowed.
+    Promise.resolve(afterResponse(context)).catch(report);
+  } catch (error) {
+    report(error);
   }
 }
 

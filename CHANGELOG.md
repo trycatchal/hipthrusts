@@ -6,10 +6,81 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 (pre-1.0: minor releases may contain breaking changes).
 
-## [Unreleased]
+## [0.13.0] - 2026-07-17
+
+_Dogfooding feedback round 2: composability/DX gaps surfaced by three more
+rounds of real-world use on 0.12.0. No correctness fixes needed — 0.12.0 held
+up._
+
+### Added
+
+- `finishPipe(pipe, handler)` (core): compose a shared partial pipeline with
+  ONE endpoint-specific trailing handler whose stage callbacks get their
+  context parameter types **inferred from the pipe** — zero hand-written
+  annotations, phantom context keys are compile errors, and pipe-internal
+  deps-met requirements (e.g. the scoped finders' `queryScope`) still surface
+  as `HipDepNotMet` at the adapter boundary. Runtime is literally
+  `HTPipe(pipe, handler)`. The trailing handler is limited to
+  `preAuthorize`/`loadResources`/`finalAuthorize`/`execute`/`redactResponse`/
+  `responseMeta` (author extraction/sanitization in the pipe). Also exports
+  the `PipeContext<TPipe>` utility behind it.
+- Everyday mongoose loader fragments (module-level in `hipthrusts/mongoose`):
+  `LoadManyTo` (find), `LoadOneTo` (findOne), `LoadByIdRequiredTo` (findById +
+  `.lean()`, throws `HipNotFound` when missing), `LoadDocByIdRequiredTo`
+  (findById hydrated, for `.set()`/`.save()` update flows). Lean reads type as
+  `TRaw & { _id: Types.ObjectId }`; doc types are inferred from mongoose's own
+  `Model<TRaw>` via type-only imports.
+- `ctxRef('dot.path')` filter/id specs for the loaders: the fragment's context
+  REQUIREMENT is derived from the path string via template-literal types, so
+  deps-met still enforces that an earlier stage provides e.g.
+  `inputs.body.user` — with no hand-written context annotations. ctxRef-
+  resolved values are `$eq`-wrapped (and `undefined` entries pruned) so
+  user-influenced values can't smuggle query operators; literal spec values
+  pass through verbatim (the operator-filter escape hatch); a selector-
+  function overload remains for computed filters.
+- Scoped finder query options: `FindScoped(Model, extraFilter?, { sort,
+  limit, skip, projection, lean, docsKey })` and `LoadScopedTo(Model, key,
+  extraFilter?, options?)`, so real list endpoints keep pagination and
+  ordering. `queryScope` stays type-required. PascalCase names are now
+  canonical (matching every other fragment factory); the camelCase
+  `findScoped`/`loadScopedTo` factory entries remain as aliases, and a bare
+  string third argument to `FindScoped` is still accepted as the docs key.
+- Switch composers (core): `RedactResponseSwitch(ctxKeyPath, cases)` picks
+  ONE simple redact fragment by the value at a context dot path ("a key of a
+  key": `'principal.role'`) — the composed fragment type-REQUIRES that
+  context key via deps-met, and cases are ordinary fragments
+  (`RedactResponse`, `RedactResponseWithZod`, ...), so contextual redaction
+  is a layer over the basic redactors, not a separate mechanism.
+  `SanitizeInputsSwitch(inputsKeyPath, cases)` is the sanitize-stage twin;
+  its discriminator lives in the unsafe inputs (sanitization runs before any
+  context exists) and an unmatched key rejects with `HipBadInputs`.
+- Adapter preset factories: `makeExpressHandlerFactory`,
+  `makeHonoHandlerFactory`, `makeFastifyHandlerFactory`,
+  `makeNextHandlerFactory` — bake shared adapter options (e.g.
+  `gatherContext`, `onError`) into a reusable converter; per-call options
+  merge over the defaults.
+
+### Changed
+
+- Errors thrown from `afterResponse` are no longer silently swallowed: they
+  are routed to `onError` with `info.phase === 'afterResponse'` (all HTTP
+  adapters), so a failed audit write is observable. They still can never
+  affect the already-sent response.
+- `json-mask` is now loaded lazily (only `dtoSchemaObj` uses it), so
+  consumers using only the finders/loaders no longer need it installed.
+
+### Docs
+
+- README: partial pipelines as the reuse unit; `finishPipe`; everyday
+  loaders + `ctxRef`; codec-style zod wire schemas; switch-style
+  redaction/sanitization; deriving update schemas from doc schemas (the
+  `.default()`-under-`.partial()` trap); adapter preset factories;
+  `defineXHandler` vs `finishPipe` division of labor.
+
+## [0.12.0]
 
 _The entries below fold the previously-unreleased modernization work and the
-dogfooding-feedback fixes into the upcoming 0.12.0 release._
+dogfooding-feedback fixes into the 0.12.0 release._
 
 ### Added (dogfooding feedback round)
 
@@ -159,6 +230,6 @@ dogfooding-feedback fixes into the upcoming 0.12.0 release._
 - Initial public releases: Express + Mongoose oriented handler classes with
   the mandatory-stage lifecycle.
 
-[Unreleased]: https://github.com/trycatchal/hipthrusts/compare/master...HEAD
+[0.13.0]: https://github.com/trycatchal/hipthrusts/compare/28fd759...master
 [0.11.0]: https://github.com/trycatchal/hipthrusts/commit/c0fee82
 [0.10.0]: https://github.com/trycatchal/hipthrusts/commit/beb8b0d

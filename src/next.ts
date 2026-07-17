@@ -155,7 +155,12 @@ export function toNextHandler<
         // final context, via Next's `after()` (runs once the response is
         // sent). Failed requests never fire it.
         const runAfterResponse = () =>
-          safeInvokeAfterResponse(options.afterResponse, context);
+          safeInvokeAfterResponse(
+            options.afterResponse,
+            context,
+            options.onError,
+            raw
+          );
         try {
           const { after } = await import('next/server.js');
           after(runAfterResponse);
@@ -191,5 +196,25 @@ export function toNextHandler<
         { status: 500 }
       );
     }
+  };
+}
+
+// Adapter preset factory: bakes shared options (gatherContext, onError,
+// afterResponse, ...) into a reusable handler converter so routes don't
+// repeat them on every toNextHandler call:
+//   export const toAppHandler = makeNextHandlerFactory({ gatherContext });
+// Per-call options merge OVER the defaults.
+export function makeNextHandlerFactory(defaults: HipNextHandlerOptions) {
+  return function toNextHandlerWithDefaults<
+    TConf extends OptionalStagesShape &
+      HasRequiredStages &
+      PreAuthorizeDepsMet<TConf> &
+      LoadResourcesDepsMet<TConf> &
+      FinalAuthorizeDepsMet<TConf> &
+      ExecuteDepsMet<TConf> &
+      RedactResponseDepsMet<TConf> &
+      HasResponseMeta,
+  >(handlingStrategy: TConf, options: HipNextHandlerOptions = {}) {
+    return toNextHandler(handlingStrategy, { ...defaults, ...options });
   };
 }

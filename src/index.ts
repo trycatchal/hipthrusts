@@ -1,3 +1,4 @@
+import { HipBadInputs, HipInternal } from './errors.js';
 import {
   authorizationPassed,
   isHasExecute,
@@ -37,6 +38,7 @@ import {
   OptionallyHasFinalAuthorize,
   OptionallyHasLoadResources,
   OptionallyHasPreAuthorize,
+  NestedPathReq,
   OptionallyHasRedactResponse,
   OptionallyHasSanitizeInputs,
   PromiseResolveOrSync,
@@ -214,6 +216,74 @@ export function SanitizeInputsSlices<
       return out as SafeSlices & HasUnsafeSlices;
     }
   );
+}
+
+function readDotPath(source: any, path: string) {
+  return path
+    .split('.')
+    .reduce((acc, segment) => (acc == null ? acc : acc[segment]), source);
+}
+
+// Switch-style input sanitization: picks ONE simple sanitize fragment from
+// `cases` by the (stringified) value found at `keyPath` on the UNSAFE inputs
+// object — the sanitize stage runs before any context exists, so the
+// discriminator can only live in the inputs themselves (e.g. 'body.kind' for
+// a discriminated-union create endpoint). An unmatched key rejects the
+// request with HipBadInputs. The chosen fragment's sanitizeInputs receives
+// the whole unsafe inputs object, so any simple sanitize fragment composes
+// here (SanitizeInputs, SanitizeInputsSlices, the zod/mongoose helpers, ...).
+export function SanitizeInputsSwitch<
+  TPath extends string,
+  TCases extends Record<string, HasSanitizeInputs<any, any>>,
+>(keyPath: TPath, cases: TCases) {
+  return SanitizeInputs(
+    (unsafeInputs: any): ReturnType<TCases[keyof TCases]['sanitizeInputs']> => {
+      const key = String(readDotPath(unsafeInputs, keyPath));
+      const chosen: HasSanitizeInputs<any, any> | undefined = cases[key];
+      if (!chosen) {
+        // Generic message: the key is untrusted input and error messages
+        // reach the client.
+        throw new HipBadInputs('Unrecognized input variant', { keyPath });
+      }
+      return chosen.sanitizeInputs(unsafeInputs);
+    }
+  );
+}
+
+// Switch-style response redaction: picks ONE simple redact fragment from
+// `cases` by the (stringified) value found at `keyPath` on the final
+// lifecycle context — a dot path, so nested keys work ('principal.role').
+// The composed fragment REQUIRES that context key (derived from the path
+// string), so deps-met makes "nothing contributes principal.role" a compile
+// error. Case values are ordinary redact fragments (RedactResponse,
+// RedactResponseWithZod, ...); the chosen one receives both the unsafe
+// response and the context, exactly as if it were the handler's own redactor:
+//   RedactResponseSwitch('canSeeEmails', {
+//     true: RedactResponseWithZod(adminWireSchema),
+//     false: RedactResponseWithZod(memberWireSchema),
+//   })
+// A key with no case is a server bug: HipInternal (the key rides `detail`,
+// which is never serialized for internal errors).
+export function RedactResponseSwitch<
+  TPath extends string,
+  TCases extends Record<string, HasRedactResponse<any, any>>,
+>(keyPath: TPath, cases: TCases) {
+  return {
+    redactResponse: (
+      unsafe: Parameters<TCases[keyof TCases]['redactResponse']>[0],
+      context: NestedPathReq<TPath>
+    ): ReturnType<TCases[keyof TCases]['redactResponse']> => {
+      const key = String(readDotPath(context, keyPath));
+      const chosen: HasRedactResponse<any, any> | undefined = cases[key];
+      if (!chosen) {
+        throw new HipInternal('No response redactor registered for key', {
+          keyPath,
+          key,
+        });
+      }
+      return chosen.redactResponse(unsafe, context);
+    },
+  };
 }
 
 export function PreAuthorizeFrom<
@@ -1339,9 +1409,12 @@ export function HTPipe(...objs: any[]) {
 }
 
 export { UNSAFE_SLICES } from './types.js';
-export type { HasUnsafeSlices, SanitizedOnly } from './types.js';
+export type { HasUnsafeSlices, NestedPathReq, SanitizedOnly } from './types.js';
 export * from './core.js';
 export * from './errors.js';
 export * from './http-adapter.js';
 export * from './user.js';
 export * from './lifecycle-functions.js';
+// finish-pipe imports HTPipe from this module; the cycle is safe because the
+// reference is only dereferenced at call time.
+export * from './finish-pipe.js';

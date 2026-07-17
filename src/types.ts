@@ -25,6 +25,15 @@ export type SanitizedOnly<T> = T extends object
   ? Omit<T, typeof UNSAFE_SLICES>
   : T;
 
+// Derives a nested requirement type from a dot path — the "key of a key"
+// indication used by selector composers (RedactResponseByKey) and the
+// mongoose loaders' ctxRef specs:
+// 'inputs.body.user' -> { inputs: { body: { user: unknown } } }
+export type NestedPathReq<TPath extends string> =
+  TPath extends `${infer THead}.${infer TRest}`
+    ? { [K in THead]: NestedPathReq<TRest> }
+    : { [K in TPath]: unknown };
+
 export type PromiseOrSync<T> = Promise<T> | T;
 export type PromiseResolveOrSync<T> = T extends Promise<infer U> ? U : T;
 

@@ -1,7 +1,15 @@
 import mongoose from 'mongoose';
 import { describe, expect, it } from 'vitest';
 import { HipBadInputs, HipNotFound } from '../src/errors';
-import { htMongooseFactory } from '../src/mongoose';
+import {
+  ctxRef,
+  FindScoped,
+  htMongooseFactory,
+  LoadByIdRequiredTo,
+  LoadDocByIdRequiredTo,
+  LoadManyTo,
+  LoadOneTo,
+} from '../src/mongoose';
 
 // Everything here runs against real mongoose but WITHOUT a database
 // connection: schema construction, document instantiation, and validateSync
@@ -242,5 +250,217 @@ describe('findScoped / loadScopedTo (Finding P2-10)', () => {
       queryScope: { tenant: { $in: ['b'] } },
     });
     expect(out.items.map((r: any) => r.name)).toEqual(['b-one']);
+  });
+});
+
+// A chainable fake query capturing every call, for loader/options assertions.
+function fakeQuery(result: any) {
+  const calls: Record<string, any[]> = {};
+  const query: any = { calls };
+  for (const method of ['sort', 'skip', 'limit', 'lean']) {
+    query[method] = (...args: any[]) => {
+      calls[method] = args;
+      return query;
+    };
+  }
+  query.exec = async () => result;
+  return query;
+}
+
+describe('everyday loaders: ctxRef filter specs', () => {
+  it('LoadOneTo $eq-wraps ctxRef values, passes literals verbatim, prunes undefined', async () => {
+    let seenFilter: any;
+    let lastQuery: any;
+    const model: any = {
+      findOne(filter: any) {
+        seenFilter = filter;
+        lastQuery = fakeQuery({ email: 'a@b.c' });
+        return lastQuery;
+      },
+    };
+    const { loadResources } = LoadOneTo(model, 'user', {
+      _id: ctxRef('inputs.body.user'),
+      status: { $in: ['active', 'invited'] },
+      missing: ctxRef('inputs.body.nope'),
+      alsoMissing: undefined,
+    });
+    const out: any = await loadResources({
+      inputs: { body: { user: 'u1' } },
+    } as any);
+    expect(seenFilter).toEqual({
+      _id: { $eq: 'u1' },
+      status: { $in: ['active', 'invited'] },
+    });
+    expect(lastQuery.calls.lean).toEqual([]);
+    expect(out.user).toEqual({ email: 'a@b.c' });
+  });
+
+  it('LoadManyTo resolves the spec and stores the lean rows', async () => {
+    let seenFilter: any;
+    const rows = [{ name: 'one' }, { name: 'two' }];
+    const model: any = {
+      find(filter: any) {
+        seenFilter = filter;
+        return fakeQuery(rows);
+      },
+    };
+    const { loadResources } = LoadManyTo(model, 'things', {
+      businessGroup: ctxRef('inputs.params.businessGroupId'),
+    });
+    const out: any = await loadResources({
+      inputs: { params: { businessGroupId: 'bg1' } },
+    } as any);
+    expect(seenFilter).toEqual({ businessGroup: { $eq: 'bg1' } });
+    expect(out.things).toBe(rows);
+  });
+
+  it('the selector-function overload passes its computed filter verbatim', async () => {
+    let seenFilter: any;
+    const model: any = {
+      find(filter: any) {
+        seenFilter = filter;
+        return fakeQuery([]);
+      },
+    };
+    const { loadResources } = LoadManyTo(
+      model,
+      'rows',
+      (ctx: { tenantIds: string[] }) => ({ tenant: { $in: ctx.tenantIds } })
+    );
+    await loadResources({ tenantIds: ['a', 'b'] });
+    expect(seenFilter).toEqual({ tenant: { $in: ['a', 'b'] } });
+  });
+});
+
+describe('everyday loaders: required-by-id variants', () => {
+  const found = { name: 'thing' };
+  function modelWithFindById(result: any) {
+    let leanCalled = false;
+    return {
+      leanCalled: () => leanCalled,
+      findById(_id: any) {
+        const query = fakeQuery(result);
+        const origLean = query.lean;
+        query.lean = (...args: any[]) => {
+          leanCalled = true;
+          return origLean(...args);
+        };
+        return query;
+      },
+    } as any;
+  }
+
+  it('LoadByIdRequiredTo loads lean and stores under the key', async () => {
+    const model = modelWithFindById(found);
+    const { loadResources } = LoadByIdRequiredTo(
+      model,
+      'thing',
+      ctxRef('inputs.params.id')
+    );
+    const out: any = await loadResources({
+      inputs: { params: { id: 'x1' } },
+    } as any);
+    expect(out.thing).toBe(found);
+    expect(model.leanCalled()).toBe(true);
+  });
+
+  it('LoadByIdRequiredTo throws HipNotFound (custom message) when missing', async () => {
+    const { loadResources } = LoadByIdRequiredTo(
+      modelWithFindById(null),
+      'thing',
+      ctxRef('inputs.params.id'),
+      'No such thing'
+    );
+    await expect(
+      loadResources({ inputs: { params: { id: 'x1' } } } as any)
+    ).rejects.toThrow(new HipNotFound('No such thing'));
+  });
+
+  it('LoadByIdRequiredTo rejects missing and object-smuggled ids as HipBadInputs', async () => {
+    const { loadResources } = LoadByIdRequiredTo(
+      modelWithFindById(found),
+      'thing',
+      ctxRef('inputs.params.id')
+    );
+    await expect(
+      loadResources({ inputs: { params: {} } } as any)
+    ).rejects.toThrow(HipBadInputs);
+    await expect(
+      loadResources({ inputs: { params: { id: { $ne: null } } } } as any)
+    ).rejects.toThrow(HipBadInputs);
+  });
+
+  it('LoadDocByIdRequiredTo loads HYDRATED (no lean) and 404s when missing', async () => {
+    const model = modelWithFindById(found);
+    const { loadResources } = LoadDocByIdRequiredTo(
+      model,
+      'thingDoc',
+      ctxRef('inputs.params.id')
+    );
+    const out: any = await loadResources({
+      inputs: { params: { id: 'x1' } },
+    } as any);
+    expect(out.thingDoc).toBe(found);
+    expect(model.leanCalled()).toBe(false);
+
+    const emptyModel = modelWithFindById(null);
+    const { loadResources: loadMissing } = LoadDocByIdRequiredTo(
+      emptyModel,
+      'thingDoc',
+      (ctx: any) => ctx.inputs.params.id
+    );
+    await expect(
+      loadMissing({ inputs: { params: { id: 'x1' } } } as any)
+    ).rejects.toThrow(HipNotFound);
+  });
+});
+
+describe('scoped finder query options', () => {
+  it('applies sort/skip/limit/lean and a projection to the scoped query', async () => {
+    let seenFilter: any;
+    let seenProjection: any;
+    let lastQuery: any;
+    const model: any = {
+      find(filter: any, projection?: any) {
+        seenFilter = filter;
+        seenProjection = projection;
+        lastQuery = fakeQuery([{ name: 'row' }]);
+        return lastQuery;
+      },
+    };
+    const frag = FindScoped(
+      model,
+      { archived: false },
+      {
+        docsKey: 'items',
+        sort: { createdAt: -1 },
+        skip: 5,
+        limit: 100,
+        lean: true,
+        projection: { name: 1 },
+      }
+    );
+    const loaded: any = await frag.loadResources({
+      queryScope: { tenant: { $eq: 't1' } },
+    });
+    expect(seenFilter).toEqual({
+      tenant: { $eq: 't1' },
+      archived: false,
+    });
+    expect(seenProjection).toEqual({ name: 1 });
+    expect(lastQuery.calls).toEqual({
+      sort: [{ createdAt: -1 }],
+      skip: [5],
+      limit: [100],
+      lean: [],
+    });
+    expect(frag.execute(loaded)).toEqual([{ name: 'row' }]);
+  });
+
+  it('keeps the bare-string docsKey back-compat form', async () => {
+    const model: any = { find: () => fakeQuery([{ name: 'r' }]) };
+    const frag = FindScoped(model, undefined, 'items');
+    const loaded: any = await frag.loadResources({ queryScope: {} });
+    expect(loaded.items).toEqual([{ name: 'r' }]);
   });
 });
