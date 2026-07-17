@@ -18,6 +18,16 @@ breaking changes from here on land only in major releases.
   contribution docs, and changelog compare links updated to match.
 - SECURITY.md supported-versions policy updated for 1.x.
 
+### Security
+
+- Dev-dependency refresh clearing all open Dependabot advisories (dev/CI
+  only — the published package ships no runtime dependencies, so none of
+  these ever reached consumers). Refreshed `hono`, `fastify`, `mongoose`,
+  `next`, `tsx`, `vitest`, `@hono/node-server`, and `@types/node` within
+  range, and added `pnpm.overrides` pinning the transitive `vite` (≥8.0.16)
+  and `postcss` (≥8.5.10) up out of their advisories. `prettier` is pinned
+  to an exact version to keep formatting stable across environments.
+
 ## [0.13.0] - 2026-07-17
 
 _Dogfooding feedback round 2: composability/DX gaps surfaced by three more
