@@ -115,6 +115,60 @@ describe('SanitizeInputsSlicesWithMongoose', () => {
   });
 });
 
+describe('toObject shape pinning under ambient mongoose config (#110)', () => {
+  // Global toObject config is baked into schemas at construction time, so the
+  // override must be in place BEFORE the factory creates its schema — the
+  // realistic ordering for app-level config set at boot.
+  function withGlobalToObject<T>(options: object, fn: () => T): T {
+    const prior = mongoose.get('toObject');
+    mongoose.set('toObject', options as any);
+    try {
+      return fn();
+    } finally {
+      mongoose.set('toObject', prior as any);
+    }
+  }
+
+  it('SanitizeInputsWithMongoose ignores a global getters/virtuals override', () => {
+    withGlobalToObject({ getters: true, virtuals: true }, () => {
+      const factory = ht.documentFactoryFromForRequest({
+        name: {
+          type: String,
+          required: true,
+          get: (v: string) => `GETTER:${v}`,
+        },
+      });
+      const { sanitizeInputs } = ht.SanitizeInputsWithMongoose(factory);
+      expect(sanitizeInputs({ name: 'hip' })).toEqual({ name: 'hip' });
+    });
+  });
+
+  it('SanitizeInputsSlicesWithMongoose ignores a global getters/virtuals override', () => {
+    withGlobalToObject({ getters: true, virtuals: true }, () => {
+      const sliceFactory = ht.documentFactoryFromForRequest({
+        id: { type: String, required: true, get: (v: string) => `GETTER:${v}` },
+      });
+      const { sanitizeInputs } = ht.SanitizeInputsSlicesWithMongoose({
+        params: sliceFactory,
+      });
+      expect(sanitizeInputs({ params: { id: '7' } }).params).toEqual({
+        id: '7',
+      });
+    });
+  });
+
+  it('RedactResponseWithMongoose ignores a global getters/virtuals override', () => {
+    withGlobalToObject({ getters: true, virtuals: true }, () => {
+      const factory = ht.documentFactoryFromForResponse({
+        name: { type: String, get: (v: string) => `GETTER:${v}` },
+      });
+      const { redactResponse } = ht.RedactResponseWithMongoose(factory);
+      const result = redactResponse({ name: 'x' }) as any;
+      expect(result.name).toBe('x');
+    });
+  });
+});
+
 describe('SaveOnDocumentFrom', () => {
   it('saves the document found on the context key', async () => {
     const { execute } = ht.SaveOnDocumentFrom('doc');

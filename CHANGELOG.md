@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 (before 1.0, minor releases could contain breaking changes).
 
+## [Unreleased]
+
+### Fixed
+
+- mongoose sanitizers and redactor: every shape-affecting `toObject` option
+  is now explicitly pinned to mongoose's defaults, so ambient config
+  (`mongoose.set('toObject', ...)` or schema-level options) can no longer
+  alter the shape of sanitized inputs or redacted responses ([#110](https://github.com/trycatchal/hipthrusts/issues/110)).
+
+### Tests
+
+- Runtime regression suite locking the composed-authorizer context merge
+  (left-returned context preserved through `HTPipe`'d `preAuthorize`/
+  `finalAuthorize`, short-circuiting, arity edges, and an end-to-end adapter
+  pass) ([#111](https://github.com/trycatchal/hipthrusts/issues/111), originally #37).
+
 ## [1.0.0] - 2026-07-17
 
 First stable release. No API changes since 0.13.0 — this release is the

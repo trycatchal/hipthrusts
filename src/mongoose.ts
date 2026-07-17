@@ -463,6 +463,19 @@ export function htMongooseFactory(mongoose: any) {
     return ret;
   }
 
+  // Every shape-affecting toObject option pinned to mongoose's defaults, so
+  // ambient config (mongoose.set('toObject', ...) or schema-level toObject
+  // options) can never alter the shape the sanitizers and redactor produce.
+  const pinnedToObjectOptions = {
+    getters: false,
+    virtuals: false,
+    aliases: false,
+    versionKey: true,
+    depopulate: false,
+    flattenMaps: false,
+    minimize: true,
+  };
+
   function deepWipeDefault(obj: any): any {
     if (Array.isArray(obj)) {
       return obj.map((elm) => deepWipeDefault(elm));
@@ -533,7 +546,10 @@ export function htMongooseFactory(mongoose: any) {
       if (validateErrors !== undefined) {
         throw new HipBadInputs('Inputs not valid');
       }
-      return doc.toObject({ transform: stripIdTransform }) as TSafe;
+      return doc.toObject({
+        ...pinnedToObjectOptions,
+        transform: stripIdTransform,
+      }) as TSafe;
     });
   }
 
@@ -558,7 +574,10 @@ export function htMongooseFactory(mongoose: any) {
           if (validateErrors !== undefined) {
             throw new HipBadInputs(`${sliceName} not valid`);
           }
-          return doc.toObject({ transform: stripIdTransform });
+          return doc.toObject({
+            ...pinnedToObjectOptions,
+            transform: stripIdTransform,
+          });
         },
       ])
     ) as {
@@ -615,7 +634,7 @@ export function htMongooseFactory(mongoose: any) {
   >(DocFactory: TDocFactory) {
     return RedactResponse((unsafeResponse: any) => {
       const doc = DocFactory(unsafeResponse);
-      return doc.toObject() as TSafeResponse;
+      return doc.toObject(pinnedToObjectOptions) as TSafeResponse;
     });
   }
 
