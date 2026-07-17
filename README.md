@@ -284,6 +284,76 @@ thingRouter.put('/:id', toExpressHandler(HTPipe(
 that needs ownership. Adding a `/things/:id/archive` endpoint takes
 roughly four lines.
 
+### Partial pipelines are the reuse unit
+
+The currying story: export a **partial pipeline** — auth, sanitization,
+loaders, anything shared — and compose it first in every endpoint. A
+typical auth pipeline lifts the (maybe-absent) principal in
+`extractAmbient` (lift-only, no denial there), then denies *and*
+contributes in `preAuthorize`. Contribute the whole principal — including
+per-request authorization data like access rows — so later stages never
+re-fetch it:
+
+```ts
+// Lift only — extraction never denies.
+const WithMaybePrincipal = ExtractAmbient((raw: NextRaw) => ({
+  principal: raw.principal as Principal | null, // from gatherContext
+}));
+
+// Deny AND contribute: after this, ctx.principal is non-null downstream.
+const RequireAuthenticated = PreAuthorize(
+  (ctx: { ambient: { principal: Principal | null } }) =>
+    ctx.ambient.principal
+      ? { principal: ctx.ambient.principal } // carries its access rows
+      : false,
+);
+
+export const Authed = HTPipe(WithMaybePrincipal, RequireAuthenticated);
+```
+
+### finishPipe: an inferred trailing handler
+
+Stage callbacks inside `HTPipe` fragments must declare the context they
+consume — `HTPipe` infers its types FROM the fragments, so contextual
+typing can't flow INTO them. For the dominant authoring shape — a shared
+partial pipeline plus ONE endpoint-specific trailing handler — use
+`finishPipe`: it computes the pipe's accumulated context from the pipe's
+*type*, so the trailing stages need **zero annotations**:
+
+```ts
+import { finishPipe } from 'hipthrusts';
+
+export const GET = toNextHandler(finishPipe(
+  HTPipe(Authed, SanitizeInputsSlicesWithZod({ params: Params })),
+  {
+    loadResources:  async (ctx) => ({          // ctx fully inferred:
+      thing: await ThingModel.findById(ctx.inputs.params.id).lean().exec(),
+    }),                                        //   principal, inputs, ambient…
+    finalAuthorize: (ctx) => ctx.thing?.ownerId === ctx.principal.id,
+    execute:        (ctx) => ctx.thing,
+    redactResponse: (unsafe) => unsafe,
+  },
+), { gatherContext });
+```
+
+Consuming a context key nothing provides is a compile error, and
+pipe-internal requirements (like the scoped finders' `queryScope`) still
+surface as `HipDepNotMet` at the adapter boundary. Runtime is literally
+`HTPipe(pipe, handler)`.
+
+Limitations, by design: the trailing handler may only declare
+`preAuthorize` / `loadResources` / `finalAuthorize` / `execute` /
+`redactResponse` / `responseMeta`. Extraction and sanitization stages
+describe the pipeline's input surface — author them in the pipe. The
+exported `PipeContext<typeof SomePipe>` utility computes a pipe's
+accumulated context type if you need it by hand.
+
+Division of labor with the per-adapter `defineXHandler` helpers: those
+give contextual typing to a single *whole* config object (and are the
+only way to get a typed adapter-raw parameter in `extractAmbient`);
+`finishPipe` covers the shared-pipe-plus-trailing-handler shape. With
+partial pipelines, `finishPipe` is usually the one you want.
+
 ## Errors
 
 The lifecycle has a small, semantic error vocabulary. Throw one of these
@@ -382,14 +452,28 @@ toNextHandler(handler, {
   // Called with every error the adapter converts to an error response
   // (redirects excluded). For unexpected failures, error.cause carries
   // the original underlying error. A throwing hook never affects the
-  // response.
-  onError: (error, { raw }) => logger.error({ err: error }),
+  // response. Errors thrown from afterResponse also land here, tagged
+  // with info.phase === 'afterResponse' — a failed audit write is
+  // observable even though the response was already sent.
+  onError: (error, { raw, phase }) => logger.error({ err: error, phase }),
 
   // Post-response side effects with the FINAL lifecycle context —
   // inputs, ambient, loaded resources, and the response. Fires only
-  // after a successful lifecycle; never blocks or breaks the response.
+  // after a successful lifecycle; never blocks or breaks the response
+  // (failures are routed to onError, above).
   afterResponse: async (ctx) => auditLog.write({ input: ctx.inputs, out: ctx.response }),
 });
+```
+
+Repeating the same options on every route? Each adapter exports a preset
+factory — `makeExpressHandlerFactory`, `makeHonoHandlerFactory`,
+`makeFastifyHandlerFactory`, `makeNextHandlerFactory` — that bakes
+defaults into a reusable converter (per-call options merge over them):
+
+```ts
+export const toAppHandler = makeNextHandlerFactory({ gatherContext, onError });
+// ...
+export const GET = toAppHandler(handler); // no repeated { gatherContext }
 ```
 
 The Next.js and Hono adapters (which parse JSON bodies themselves)
@@ -411,8 +495,7 @@ scope a *typed context dependency* instead of a convention: one fragment
 contributes `queryScope`, and the scoped finders require it.
 
 ```ts
-import { htMongooseFactory } from 'hipthrusts/mongoose';
-const { findScoped } = htMongooseFactory(mongoose);
+import { FindScoped } from 'hipthrusts/mongoose';
 
 const WithTenantScope = LoadResources((ctx: { ambient: { user: User } }) => ({
   queryScope: { businessGroup: { $in: ctx.ambient.user.accessibleGroupIds } },
@@ -425,21 +508,29 @@ app.get('/things', toExpressHandler(HTPipe(
     sanitizeInputs: (i) => i,
     preAuthorize:   (ctx) => !!ctx.ambient.user,
     finalAuthorize: () => true,
-    ...findScoped(ThingModel),          // Model.find({ ...ctx.queryScope })
+    ...FindScoped(ThingModel, undefined, {   // Model.find({ ...ctx.queryScope })
+      sort: { createdAt: -1 },
+      limit: 100,
+    }),
     redactResponse: (rows) => rows.map(({ id, name }) => ({ id, name })),
   },
 )));
 ```
 
-`findScoped(Model, extraFilter?, docsKey?)` is a two-stage fragment: the
+`FindScoped(Model, extraFilter?, options?)` is a two-stage fragment: the
 scoped `Model.find` runs on the **load** stage (so the rows sit in
 context — under `scopedDocs` by default — where `finalAuthorize`, a
 two-param `redactResponse`, and any downstream `execute` you pipe can
 see them) plus a trivial `execute` that returns them. Its load stage
 **requires** `queryScope` in its context type — drop `WithTenantScope`
-from the pipe and the handler no longer compiles. `loadScopedTo(Model,
-key, extraFilter?)` is the load stage alone, for handlers that
-post-process the scoped rows in their own `execute`.
+from the pipe and the handler no longer compiles. The options bag takes
+`{ sort, limit, skip, projection, lean, docsKey }`, so real list
+endpoints keep their pagination and ordering. `LoadScopedTo(Model, key,
+extraFilter?, options?)` is the load stage alone, for handlers that
+post-process the scoped rows in their own `execute`. (The camelCase
+`findScoped`/`loadScopedTo` names on `htMongooseFactory` remain as
+aliases; a bare string third argument to `FindScoped` is still accepted
+as the docs key.)
 
 ## Type troubleshooting
 
@@ -507,6 +598,73 @@ A Zod parse failure throws `HipBadInputs` carrying the `ZodError` as
 
 For partial-update endpoints, pass `Body.partial()` as the slice schema.
 
+#### Codec-style wire schemas
+
+Make the wire schema a zod **codec**: it accepts the STORED document and
+its transforms own the whole reshape (`_id` → `id`, ObjectId → string,
+Date → ISO, null-normalization). Redaction is then ONE fragment — no
+mapper-then-validate two-step:
+
+```ts
+const wireCodecSchema = z
+  .object({
+    _id: z.instanceof(Types.ObjectId).transform(String),
+    name: z.string(),
+    createdAt: z.date().transform((d) => d.toISOString()),
+  })
+  .transform(({ _id, ...rest }) => ({ id: _id, ...rest }));
+
+const RedactAsWire = RedactResponseWithZod(wireCodecSchema);
+```
+
+#### Role-dependent redaction
+
+When different callers get different shapes ("members see `{names}`,
+admins see `{names, emails}`"), pick the schema by a context key instead
+of hand-branching:
+
+```ts
+const { RedactResponseByRoleWithZod } = htZodFactory();
+
+// By a boolean flag some auth stage contributed:
+RedactResponseByRoleWithZod((ctx: { canSeeEmails: boolean }) => ctx.canSeeEmails, {
+  true: adminWireSchema,
+  false: memberWireSchema,
+});
+
+// ...or keyed by a role string:
+RedactResponseByRoleWithZod((ctx: { role: 'admin' | 'member' }) => ctx.role, {
+  admin: adminWireSchema,
+  member: memberWireSchema,
+});
+```
+
+The selector's context requirement participates in deps-met like any
+two-parameter redactor's: if nothing contributes `canSeeEmails`, the
+handler doesn't compile.
+
+#### Deriving input schemas from document schemas
+
+Deriving a PATCH schema from the stored-document schema has a trap: zod
+fires `.default()` **even under `.partial()`**, so a derived update
+schema silently injects defaulted fields into every update — e.g. every
+PATCH "sends" `verificationComplete: false` and then trips your
+privileged-field check with a 403. Derive input schemas with
+pick/partial AND strip defaults:
+
+```ts
+// DON'T: docSchema.partial() — .default() fields materialize on every parse.
+// DO: pick the client-writable fields and re-declare them default-free:
+const UpdateBody = z.object({
+  name: docShape.name,             // reuse field validators...
+  description: docShape.description,
+}).partial();                      // ...but only ones without .default()
+```
+
+If a field needs a default at CREATE time, keep the default on the
+create schema (or the DB layer) — never on a schema an update derives
+from.
+
 ### Mongoose
 
 ```ts
@@ -522,6 +680,55 @@ const {
 ```
 
 These compose with `HTPipe` like everything else.
+
+#### Everyday loaders & ctxRef
+
+The everyday findById/findOne/find `loadResources` blocks are one-liners
+(module-level exports — no factory needed). Filter values and ids are
+declared as **context paths** with `ctxRef`, and the fragment's context
+*requirement* is derived from the path string — deps-met still enforces
+that an earlier stage provides `inputs.body.user`, with zero
+hand-written context annotations:
+
+```ts
+import {
+  ctxRef, LoadManyTo, LoadOneTo, LoadByIdRequiredTo, LoadDocByIdRequiredTo,
+} from 'hipthrusts/mongoose';
+
+/** find -> ctx.things: Lean<Thing>[] */
+LoadManyTo(ThingModel, 'things', {
+  businessGroup: ctxRef('inputs.params.businessGroupId'),
+  archived: false,                     // literal: passed through verbatim
+})
+/** findOne -> ctx.user: Lean<User> | null */
+LoadOneTo(UserModel, 'user', { _id: ctxRef('inputs.body.user') })
+/** findById + .lean(), throws HipNotFound -> ctx.thing: Lean<Thing> */
+LoadByIdRequiredTo(ThingModel, 'thing', ctxRef('inputs.params.id'), 'No such thing')
+/** findById HYDRATED (for .set()/.save() update flows), throws HipNotFound */
+LoadDocByIdRequiredTo(ThingModel, 'thingDoc', ctxRef('inputs.params.id'))
+```
+
+Semantics worth knowing:
+
+- **`$eq`-wrapping by default.** ctxRef-resolved values are wrapped in
+  `{ $eq: value }` (and `undefined` entries pruned), so user-influenced
+  context values can't smuggle query operators. Literal values in the
+  spec are developer-authored and pass through verbatim — that's the
+  escape hatch for operator filters like `{ status: { $in: [...] } }`.
+  Every loader also accepts a selector function
+  (`(ctx) => ({ tenant: { $in: ctx.tenantIds } })`) for computed
+  filters, passed through as-is.
+- **Lean by default.** `LoadManyTo`/`LoadOneTo`/`LoadByIdRequiredTo`
+  read `.lean()` and type rows as `TRaw & { _id: Types.ObjectId }`, so a
+  downstream stage declaring `_id` passes deps-met. Use
+  `LoadDocByIdRequiredTo` when you need a hydrated document to mutate
+  and save.
+- **404 is the short pattern.** The `RequiredTo` variants throw
+  `HipNotFound` (with your optional message) when the row is missing —
+  reserving `finalAuthorize`/403 for actual permission denials.
+- These are typed against mongoose's own `Model<TRaw>` via type-only
+  imports (they erase at runtime; mongoose stays an optional peer), so
+  the raw doc type is inferred from the model you pass.
 
 ## tRPC adapter
 

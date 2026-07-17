@@ -4,7 +4,11 @@ import { z } from 'zod';
 import { HTPipe } from '../src';
 import { HipConflict, HipForbidden, HipRedirect } from '../src/errors';
 import { htZodFactory } from '../src/zod';
-import { defineNextHandler, toNextHandler } from '../src/next';
+import {
+  defineNextHandler,
+  makeNextHandlerFactory,
+  toNextHandler,
+} from '../src/next';
 
 function postReq(url: string, body: any): NextRequest {
   return new NextRequest(url, {
@@ -265,6 +269,108 @@ describe('adapter options (Findings P1-5, P1-6, P2-12.2)', () => {
     expect(ctx.inputs.params).toEqual({ id: '9' });
     expect(ctx.thing).toEqual({ id: 't1' });
     expect(ctx.response).toEqual({ made: true });
+  });
+
+  it('routes afterResponse failures (sync and async) to onError with phase afterResponse', async () => {
+    const seen: { error: unknown; info: any }[] = [];
+    const syncThrower = toNextHandler(okStages, {
+      onError: (error, info) => seen.push({ error, info }),
+      afterResponse: () => {
+        throw new Error('audit write failed');
+      },
+    });
+    const res = await syncThrower(
+      postReq('http://localhost/api/x', {}),
+      routeCtx({})
+    );
+    expect(res.status).toBe(200);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(seen).toHaveLength(1);
+    expect((seen[0].error as Error).message).toBe('audit write failed');
+    expect(seen[0].info.phase).toBe('afterResponse');
+
+    seen.length = 0;
+    const asyncRejector = toNextHandler(okStages, {
+      onError: (error, info) => seen.push({ error, info }),
+      afterResponse: async () => {
+        throw new Error('async audit write failed');
+      },
+    });
+    const res2 = await asyncRejector(
+      postReq('http://localhost/api/x', {}),
+      routeCtx({})
+    );
+    expect(res2.status).toBe(200);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(seen).toHaveLength(1);
+    expect((seen[0].error as Error).message).toBe('async audit write failed');
+    expect(seen[0].info.phase).toBe('afterResponse');
+  });
+
+  it('request-lifecycle onError calls carry no afterResponse phase', async () => {
+    const seen: any[] = [];
+    const handler = toNextHandler(
+      {
+        ...okStages,
+        execute: () => {
+          throw new Error('boom');
+        },
+      },
+      { onError: (_e, info) => seen.push(info) }
+    );
+    await handler(postReq('http://localhost/api/x', {}), routeCtx({}));
+    expect(seen).toHaveLength(1);
+    expect(seen[0].phase).toBeUndefined();
+  });
+
+  it('makeNextHandlerFactory bakes defaults; per-call options merge over them', async () => {
+    const gathered: string[] = [];
+    const toAppHandler = makeNextHandlerFactory({
+      gatherContext: async () => {
+        gathered.push('default');
+        return { principal: 'default-user' };
+      },
+    });
+
+    const withDefaults = toAppHandler({
+      extractAmbient: (raw: { principal: string }) => ({
+        principal: raw.principal,
+      }),
+      sanitizeInputs: (i: any) => i,
+      preAuthorize: () => true,
+      finalAuthorize: () => true,
+      execute: (ctx: { ambient: { principal: string } }) => ({
+        who: ctx.ambient.principal,
+      }),
+      redactResponse: (u: any) => u,
+    });
+    const res = await withDefaults(
+      postReq('http://localhost/api/me', {}),
+      routeCtx({})
+    );
+    expect(await res.json()).toEqual({ who: 'default-user' });
+    expect(gathered).toEqual(['default']);
+
+    const overridden = toAppHandler(
+      {
+        extractAmbient: (raw: { principal: string }) => ({
+          principal: raw.principal,
+        }),
+        sanitizeInputs: (i: any) => i,
+        preAuthorize: () => true,
+        finalAuthorize: () => true,
+        execute: (ctx: { ambient: { principal: string } }) => ({
+          who: ctx.ambient.principal,
+        }),
+        redactResponse: (u: any) => u,
+      },
+      { gatherContext: async () => ({ principal: 'override-user' }) }
+    );
+    const res2 = await overridden(
+      postReq('http://localhost/api/me', {}),
+      routeCtx({})
+    );
+    expect(await res2.json()).toEqual({ who: 'override-user' });
   });
 
   it('afterResponse does not fire on a failed request', async () => {

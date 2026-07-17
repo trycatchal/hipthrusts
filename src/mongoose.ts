@@ -1,3 +1,10 @@
+// Everyday loader fragments (LoadManyTo & friends) are typed against
+// mongoose's OWN Model/HydratedDocument generics: structural inference from
+// mongoose's overloaded Query/lean machinery resolves to `unknown`, so
+// type-only imports are the deliberate trade-off. They erase at runtime —
+// mongoose stays an optional peer — but consumers of 'hipthrusts/mongoose'
+// need mongoose installed to typecheck (they always did in practice).
+import type { HydratedDocument, Model, SortOrder, Types } from 'mongoose';
 import { HipBadInputs, HipNotFound } from './errors.js';
 import { SanitizeInputsSlices } from './index.js';
 import {
@@ -6,9 +13,10 @@ import {
   RedactResponse,
   SanitizeInputs,
 } from './lifecycle-functions.js';
+import { JsonMaskFn, loadJsonMask } from './load-json-mask.js';
 import { Constructor } from './types.js';
 
-import mask from 'json-mask';
+let jsonMaskFn: JsonMaskFn | undefined;
 
 interface ModelWithFindById<TInstance = any> {
   findById(id: string): { exec(): Promise<TInstance> };
@@ -19,7 +27,7 @@ interface ModelWithFindOne<TInstance = any> {
 }
 
 interface ModelWithFind<TInstance = any> {
-  find(filter: any): { exec(): Promise<TInstance[]> };
+  find(filter: any, projection?: any): { exec(): Promise<TInstance[]> };
 }
 
 // The context contribution/requirement for tenant-scoped list endpoints: some
@@ -28,6 +36,391 @@ interface ModelWithFind<TInstance = any> {
 // the scope is a compile error instead of a cross-tenant data leak.
 export interface HasQueryScope {
   queryScope: Record<string, unknown>;
+}
+
+// ---------------------------------------------------------------------------
+// ctxRef: declarative context-path references for loader filter/id specs.
+// ---------------------------------------------------------------------------
+
+// Symbol.for() so the marker survives dual-package (ESM+CJS) loading; the
+// unique-symbol assertion lets it be used as a literal key in types.
+const CTX_REF: unique symbol = Symbol.for('hipthrusts.ctxRef') as never;
+
+export interface CtxRef<TPath extends string = string> {
+  [CTX_REF]: true;
+  path: TPath;
+}
+
+// Declares "read this value from the lifecycle context at request time" in a
+// loader spec: `LoadOneTo(User, 'user', { _id: ctxRef('inputs.body.user') })`.
+// The context REQUIREMENT is derived from the path string, so deps-met still
+// enforces that an earlier stage provides `inputs.body.user` — with zero
+// hand-written context annotations at the call site.
+export function ctxRef<TPath extends string>(path: TPath): CtxRef<TPath> {
+  return { [CTX_REF]: true, path } as CtxRef<TPath>;
+}
+
+function isCtxRef(value: unknown): value is CtxRef {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as Record<PropertyKey, unknown>)[CTX_REF] === true
+  );
+}
+
+function readCtxPath(context: any, path: string) {
+  return path
+    .split('.')
+    .reduce((acc, segment) => (acc == null ? acc : acc[segment]), context);
+}
+
+// Derives the nested context requirement from a ctxRef dot path:
+// "inputs.body.user" -> { inputs: { body: { user: unknown } } }.
+export type CtxRefReq<TPath extends string> =
+  TPath extends `${infer THead}.${infer TRest}`
+    ? { [K in THead]: CtxRefReq<TRest> }
+    : { [K in TPath]: unknown };
+
+type UnionToIntersection<U> = (
+  U extends any ? (arg: U) => void : never
+) extends (arg: infer I) => void
+  ? I
+  : never;
+
+// The combined context requirement of every ctxRef in a filter spec; literal
+// (non-ref) values contribute nothing.
+type SpecReq<TSpec> =
+  UnionToIntersection<
+    {
+      [K in keyof TSpec]: TSpec[K] extends CtxRef<infer TPath>
+        ? CtxRefReq<TPath>
+        : never;
+    }[keyof TSpec]
+  > extends infer TReq
+    ? [TReq] extends [never]
+      ? {}
+      : TReq
+    : never;
+
+// A loader filter spec: field -> ctxRef (resolved per request, $eq-wrapped) or
+// a literal value (developer-authored, passed through verbatim — literals are
+// the escape hatch for operator filters like `{ status: { $in: [...] } }`).
+type FilterSpec = Record<string, unknown>;
+
+// ctxRef-resolved values get $eq-wrapped so user-influenced context values
+// can't smuggle query operators (NoSQL injection hygiene by default), and
+// undefined entries are pruned. Literals pass through verbatim.
+function resolveFilterSpec(
+  spec: FilterSpec | undefined,
+  context: any
+): Record<string, unknown> {
+  const filter: Record<string, unknown> = {};
+  if (!spec) {
+    return filter;
+  }
+  for (const field of Object.keys(spec)) {
+    const value = spec[field];
+    if (isCtxRef(value)) {
+      const resolved = readCtxPath(context, value.path);
+      if (resolved === undefined) {
+        continue;
+      }
+      filter[field] = { $eq: resolved };
+    } else if (value !== undefined) {
+      filter[field] = value;
+    }
+  }
+  return filter;
+}
+
+function resolveIdSpec(
+  idSpec: CtxRef | ((context: any) => unknown),
+  context: any
+) {
+  const id = isCtxRef(idSpec)
+    ? readCtxPath(context, idSpec.path)
+    : idSpec(context);
+  if (id === null || id === undefined || !id.toString()) {
+    throw new HipBadInputs('Missing dependent resource ID');
+  }
+  // A plain object/array here is either a bug or an operator-smuggling
+  // attempt (`{"$ne": null}` as an id); ObjectId instances pass fine.
+  if (
+    typeof id === 'object' &&
+    (Array.isArray(id) || (id as object).constructor === Object)
+  ) {
+    throw new HipBadInputs('Invalid dependent resource ID');
+  }
+  return id;
+}
+
+// Lean reads type as TRaw & { _id } so a downstream stage declaring `_id`
+// passes deps-met.
+export type LeanDocOf<TRaw> = TRaw & { _id: Types.ObjectId };
+
+// ---------------------------------------------------------------------------
+// Everyday loader fragments. All PascalCase + stage-prefixed, matching the
+// core fragment-factory convention.
+// ---------------------------------------------------------------------------
+
+/** LoadResources fragment: `Model.find(spec).lean()` -> ctx[key]: Lean<TRaw>[] */
+export function LoadManyTo<
+  TRaw,
+  TKey extends string,
+  TSpec extends FilterSpec = {},
+>(
+  Model: Model<TRaw>,
+  key: TKey,
+  filterSpec?: TSpec
+): {
+  loadResources: (
+    context: SpecReq<TSpec>
+  ) => Promise<Record<TKey, LeanDocOf<TRaw>[]>>;
+};
+export function LoadManyTo<TRaw, TKey extends string, TCtx extends object>(
+  Model: Model<TRaw>,
+  key: TKey,
+  filterSelector: (context: TCtx) => Record<string, unknown>
+): {
+  loadResources: (context: TCtx) => Promise<Record<TKey, LeanDocOf<TRaw>[]>>;
+};
+export function LoadManyTo(
+  Model: any,
+  key: string,
+  filterSpec?: FilterSpec | ((context: any) => Record<string, unknown>)
+) {
+  return LoadResources(async (context: object) => {
+    const filter =
+      typeof filterSpec === 'function'
+        ? filterSpec(context)
+        : resolveFilterSpec(filterSpec, context);
+    return { [key]: await Model.find(filter).lean().exec() };
+  });
+}
+
+/** LoadResources fragment: `Model.findOne(spec).lean()` -> ctx[key]: Lean<TRaw> | null */
+export function LoadOneTo<
+  TRaw,
+  TKey extends string,
+  TSpec extends FilterSpec = {},
+>(
+  Model: Model<TRaw>,
+  key: TKey,
+  filterSpec?: TSpec
+): {
+  loadResources: (
+    context: SpecReq<TSpec>
+  ) => Promise<Record<TKey, LeanDocOf<TRaw> | null>>;
+};
+export function LoadOneTo<TRaw, TKey extends string, TCtx extends object>(
+  Model: Model<TRaw>,
+  key: TKey,
+  filterSelector: (context: TCtx) => Record<string, unknown>
+): {
+  loadResources: (
+    context: TCtx
+  ) => Promise<Record<TKey, LeanDocOf<TRaw> | null>>;
+};
+export function LoadOneTo(
+  Model: any,
+  key: string,
+  filterSpec?: FilterSpec | ((context: any) => Record<string, unknown>)
+) {
+  return LoadResources(async (context: object) => {
+    const filter =
+      typeof filterSpec === 'function'
+        ? filterSpec(context)
+        : resolveFilterSpec(filterSpec, context);
+    return { [key]: await Model.findOne(filter).lean().exec() };
+  });
+}
+
+/**
+ * LoadResources fragment: `Model.findById(id).lean()`, throwing HipNotFound
+ * when missing -> ctx[key]: Lean<TRaw>. 404-on-missing is the SHORT pattern.
+ */
+export function LoadByIdRequiredTo<
+  TRaw,
+  TKey extends string,
+  TPath extends string,
+>(
+  Model: Model<TRaw>,
+  key: TKey,
+  idRef: CtxRef<TPath>,
+  notFoundMessage?: string
+): {
+  loadResources: (
+    context: CtxRefReq<TPath>
+  ) => Promise<Record<TKey, LeanDocOf<TRaw>>>;
+};
+export function LoadByIdRequiredTo<
+  TRaw,
+  TKey extends string,
+  TCtx extends object,
+>(
+  Model: Model<TRaw>,
+  key: TKey,
+  idSelector: (context: TCtx) => unknown,
+  notFoundMessage?: string
+): {
+  loadResources: (context: TCtx) => Promise<Record<TKey, LeanDocOf<TRaw>>>;
+};
+export function LoadByIdRequiredTo(
+  Model: any,
+  key: string,
+  idSpec: CtxRef | ((context: any) => unknown),
+  notFoundMessage?: string
+) {
+  return LoadResources(async (context: object) => {
+    const id = resolveIdSpec(idSpec, context);
+    const doc = await Model.findById(id).lean().exec();
+    if (!doc) {
+      throw new HipNotFound(notFoundMessage ?? 'Resource not found');
+    }
+    return { [key]: doc };
+  });
+}
+
+/**
+ * LoadResources fragment: `Model.findById(id)` HYDRATED (for update flows that
+ * `.set()`/`.save()`), throwing HipNotFound when missing
+ * -> ctx[key]: HydratedDocument<TRaw>.
+ */
+export function LoadDocByIdRequiredTo<
+  TRaw,
+  TKey extends string,
+  TPath extends string,
+>(
+  Model: Model<TRaw>,
+  key: TKey,
+  idRef: CtxRef<TPath>,
+  notFoundMessage?: string
+): {
+  loadResources: (
+    context: CtxRefReq<TPath>
+  ) => Promise<Record<TKey, HydratedDocument<TRaw>>>;
+};
+export function LoadDocByIdRequiredTo<
+  TRaw,
+  TKey extends string,
+  TCtx extends object,
+>(
+  Model: Model<TRaw>,
+  key: TKey,
+  idSelector: (context: TCtx) => unknown,
+  notFoundMessage?: string
+): {
+  loadResources: (
+    context: TCtx
+  ) => Promise<Record<TKey, HydratedDocument<TRaw>>>;
+};
+export function LoadDocByIdRequiredTo(
+  Model: any,
+  key: string,
+  idSpec: CtxRef | ((context: any) => unknown),
+  notFoundMessage?: string
+) {
+  return LoadResources(async (context: object) => {
+    const id = resolveIdSpec(idSpec, context);
+    const doc = await Model.findById(id).exec();
+    if (!doc) {
+      throw new HipNotFound(notFoundMessage ?? 'Resource not found');
+    }
+    return { [key]: doc };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Scoped finders (tenant-scoped list endpoints). PascalCase is the canonical
+// naming (matching every other fragment factory); the camelCase names on
+// htMongooseFactory remain as aliases.
+// ---------------------------------------------------------------------------
+
+// Query options for scoped finders. `queryScope` stays a type-REQUIRED
+// context key exactly as before — these only shape the query itself.
+export interface ScopedQueryOptions {
+  sort?: string | Record<string, SortOrder>;
+  limit?: number;
+  skip?: number;
+  projection?: string | Record<string, unknown>;
+  lean?: boolean;
+}
+
+export interface FindScopedOptions<
+  TKey extends string = 'scopedDocs',
+> extends ScopedQueryOptions {
+  docsKey?: TKey;
+}
+
+function execScopedQuery(
+  Model: ModelWithFind,
+  filter: Record<string, unknown>,
+  options: ScopedQueryOptions
+) {
+  let query: any =
+    options.projection !== undefined
+      ? Model.find(filter, options.projection)
+      : Model.find(filter);
+  if (options.sort !== undefined) {
+    query = query.sort(options.sort);
+  }
+  if (options.skip !== undefined) {
+    query = query.skip(options.skip);
+  }
+  if (options.limit !== undefined) {
+    query = query.limit(options.limit);
+  }
+  if (options.lean) {
+    query = query.lean();
+  }
+  return query.exec();
+}
+
+// LoadResources fragment: fetches Model.find with the composed filter
+// `{ ...ctx.queryScope, ...extraFilter }` and stores the rows under
+// `docsKey`. `queryScope` is REQUIRED in the context type, so the deps-met
+// machinery forces some earlier fragment (e.g. a LoadResources contributing
+// the caller's tenant filter) to provide it — authorization-as-query-scope
+// by construction.
+export function LoadScopedTo<TKey extends string>(
+  Model: ModelWithFind,
+  docsKey: TKey,
+  extraFilter?: object,
+  options: ScopedQueryOptions = {}
+) {
+  return LoadResources(async (context: HasQueryScope) => {
+    return {
+      [docsKey]: await execScopedQuery(
+        Model,
+        { ...context.queryScope, ...(extraFilter || {}) },
+        options
+      ),
+    } as Record<TKey, any[]>;
+  });
+}
+
+// The plain list endpoint in one fragment: LoadScopedTo on the load stage
+// (so the rows sit in context for finalAuthorize / redactResponse /
+// downstream execute stages) plus a trivial execute that returns them.
+// Fetching lives on the LOAD stage — piping your own execute after this one
+// overrides the response without re-running or wasting the query.
+// The third parameter takes an options bag ({ sort, limit, skip, projection,
+// lean, docsKey }); a bare string is accepted as the docs key for
+// backward compatibility.
+export function FindScoped<TKey extends string = 'scopedDocs'>(
+  Model: ModelWithFind,
+  extraFilter?: object,
+  docsKeyOrOptions?: TKey | FindScopedOptions<TKey>
+) {
+  const options: FindScopedOptions<TKey> =
+    typeof docsKeyOrOptions === 'string'
+      ? { docsKey: docsKeyOrOptions }
+      : (docsKeyOrOptions ?? {});
+  const key = (options.docsKey ?? 'scopedDocs') as TKey;
+  return {
+    ...LoadScopedTo(Model, key, extraFilter, options),
+    ...Execute((context: Record<TKey, any[]>) => context[key]),
+  };
 }
 
 interface HasValidateSync {
@@ -89,7 +482,12 @@ export function htMongooseFactory(mongoose: any) {
   }
 
   function dtoSchemaObj(schemaConfigObject: any, maskConfig: string) {
-    return deepWipeDefault(mask(schemaConfigObject, maskConfig));
+    // json-mask is loaded lazily so consumers using only the finders/loaders
+    // don't need the optional peer installed.
+    if (!jsonMaskFn) {
+      jsonMaskFn = loadJsonMask();
+    }
+    return deepWipeDefault(jsonMaskFn(schemaConfigObject, maskConfig));
   }
 
   type DocumentFactory<T> = (
@@ -174,44 +572,6 @@ export function htMongooseFactory(mongoose: any) {
     return SanitizeInputsSlices(sanitizers);
   }
 
-  // LoadResources fragment: fetches Model.find with the composed filter
-  // `{ ...ctx.queryScope, ...extraFilter }` and stores the rows under
-  // `docsKey`. `queryScope` is REQUIRED in the context type, so the deps-met
-  // machinery forces some earlier fragment (e.g. a LoadResources contributing
-  // the caller's tenant filter) to provide it — authorization-as-query-scope
-  // by construction.
-  function loadScopedTo<TKey extends string>(
-    Model: ModelWithFind,
-    docsKey: TKey,
-    extraFilter?: object
-  ) {
-    return LoadResources(async (context: HasQueryScope) => {
-      return {
-        [docsKey]: await Model.find({
-          ...context.queryScope,
-          ...(extraFilter || {}),
-        }).exec(),
-      } as Record<TKey, any[]>;
-    });
-  }
-
-  // The plain list endpoint in one fragment: loadScopedTo on the load stage
-  // (so the rows sit in context for finalAuthorize / redactResponse /
-  // downstream execute stages) plus a trivial execute that returns them.
-  // Fetching lives on the LOAD stage — piping your own execute after this one
-  // overrides the response without re-running or wasting the query.
-  function findScoped<TKey extends string = 'scopedDocs'>(
-    Model: ModelWithFind,
-    extraFilter?: object,
-    docsKey?: TKey
-  ) {
-    const key = (docsKey ?? 'scopedDocs') as TKey;
-    return {
-      ...loadScopedTo(Model, key, extraFilter),
-      ...Execute((context: Record<TKey, any[]>) => context[key]),
-    };
-  }
-
   function SaveOnDocumentFrom(propertyKeyOfDocument: string) {
     return Execute(async (context: any) => {
       if (context[propertyKeyOfDocument]) {
@@ -286,8 +646,19 @@ export function htMongooseFactory(mongoose: any) {
     dtoSchemaObj,
     findByIdRequired,
     findOneByRequired,
-    findScoped,
-    loadScopedTo,
+    // Everyday loader fragments (also exported at module level — none of them
+    // need the mongoose instance; they're on the factory for discoverability).
+    ctxRef,
+    LoadManyTo,
+    LoadOneTo,
+    LoadByIdRequiredTo,
+    LoadDocByIdRequiredTo,
+    // Scoped finders. PascalCase is canonical; the camelCase names are
+    // backward-compatible aliases.
+    FindScoped,
+    LoadScopedTo,
+    findScoped: FindScoped,
+    loadScopedTo: LoadScopedTo,
     stripIdTransform,
   };
 }

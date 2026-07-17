@@ -102,7 +102,15 @@ export function toFastifyHandler<
       if (options.afterResponse) {
         // Fastify is Node-only; schedule off the response path.
         setImmediate(() =>
-          safeInvokeAfterResponse(options.afterResponse, context)
+          safeInvokeAfterResponse(
+            options.afterResponse,
+            context,
+            options.onError,
+            {
+              req,
+              reply,
+            }
+          )
         );
       }
       return reply.status(meta.status || 200).send(response);
@@ -119,5 +127,23 @@ export function toFastifyHandler<
       }
       return reply.status(500).send({ error: 'Internal server error' });
     }
+  };
+}
+
+// Adapter preset factory: bakes shared options into a reusable handler
+// converter (mirrors makeNextHandlerFactory); per-call options merge OVER
+// the defaults.
+export function makeFastifyHandlerFactory(defaults: HttpAdapterOptions) {
+  return function toFastifyHandlerWithDefaults<
+    TConf extends OptionalStagesShape &
+      HasRequiredStages &
+      PreAuthorizeDepsMet<TConf> &
+      LoadResourcesDepsMet<TConf> &
+      FinalAuthorizeDepsMet<TConf> &
+      ExecuteDepsMet<TConf> &
+      RedactResponseDepsMet<TConf> &
+      HasResponseMeta,
+  >(handlingStrategy: TConf, options: HttpAdapterOptions = {}) {
+    return toFastifyHandler(handlingStrategy, { ...defaults, ...options });
   };
 }

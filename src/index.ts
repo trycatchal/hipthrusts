@@ -1345,3 +1345,6 @@ export * from './errors.js';
 export * from './http-adapter.js';
 export * from './user.js';
 export * from './lifecycle-functions.js';
+// finish-pipe imports HTPipe from this module; the cycle is safe because the
+// reference is only dereferenced at call time.
+export * from './finish-pipe.js';

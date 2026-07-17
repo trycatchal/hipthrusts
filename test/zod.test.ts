@@ -7,6 +7,7 @@ const {
   SanitizeInputsWithZod,
   SanitizeInputsSlicesWithZod,
   RedactResponseWithZod,
+  RedactResponseByRoleWithZod,
   PojoToValidated,
   stripIdTransform,
 } = htZodFactory();
@@ -142,5 +143,62 @@ describe('SanitizeInputsSlicesWithZod', () => {
     expect(sanitizeInputs({ body: { name: 'hip', _id: 'nope' } }).body).toEqual(
       { name: 'hip' }
     );
+  });
+});
+
+describe('RedactResponseByRoleWithZod', () => {
+  const memberSchema = z.object({ names: z.array(z.string()) });
+  const adminSchema = z.object({
+    names: z.array(z.string()),
+    emails: z.array(z.string()),
+  });
+  const unsafe = {
+    names: ['a', 'b'],
+    emails: ['a@x.co', 'b@x.co'],
+    internalFlag: true,
+  };
+
+  it('picks the schema by a boolean context flag', () => {
+    const { redactResponse } = RedactResponseByRoleWithZod(
+      (ctx: { canSeeEmails: boolean }) => ctx.canSeeEmails,
+      { true: adminSchema, false: memberSchema }
+    );
+    expect(redactResponse(unsafe, { canSeeEmails: true })).toEqual({
+      names: ['a', 'b'],
+      emails: ['a@x.co', 'b@x.co'],
+    });
+    expect(redactResponse(unsafe, { canSeeEmails: false })).toEqual({
+      names: ['a', 'b'],
+    });
+  });
+
+  it('picks the schema by a string role key', () => {
+    const { redactResponse } = RedactResponseByRoleWithZod(
+      (ctx: { role: 'admin' | 'member' }) => ctx.role,
+      { admin: adminSchema, member: memberSchema }
+    );
+    expect(redactResponse(unsafe, { role: 'member' })).toEqual({
+      names: ['a', 'b'],
+    });
+  });
+
+  it('throws HipInternal when no schema is registered for the key', () => {
+    const { redactResponse } = RedactResponseByRoleWithZod(
+      (ctx: { role: string }) => ctx.role,
+      { admin: adminSchema } as Record<string, typeof adminSchema>
+    );
+    expect(() => redactResponse(unsafe, { role: 'ghost' })).toThrow(
+      HipInternal
+    );
+  });
+
+  it('throws HipInternal when the chosen schema rejects the response', () => {
+    const { redactResponse } = RedactResponseByRoleWithZod(
+      (ctx: { canSeeEmails: boolean }) => ctx.canSeeEmails,
+      { true: adminSchema, false: memberSchema }
+    );
+    expect(() =>
+      redactResponse({ nope: true }, { canSeeEmails: true })
+    ).toThrow(HipInternal);
   });
 });
