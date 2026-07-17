@@ -8,10 +8,10 @@ that promise seriously.
 
 | Version | Supported |
 | ------- | --------- |
-| latest 0.x release | ✅ |
-| older releases | ❌ |
+| latest 1.x release | ✅ |
+| 0.x releases | ❌ |
 
-Until 1.0, fixes land on the latest release only.
+Fixes land on the latest release only.
 
 ## Reporting a vulnerability
 

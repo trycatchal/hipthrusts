@@ -1009,8 +1009,10 @@ pnpm exec tsx examples/fastify-hello.ts
   handler set from `{ resource, principals, operations }`
 - A starter template
 
-See [ROADMAP.md](./ROADMAP.md) for the path to 1.0. PRs welcome —
-see [CONTRIBUTING.md](./CONTRIBUTING.md).
+HipThrusTS is stable as of 1.0.0 and follows
+[semantic versioning](https://semver.org): breaking changes to the public
+API land only in major releases. See [ROADMAP.md](./ROADMAP.md) for what's
+next. PRs welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## License
 

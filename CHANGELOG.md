@@ -4,7 +4,29 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
-(pre-1.0: minor releases may contain breaking changes).
+(before 1.0, minor releases could contain breaking changes).
+
+## [1.0.0] - 2026-07-17
+
+First stable release. No API changes since 0.13.0 — this release is the
+semver commitment: the public API surface shipped in 0.13.0 is frozen, and
+breaking changes from here on land only in major releases.
+
+### Changed
+
+- Default branch renamed from `master` to `main`; CI/docs workflows,
+  contribution docs, and changelog compare links updated to match.
+- SECURITY.md supported-versions policy updated for 1.x.
+
+### Security
+
+- Dev-dependency refresh clearing all open Dependabot advisories (dev/CI
+  only — the published package ships no runtime dependencies, so none of
+  these ever reached consumers). Refreshed `hono`, `fastify`, `mongoose`,
+  `next`, `tsx`, `vitest`, `@hono/node-server`, and `@types/node` within
+  range, and added `pnpm.overrides` pinning the transitive `vite` (≥8.0.16)
+  and `postcss` (≥8.5.10) up out of their advisories. `prettier` is pinned
+  to an exact version to keep formatting stable across environments.
 
 ## [0.13.0] - 2026-07-17
 
@@ -230,6 +252,7 @@ dogfooding-feedback fixes into the 0.12.0 release._
 - Initial public releases: Express + Mongoose oriented handler classes with
   the mandatory-stage lifecycle.
 
-[0.13.0]: https://github.com/trycatchal/hipthrusts/compare/28fd759...master
+[1.0.0]: https://github.com/trycatchal/hipthrusts/compare/e7205a2...main
+[0.13.0]: https://github.com/trycatchal/hipthrusts/compare/28fd759...e7205a2
 [0.11.0]: https://github.com/trycatchal/hipthrusts/commit/c0fee82
 [0.10.0]: https://github.com/trycatchal/hipthrusts/commit/beb8b0d
