@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 (before 1.0, minor releases could contain breaking changes).
 
+## [Unreleased]
+
+### Documentation
+
+- README rewritten as a visual-first overview (~230 lines, down from
+  ~1100): the new lifecycle diagram (`docs/img/lifecycle.svg`, hand-drawn
+  SVG so it renders on npm too), context accumulation, and `HTPipe`
+  composition now appear inline instead of behind a link. The deep
+  reference material moved to six topic pages under `docs/` — lifecycle,
+  composition, errors, adapters, validation (zod), mongoose — indexed from
+  `docs/README.md`. The diagrams from `docs/architecture.md` were
+  redistributed to sit next to the prose they illustrate (that file is now
+  a pointer stub), and the failure-routing diagram was corrected for
+  1.1.0's `extractAmbient` unknown-throw fix (422 row → 500 row).
+- typedoc: the `hipthrusts/ctx-ref` subpath added in 1.1.0 is now an
+  entry point, so its exports appear in the generated API reference.
+
 ## [1.1.0] - 2026-07-19
 
 ### Added

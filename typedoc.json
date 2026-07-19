@@ -3,6 +3,7 @@
   "entryPoints": [
     "src/index.ts",
     "src/core.ts",
+    "src/ctx-ref.ts",
     "src/errors.ts",
     "src/http-adapter.ts",
     "src/lifecycle-functions.ts",
