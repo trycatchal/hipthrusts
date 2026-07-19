@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: read
+  # OIDC token for npm Trusted Publishing — no long-lived NPM_TOKEN secret.
   id-token: write
 
 jobs:
@@ -22,7 +23,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm test
-      # prepublishOnly runs clean + build + check:exports + smoke
-      - run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # Trusted Publishing (OIDC) needs npm >= 11.5.1; Node 22 ships npm 10.
+      - run: npm install -g npm@latest
+      # prepublishOnly runs clean + build + check:exports + smoke.
+      # No NODE_AUTH_TOKEN and no --provenance: with Trusted Publishing npm
+      # authenticates via OIDC and attaches provenance automatically.
+      - run: npm publish --access public
