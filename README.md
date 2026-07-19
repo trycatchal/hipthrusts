@@ -816,6 +816,16 @@ Semantics worth knowing:
   imports (they erase at runtime; mongoose stays an optional peer), so
   the raw doc type is inferred from the model you pass.
 
+> **Building loaders for another backend?** The `ctxRef` marker primitives
+> are backend-neutral and also live at their own subpath,
+> `hipthrusts/ctx-ref` — `ctxRef`, `isCtxRef` (the runtime guard),
+> `CtxRef` / `CtxRefReq`, and `SpecReq` (derives a spec's deps-met
+> requirement). Import from there to emit and recognize the *same* markers
+> the mongoose loaders use — the marker is keyed by a shared
+> `Symbol.for` registry — without depending on the mongoose entrypoint.
+> `hipthrusts/mongoose` re-exports `ctxRef` / `CtxRef` / `CtxRefReq` for
+> backward compatibility.
+
 ## tRPC adapter
 
 The same handler config works with tRPC; only the adapter changes:

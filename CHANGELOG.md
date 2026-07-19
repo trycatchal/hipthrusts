@@ -10,12 +10,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `hipthrusts/mongoose` now exports `isCtxRef` (the runtime guard for the
-  `ctxRef` marker) and `SpecReq` (types-only; the mapped type that derives a
-  filter spec's combined deps-met context requirement). Alternative-backend
-  loader flavors can reuse the shared `Symbol.for('hipthrusts.ctxRef')`
-  marker registry and derive the identical requirement without restating
-  either — keeping them byte-compatible with the built-in loaders.
+- New backend-neutral subpath `hipthrusts/ctx-ref`: the canonical home for
+  the `ctxRef` marker primitives — `ctxRef`, `isCtxRef` (runtime guard),
+  `CtxRef` / `CtxRefReq`, and `SpecReq` (derives a filter spec's combined
+  deps-met context requirement). Alternative-backend loader flavors (a
+  non-mongoose ODM, a hand-rolled loader) can now emit and recognize the
+  *same* markers the built-in mongoose loaders use — the marker is keyed by
+  the shared `Symbol.for('hipthrusts.ctxRef')` registry — without importing
+  the mongoose entrypoint or restating any private machinery. `isCtxRef` and
+  `SpecReq` are newly exported here; `ctxRef` / `CtxRef` / `CtxRefReq`
+  (previously reachable only via `hipthrusts/mongoose`) now live here too.
+
+### Changed
+
+- `hipthrusts/mongoose` re-exports `ctxRef` / `CtxRef` / `CtxRefReq` from the
+  new `hipthrusts/ctx-ref` subpath, so imports of those names from
+  `hipthrusts/mongoose` continue to work unchanged (backward compatible).
 
 ### Fixed
 

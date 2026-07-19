@@ -5,6 +5,8 @@
 // mongoose stays an optional peer — but consumers of 'hipthrusts/mongoose'
 // need mongoose installed to typecheck (they always did in practice).
 import type { HydratedDocument, Model, SortOrder, Types } from 'mongoose';
+import { ctxRef, isCtxRef } from './ctx-ref.js';
+import type { CtxRef, CtxRefReq, SpecReq } from './ctx-ref.js';
 import { HipBadInputs, HipNotFound } from './errors.js';
 import { SanitizeInputsSlices } from './index.js';
 import {
@@ -14,7 +16,15 @@ import {
   SanitizeInputs,
 } from './lifecycle-functions.js';
 import { JsonMaskFn, loadJsonMask } from './load-json-mask.js';
-import { Constructor, NestedPathReq } from './types.js';
+import { Constructor } from './types.js';
+
+// Backward-compatible re-exports: these names shipped from
+// 'hipthrusts/mongoose' in 1.0.0, so they keep resolving here. Their
+// canonical home is now the backend-neutral 'hipthrusts/ctx-ref' subpath.
+// (`isCtxRef` and `SpecReq` are new in this release and live ONLY there —
+// they were never exported from 'hipthrusts/mongoose', so nothing to keep.)
+export { ctxRef };
+export type { CtxRef, CtxRefReq };
 
 let jsonMaskFn: JsonMaskFn | undefined;
 
@@ -39,72 +49,17 @@ export interface HasQueryScope {
 }
 
 // ---------------------------------------------------------------------------
-// ctxRef: declarative context-path references for loader filter/id specs.
+// ctxRef resolution: the marker primitives (ctxRef/isCtxRef/CtxRef/CtxRefReq/
+// SpecReq) live in the backend-neutral './ctx-ref.js' module and are imported
+// above; the mongoose loaders below resolve those markers against the runtime
+// context via `readCtxPath`.
 // ---------------------------------------------------------------------------
-
-// Symbol.for() so the marker survives dual-package (ESM+CJS) loading; the
-// unique-symbol assertion lets it be used as a literal key in types.
-const CTX_REF: unique symbol = Symbol.for('hipthrusts.ctxRef') as never;
-
-export interface CtxRef<TPath extends string = string> {
-  [CTX_REF]: true;
-  path: TPath;
-}
-
-// Declares "read this value from the lifecycle context at request time" in a
-// loader spec: `LoadOneTo(User, 'user', { _id: ctxRef('inputs.body.user') })`.
-// The context REQUIREMENT is derived from the path string, so deps-met still
-// enforces that an earlier stage provides `inputs.body.user` — with zero
-// hand-written context annotations at the call site.
-export function ctxRef<TPath extends string>(path: TPath): CtxRef<TPath> {
-  return { [CTX_REF]: true, path } as CtxRef<TPath>;
-}
-
-// Exported so alternative-backend loader flavors (a non-mongoose ODM, or a
-// hand-rolled loader) can recognize the SAME `ctxRef` markers these factories
-// emit — the marker is keyed by `Symbol.for('hipthrusts.ctxRef')`, so a guard
-// built here matches refs created anywhere in the process without restating
-// the private symbol.
-export function isCtxRef(value: unknown): value is CtxRef {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    (value as Record<PropertyKey, unknown>)[CTX_REF] === true
-  );
-}
 
 function readCtxPath(context: any, path: string) {
   return path
     .split('.')
     .reduce((acc, segment) => (acc == null ? acc : acc[segment]), context);
 }
-
-// The nested context requirement derived from a ctxRef dot path:
-// "inputs.body.user" -> { inputs: { body: { user: unknown } } }.
-export type CtxRefReq<TPath extends string> = NestedPathReq<TPath>;
-
-type UnionToIntersection<U> = (
-  U extends any ? (arg: U) => void : never
-) extends (arg: infer I) => void
-  ? I
-  : never;
-
-// The combined context requirement of every ctxRef in a filter spec; literal
-// (non-ref) values contribute nothing. Exported (types-only) so alternative
-// loader flavors can derive the identical deps-met requirement from a spec
-// without restating this mapped type.
-export type SpecReq<TSpec> =
-  UnionToIntersection<
-    {
-      [K in keyof TSpec]: TSpec[K] extends CtxRef<infer TPath>
-        ? CtxRefReq<TPath>
-        : never;
-    }[keyof TSpec]
-  > extends infer TReq
-    ? [TReq] extends [never]
-      ? {}
-      : TReq
-    : never;
 
 // A loader filter spec: field -> ctxRef (resolved per request, $eq-wrapped) or
 // a literal value (developer-authored, passed through verbatim — literals are
