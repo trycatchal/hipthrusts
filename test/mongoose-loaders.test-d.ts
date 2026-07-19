@@ -4,6 +4,7 @@
 import type { Model, Types } from 'mongoose';
 import { describe, expectTypeOf, it } from 'vitest';
 import { HTPipe, SanitizeInputsSlices } from '../src/index.js';
+import type { CtxRef, SpecReq } from '../src/mongoose.js';
 import {
   ctxRef,
   LoadByIdRequiredTo,
@@ -116,5 +117,25 @@ describe('lean and hydrated result typing', () => {
     type Out = Awaited<ReturnType<typeof frag.loadResources>>;
     // Hydrated documents carry mongoose instance methods like save().
     expectTypeOf<Out['userDoc']['save']>().toBeFunction();
+  });
+});
+
+// Exported so alternative loader flavors can derive the same deps-met
+// requirement from a filter spec without restating the mapped type.
+describe('SpecReq (exported spec-requirement mapper)', () => {
+  it('combines every ctxRef path into one nested requirement; literals add nothing', () => {
+    type Req = SpecReq<{
+      _id: CtxRef<'inputs.body.user'>;
+      status: { $in: string[] }; // literal — contributes no requirement
+      org: CtxRef<'inputs.params.orgId'>;
+    }>;
+    expectTypeOf<Req>().toMatchTypeOf<{
+      inputs: { body: { user: unknown }; params: { orgId: unknown } };
+    }>();
+  });
+
+  it('a spec with no ctxRefs requires nothing', () => {
+    // No ctxRefs => no required keys (the `{}` empty requirement).
+    expectTypeOf<keyof SpecReq<{ status: string }>>().toEqualTypeOf<never>();
   });
 });

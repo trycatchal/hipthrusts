@@ -5,6 +5,7 @@ import {
   ctxRef,
   FindScoped,
   htMongooseFactory,
+  isCtxRef,
   LoadByIdRequiredTo,
   LoadDocByIdRequiredTo,
   LoadManyTo,
@@ -320,6 +321,37 @@ function fakeQuery(result: any) {
   query.exec = async () => result;
   return query;
 }
+
+describe('isCtxRef (exported ctxRef marker guard)', () => {
+  it('recognizes a ctxRef and narrows to its path, rejecting everything else', () => {
+    const ref = ctxRef('inputs.body.user');
+    expect(isCtxRef(ref)).toBe(true);
+    if (isCtxRef(ref)) {
+      // narrows to CtxRef — .path is readable without a cast
+      expect(ref.path).toBe('inputs.body.user');
+    }
+    for (const notARef of [
+      null,
+      undefined,
+      {},
+      { path: 'inputs.body.user' },
+      'inputs.body.user',
+      42,
+    ]) {
+      expect(isCtxRef(notARef)).toBe(false);
+    }
+  });
+
+  it('matches a marker minted from the shared Symbol.for registry (cross-copy interop)', () => {
+    // An alternative loader flavor that never imported ctxRef but stamps the
+    // same registered symbol is still recognized — the point of exporting it.
+    const foreign = {
+      [Symbol.for('hipthrusts.ctxRef')]: true,
+      path: 'inputs.params.id',
+    };
+    expect(isCtxRef(foreign)).toBe(true);
+  });
+});
 
 describe('everyday loaders: ctxRef filter specs', () => {
   it('LoadOneTo $eq-wraps ctxRef values, passes literals verbatim, prunes undefined', async () => {

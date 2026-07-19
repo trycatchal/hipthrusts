@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `hipthrusts/mongoose` now exports `isCtxRef` (the runtime guard for the
+  `ctxRef` marker) and `SpecReq` (types-only; the mapped type that derives a
+  filter spec's combined deps-met context requirement). Alternative-backend
+  loader flavors can reuse the shared `Symbol.for('hipthrusts.ctxRef')`
+  marker registry and derive the identical requirement without restating
+  either — keeping them byte-compatible with the built-in loaders.
+
 ### Fixed
 
 - `extractAmbient` now routes an unknown (non-`HipError`) throw to `500`

@@ -39,12 +39,11 @@ in a 1.x minor if a concrete use case arrives; the rest are genuinely 2.0
       / thunk on `raw.body`). Complications: adapters that must read the body
       regardless (e.g. HMAC-signed webhooks) and preserving
       `allowMalformedBody` semantics.
-- [ ] **Export `SpecReq` and `isCtxRef` from `hipthrusts/mongoose`**
-      (additive, possibly 1.x). Alternative-backend loader flavors that want
-      to reuse the upstream `ctxRef` markers must currently restate the
-      module-private `SpecReq` mapped type and the `isCtxRef` guard — a drift
-      surface. Exporting both (types-only for `SpecReq`) lets those loaders
-      stay byte-compatible without restatement.
+- [x] **Export `SpecReq` and `isCtxRef` from `hipthrusts/mongoose`** — done
+      (additive; see CHANGELOG Unreleased). Alternative-backend loader flavors
+      can now reuse the upstream `ctxRef` marker registry and derive the same
+      deps-met requirement without restating the module-private guard or
+      mapped type.
 - [ ] **Optional `gateAmbient` stage / alias** (2.0, cosmetic). The auth-gate
       pattern bends the "extract" vocabulary (an extraction that throws).
       A first-class `gateAmbient` alias would name the intent explicitly while

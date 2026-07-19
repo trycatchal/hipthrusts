@@ -60,7 +60,12 @@ export function ctxRef<TPath extends string>(path: TPath): CtxRef<TPath> {
   return { [CTX_REF]: true, path } as CtxRef<TPath>;
 }
 
-function isCtxRef(value: unknown): value is CtxRef {
+// Exported so alternative-backend loader flavors (a non-mongoose ODM, or a
+// hand-rolled loader) can recognize the SAME `ctxRef` markers these factories
+// emit — the marker is keyed by `Symbol.for('hipthrusts.ctxRef')`, so a guard
+// built here matches refs created anywhere in the process without restating
+// the private symbol.
+export function isCtxRef(value: unknown): value is CtxRef {
   return (
     typeof value === 'object' &&
     value !== null &&
@@ -85,8 +90,10 @@ type UnionToIntersection<U> = (
   : never;
 
 // The combined context requirement of every ctxRef in a filter spec; literal
-// (non-ref) values contribute nothing.
-type SpecReq<TSpec> =
+// (non-ref) values contribute nothing. Exported (types-only) so alternative
+// loader flavors can derive the identical deps-met requirement from a spec
+// without restating this mapped type.
+export type SpecReq<TSpec> =
   UnionToIntersection<
     {
       [K in keyof TSpec]: TSpec[K] extends CtxRef<infer TPath>
