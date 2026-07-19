@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 (before 1.0, minor releases could contain breaking changes).
 
-## [Unreleased]
+## [1.1.0] - 2026-07-19
 
 ### Added
 
@@ -319,7 +319,8 @@ dogfooding-feedback fixes into the 0.12.0 release._
 - Initial public releases: Express + Mongoose oriented handler classes with
   the mandatory-stage lifecycle.
 
-[1.0.0]: https://github.com/trycatchal/hipthrusts/compare/e7205a2...main
+[1.1.0]: https://github.com/trycatchal/hipthrusts/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/trycatchal/hipthrusts/compare/e7205a2...v1.0.0
 [0.13.0]: https://github.com/trycatchal/hipthrusts/compare/28fd759...e7205a2
 [0.11.0]: https://github.com/trycatchal/hipthrusts/commit/c0fee82
 [0.10.0]: https://github.com/trycatchal/hipthrusts/commit/beb8b0d
