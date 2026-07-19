@@ -1,28 +1,30 @@
 # HipThrusTS, visually
 
-Five diagrams that explain how HipThrusTS works and why it exists:
+Six views that explain how HipThrusTS works and why it exists:
 
-1. [The lifecycle](#1-the-lifecycle) — the eight stages, how context
-   accumulates, and how flow control moves through them
+1. [The lifecycle](#1-the-lifecycle) — the eight stages and how flow
+   control moves through them
 2. [Failure routing](#2-failure-routing) — how each stage's failures map to
    client-safe responses
-3. [Composition with `HTPipe`](#3-composition-with-htpipe) — how fragments
-   merge, and how a single request snakes across the whole pipe one
-   lifecycle stage at a time
-4. [Adapters](#4-adapters) — framework adapters on the outside, schema and
-   data-model adapters plugged into individual stages
-5. [The strictness guarantee](#5-the-strictness-guarantee) — why an
-   unsanitized input slice can never reach your business logic
+3. [From raw request to initial context](#3-from-raw-request-to-initial-context)
+   — the trusted and untrusted halves of a request, and why unsanitized
+   slices can't survive
+4. [The context only grows](#4-the-context-only-grows) — how every stage
+   layers its contribution onto what came before
+5. [Composition with `HTPipe`](#5-composition-with-htpipe) — one request
+   sweeping the whole pipe stage by stage
+6. [Adapters](#6-adapters) — thin edges around a framework-free middle
 
-All diagrams are Mermaid, so GitHub renders them natively and they get
-reviewed in the same diff as the code they describe.
+Simple flows are Mermaid (GitHub renders it natively, and it's reviewed in
+the same diff as the code it describes). The spatial ones — the growing
+context stack, the pipe sweep, the adapter surface — are hand-drawn SVGs
+in [`img/`](./img), also plain text in the diff, drawn with theme-neutral
+colors so they read correctly in both GitHub light and dark mode.
 
 ## 1. The lifecycle
 
 Every handler is the same eight stages (five required, three optional),
-run in a fixed order by `executeHipthrustable`. The context is a plain
-object that **accumulates**: each stage receives everything earlier stages
-produced, and later stages can consume it with full type inference.
+run in a fixed order by `executeHipthrustable`.
 
 Authorization stages return `true` to pass, `false` to deny, or an
 **object** to pass *and* contribute that object's keys to the context.
@@ -93,178 +95,86 @@ flowchart LR
     S4 --> E500
 ```
 
-## 3. Composition with `HTPipe`
+## 3. From raw request to initial context
 
-The real payoff is writing a fragment once — "load the Thing, require the
-caller to own it" — and reusing it everywhere. `HTPipe` merges fragments
-**stage by stage**, not end to end:
-
-```mermaid
-flowchart LR
-    F1["WithUserFromReq<br/><i>extractAmbient</i>"]
-    F2["SanitizeInputsSlices<br/><i>sanitizeInputs</i>"]
-    F3["RequireThingOwner<br/><i>loadResources<br/>finalAuthorize</i>"]
-    F4["endpoint handler<br/><i>preAuthorize<br/>execute<br/>redactResponse</i>"]
-
-    PIPE(["HTPipe(…)"])
-    OUT["<b>one complete handler</b><br/>every stage present,<br/>each stage = its fragments chained left→right,<br/>context types intersected"]
-
-    F1 --> PIPE
-    F2 --> PIPE
-    F3 --> PIPE
-    F4 --> PIPE
-    PIPE --> OUT
-```
-
-At **runtime**, this means a single request does *not* run fragment 1
-start-to-finish, then fragment 2. Instead, each lifecycle stage sweeps
-left-to-right across every fragment that declares it — threading the
-accumulating context through — and only then does the request move to the
-next stage, back at the start of the pipe:
+A request object carries two very different kinds of data, and the first
+two lifecycle stages exist to keep them apart. Things the **caller
+controls** (params, body, query, headers) are untrusted and must pass
+through `sanitizeInputs`. Things **your own middleware produced** before
+the handler ran (`req.user` from your auth layer, a request ID, a locale)
+are trusted, and `extractAmbient` lifts them directly.
 
 ```mermaid
-sequenceDiagram
-    autonumber
-    participant C as core lifecycle
-    participant U as WithUserFromReq
-    participant S as SanitizeSlices
-    participant O as RequireThingOwner
-    participant H as endpoint handler
+flowchart TD
+    REQ["request object"]
 
-    Note over C,H: extractAmbient
-    C->>U: extractAmbient(raw)
-    U-->>C: { user } → ctx.ambient
-
-    Note over C,H: sanitizeInputs
-    C->>S: sanitizeInputs(unsafe)
-    S-->>C: { params, body } → ctx.inputs
-
-    Note over C,H: preAuthorize
-    C->>H: preAuthorize(ctx)
-    H-->>C: true
-
-    Note over C,H: loadResources — back to the pipe's middle
-    C->>O: loadResources(ctx)
-    O-->>C: { thing } → ctx.thing
-
-    Note over C,H: finalAuthorize
-    C->>O: finalAuthorize(ctx)
-    O-->>C: { isOwner: true } → ctx.isOwner
-
-    Note over C,H: execute
-    C->>H: execute(ctx)
-    H-->>C: unsafe result
-
-    Note over C,H: redactResponse
-    C->>H: redactResponse(unsafe, ctx)
-    H-->>C: safe response
-```
-
-When **two fragments declare the same stage**, they chain within that
-stage, left to right, and flow control short-circuits:
-
-```mermaid
-flowchart LR
-    IN["ctx in"] --> L{"left fragment's<br/>finalAuthorize"}
-    L -->|"object / true<br/>(contribution spread into ctx)"| R{"right fragment's<br/>finalAuthorize"}
-    L -->|"false"| DENY(["stage denies —<br/>right never runs"])
-    R -->|"object / true"| PASS(["stage passes;<br/>both contributions merged"])
-    R -->|"false"| DENY
-```
-
-(`sanitizeInputs` chains output→input like a classic pipe;
-`redactResponse` chains the same way, so redactors stack; `execute` runs
-both and keeps the right result; loaders and authorizers merge their
-contributions as shown.)
-
-`finishPipe(pipe, handler)` is the ergonomic finish for the dominant
-shape — one shared pipe plus one endpoint-specific trailing handler —
-with the trailing handler's context types **inferred** from the pipe, so
-its callbacks need zero annotations.
-
-## 4. Adapters
-
-The lifecycle is framework-agnostic. Three kinds of adapters plug into
-it, and none of them know about each other:
-
-- **Endpoint handler adapters** wrap the whole lifecycle for a framework
-  (~100 lines each — anything else is a small PR away).
-- **Schema validation adapters** produce `sanitizeInputs` fragments from
-  a schema library.
-- **Data-model adapters** produce `loadResources` fragments (and
-  redaction helpers) from your ORM/ODM.
-
-```mermaid
-flowchart LR
-    subgraph FW["Endpoint handler adapters"]
-        direction TB
-        EXP["Express<br/><code>toExpressHandler</code>"]
-        TRPC["tRPC<br/><code>toTrpcProcedure</code>"]
-        HONO["Hono<br/><code>toHonoHandler</code>"]
-        FAST["Fastify<br/><code>toFastifyHandler</code>"]
-        NEXT["Next.js App Router<br/><code>toNextHandler</code>"]
+    subgraph UT["untrusted — the caller controls this"]
+        P["params"]
+        B["body"]
+        Q["query · headers · …"]
     end
+    MW["trusted — produced by your own<br/>prior middleware: req.user, request ID"]
 
-    subgraph CORE["Core lifecycle (framework-free)"]
-        direction TB
-        LC["extractAmbient → extractInputs →<br/>sanitizeInputs → preAuthorize →<br/>loadResources → finalAuthorize →<br/>execute → redactResponse"]
-    end
+    SI["<b>sanitizeInputs</b><br/>validate every slice you want to keep"]
+    EA["<b>extractAmbient</b><br/>lift what you already trust"]
 
-    subgraph PLUG["Stage-fragment adapters"]
-        direction TB
-        ZOD["<b>Zod</b> (schema validation)<br/>SanitizeInputsWithZod<br/>SanitizeInputsSlicesWithZod<br/>→ sanitizeInputs fragments"]
-        MOO["<b>Mongoose</b> (data model)<br/>LoadByIdRequiredTo, FindScoped, …<br/>→ loadResources fragments<br/>json-mask → redaction helpers"]
-        USR["<b>Auth helpers</b><br/>roleCheckersOnRoleKey,<br/>assigneeCheckersOnIdKey<br/>→ authorize fragments"]
-    end
+    DROP(["slices you didn't sanitize are deleted<br/>at the stage boundary — consuming one<br/>downstream is a compile error"])
+    CTX["<b>initial context</b><br/>ctx.ambient — trusted<br/>ctx.inputs — validated"]
 
-    EXP -->|"canonical raw inputs<br/>{ params, query, body, headers }"| CORE
-    TRPC -->|"single input + ctx"| CORE
-    HONO --> CORE
-    FAST --> CORE
-    NEXT --> CORE
-
-    CORE -->|"safe response /<br/>HipError → status or TRPCError"| FW
-
-    ZOD -.->|"plug into<br/>sanitizeInputs"| CORE
-    MOO -.->|"plug into<br/>loadResources"| CORE
-    USR -.->|"plug into<br/>pre/finalAuthorize"| CORE
+    REQ --> UT
+    REQ --> MW
+    P -->|"validated"| SI
+    B -->|"validated"| SI
+    Q -.->|"not sanitized"| DROP
+    MW --> EA
+    SI -->|"ctx.inputs"| CTX
+    EA -->|"ctx.ambient"| CTX
 ```
 
-The framework adapter owns exactly two jobs: hand the lifecycle a
-canonical raw request, and translate the outcome (safe response, or a
-`HipError`) into its transport's vocabulary. Everything security-relevant
-lives in the framework-free middle — which is why the same shared
-fragments work unchanged across Express and tRPC.
+That drop is the **strictness guarantee**: slice sanitizers pass the raw
+remainder to each other on a hidden `UNSAFE_SLICES` channel, and core
+deletes that channel the moment the stage completes — at runtime *and* in
+the types. Want a raw slice through anyway? Say so explicitly
+(`{ query: (q) => q }`) — a visible, greppable decision instead of a
+silent default.
 
-## 5. The strictness guarantee
+## 4. The context only grows
 
-Slice-style sanitizers (`SanitizeInputsSlices`) hand the raw remainder to
-each other under a hidden `UNSAFE_SLICES` channel, and core **deletes that
-channel** when the sanitize stage completes. Only slices you explicitly
-sanitized survive — at runtime *and* in the types (consuming a dropped
-slice downstream is a compile error).
+From the initial context onward, every stage receives everything earlier
+stages produced and layers on its own contribution. `execute` written at
+the end of a long chain can reach `ctx.ambient.user`,
+`ctx.inputs.params.id`, `ctx.thing`, and `ctx.isOwner` — with full type
+inference.
 
-```mermaid
-flowchart LR
-    RAW["raw inputs<br/>{ params, query, body, headers }"]
+![Each stage reads the whole accumulated context and adds one layer to it](./img/context-accumulation.svg)
 
-    subgraph STAGE["sanitizeInputs stage"]
-        direction LR
-        SP["slice sanitizer<br/>params ✓"]
-        SB["slice sanitizer<br/>body ✓"]
-    end
+## 5. Composition with `HTPipe`
 
-    BOUNDARY{{"stage boundary:<br/>UNSAFE_SLICES deleted"}}
+`HTPipe(...)` merges reusable fragments — "lift the user," "sanitize
+these slices," "load the Thing and require ownership" — into one complete
+handler. The merge is **stage by stage, not end to end**: at runtime, each
+lifecycle stage sweeps left-to-right across every input that declares it,
+threading the accumulating context through; only then does the request
+wrap back to the start of the pipe for the next stage.
 
-    SAFE["ctx.inputs = { params, body }<br/>typed, validated"]
-    GONE(["query, headers: gone —<br/>never reach preAuthorize or beyond;<br/>referencing them is a compile error"])
+![A single request sweeps the whole pipe once per lifecycle stage, wrapping back to the start of the pipe between stages](./img/htpipe-composition.svg)
 
-    RAW --> SP
-    SP -->|"sanitized: { params }<br/>+ raw remainder via UNSAFE_SLICES"| SB
-    SB -->|"sanitized: { params, body }<br/>+ raw remainder"| BOUNDARY
-    BOUNDARY --> SAFE
-    BOUNDARY -.-> GONE
-```
+Per-stage chaining rules, for the curious: `sanitizeInputs` and
+`redactResponse` chain output→input (so redactors stack); loaders and
+authorizers merge their object contributions (right wins on a key clash);
+`execute` runs both and keeps the right result. And
+`finishPipe(pipe, handler)` finishes the dominant authoring shape — one
+shared pipe plus one endpoint-specific trailing handler — with the
+trailing handler's context types inferred from the pipe, so its callbacks
+need zero annotations.
 
-Want a raw slice through anyway? Say so explicitly — `{ query: (q) => q }`
-is a visible, greppable decision instead of a silent default.
+## 6. Adapters
+
+The middle is framework-free; only the edges know what framework you're
+on. **Endpoint adapters** (~100 lines each) canonicalize the raw request
+on the way in and translate the outcome on the way out. **Stage
+factories** — Zod for validation, Mongoose for loading and redaction,
+role/assignee helpers for authorization — emit fragments for one specific
+stage. The same handler object runs unchanged under any of them.
+
+![Endpoint adapters wrap the handler's edges; stage factories plug fragments into single stages](./img/adapters.svg)

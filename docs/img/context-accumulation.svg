@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1700 480" font-family="'Segoe UI', system-ui, -apple-system, sans-serif">
+  <defs>
+    <marker id="arrGray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#768390"/>
+    </marker>
+  </defs>
+
+  <text x="40" y="40" font-size="20" font-weight="600" fill="#768390">The context only ever grows — each stage reads everything before it, then layers on its contribution</text>
+
+  <g transform="translate(0,-150)">
+  <!-- ===== Stage boxes on the spine (y=465 center) ===== -->
+  <g font-size="15" font-weight="600" text-anchor="middle">
+    <rect x="280" y="443" width="150" height="44" rx="8" fill="#76839018" stroke="#768390" stroke-width="1.5"/>
+    <text x="355" y="471" fill="#768390">preAuthorize</text>
+    <rect x="720" y="443" width="150" height="44" rx="8" fill="#76839018" stroke="#768390" stroke-width="1.5"/>
+    <text x="795" y="471" fill="#768390">loadResources</text>
+    <rect x="1160" y="443" width="150" height="44" rx="8" fill="#76839018" stroke="#768390" stroke-width="1.5"/>
+    <text x="1235" y="471" fill="#768390">finalAuthorize</text>
+  </g>
+
+  <!-- ===== Spine arrows ===== -->
+  <g stroke="#768390" stroke-width="2" marker-end="url(#arrGray)">
+    <line x1="230" y1="465" x2="272" y2="465"/>
+    <line x1="430" y1="465" x2="472" y2="465"/>
+    <line x1="670" y1="465" x2="712" y2="465"/>
+    <line x1="870" y1="465" x2="912" y2="465"/>
+    <line x1="1110" y1="465" x2="1152" y2="465"/>
+    <line x1="1310" y1="465" x2="1352" y2="465"/>
+    <line x1="1552" y1="465" x2="1590" y2="465"/>
+  </g>
+  <text x="1598" y="450" font-size="14" fill="#768390">execute,</text>
+  <text x="1598" y="468" font-size="14" fill="#768390">redact…</text>
+
+  <!-- ===== Stack S0: initial context ===== -->
+  <g>
+    <rect x="40" y="482" width="190" height="34" rx="6" fill="#4493f826" stroke="#4493f8" stroke-width="1.5"/>
+    <text x="135" y="504" font-size="13.5" fill="#4493f8" text-anchor="middle">ambient · { user }</text>
+    <rect x="40" y="444" width="190" height="34" rx="6" fill="#2ea04326" stroke="#2ea043" stroke-width="1.5"/>
+    <text x="135" y="466" font-size="13.5" fill="#2ea043" text-anchor="middle">inputs · { params, body }</text>
+    <text x="135" y="556" font-size="13.5" font-weight="600" fill="#768390" text-anchor="middle">initial context</text>
+  </g>
+
+  <!-- ===== Stack S1: after preAuthorize ===== -->
+  <g>
+    <rect x="480" y="482" width="190" height="34" rx="6" fill="#4493f826" stroke="#4493f8" stroke-width="1.5"/>
+    <text x="575" y="504" font-size="13.5" fill="#4493f8" text-anchor="middle">ambient · { user }</text>
+    <rect x="480" y="444" width="190" height="34" rx="6" fill="#2ea04326" stroke="#2ea043" stroke-width="1.5"/>
+    <text x="575" y="466" font-size="13.5" fill="#2ea043" text-anchor="middle">inputs · { params, body }</text>
+    <rect x="480" y="406" width="190" height="34" rx="6" fill="#d2992226" stroke="#d29922" stroke-width="2.5"/>
+    <text x="575" y="428" font-size="13.5" fill="#d29922" text-anchor="middle">isEditor: true</text>
+    <text x="575" y="392" font-size="12.5" font-weight="600" fill="#d29922" text-anchor="middle">+ preAuthorize's object</text>
+    <text x="575" y="556" font-size="13.5" fill="#768390" text-anchor="middle">…after preAuthorize</text>
+  </g>
+
+  <!-- ===== Stack S2: after loadResources ===== -->
+  <g>
+    <rect x="920" y="482" width="190" height="34" rx="6" fill="#4493f826" stroke="#4493f8" stroke-width="1.5"/>
+    <text x="1015" y="504" font-size="13.5" fill="#4493f8" text-anchor="middle">ambient · { user }</text>
+    <rect x="920" y="444" width="190" height="34" rx="6" fill="#2ea04326" stroke="#2ea043" stroke-width="1.5"/>
+    <text x="1015" y="466" font-size="13.5" fill="#2ea043" text-anchor="middle">inputs · { params, body }</text>
+    <rect x="920" y="406" width="190" height="34" rx="6" fill="#d2992226" stroke="#d29922" stroke-width="1.5"/>
+    <text x="1015" y="428" font-size="13.5" fill="#d29922" text-anchor="middle">isEditor: true</text>
+    <rect x="920" y="368" width="190" height="34" rx="6" fill="#a371f726" stroke="#a371f7" stroke-width="2.5"/>
+    <text x="1015" y="390" font-size="13.5" fill="#a371f7" text-anchor="middle">thing (loaded doc)</text>
+    <text x="1015" y="354" font-size="12.5" font-weight="600" fill="#a371f7" text-anchor="middle">+ what loadResources fetched</text>
+    <text x="1015" y="556" font-size="13.5" fill="#768390" text-anchor="middle">…after loadResources</text>
+  </g>
+
+  <!-- ===== Stack S3: after finalAuthorize ===== -->
+  <g>
+    <rect x="1360" y="482" width="190" height="34" rx="6" fill="#4493f826" stroke="#4493f8" stroke-width="1.5"/>
+    <text x="1455" y="504" font-size="13.5" fill="#4493f8" text-anchor="middle">ambient · { user }</text>
+    <rect x="1360" y="444" width="190" height="34" rx="6" fill="#2ea04326" stroke="#2ea043" stroke-width="1.5"/>
+    <text x="1455" y="466" font-size="13.5" fill="#2ea043" text-anchor="middle">inputs · { params, body }</text>
+    <rect x="1360" y="406" width="190" height="34" rx="6" fill="#d2992226" stroke="#d29922" stroke-width="1.5"/>
+    <text x="1455" y="428" font-size="13.5" fill="#d29922" text-anchor="middle">isEditor: true</text>
+    <rect x="1360" y="368" width="190" height="34" rx="6" fill="#a371f726" stroke="#a371f7" stroke-width="1.5"/>
+    <text x="1455" y="390" font-size="13.5" fill="#a371f7" text-anchor="middle">thing (loaded doc)</text>
+    <rect x="1360" y="330" width="190" height="34" rx="6" fill="#db61a226" stroke="#db61a2" stroke-width="2.5"/>
+    <text x="1455" y="352" font-size="13.5" fill="#db61a2" text-anchor="middle">isOwner: true</text>
+    <text x="1455" y="316" font-size="12.5" font-weight="600" fill="#db61a2" text-anchor="middle">+ finalAuthorize's object</text>
+    <text x="1455" y="556" font-size="13.5" fill="#768390" text-anchor="middle">final context</text>
+  </g>
+
+  </g>
+
+  <!-- ===== Footnotes ===== -->
+  <text x="40" y="434" font-size="13.5" fill="#768390">authorize stages contribute only when they return an object — returning true passes and adds nothing; false denies (→ 403) and the flow stops.</text>
+  <text x="40" y="458" font-size="13.5" fill="#768390">execute receives the final stack, and redactResponse receives it too (as its 2nd argument) — so redaction can depend on who is asking.</text>
+</svg>

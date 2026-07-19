@@ -1,0 +1,139 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 780" font-family="'Segoe UI', system-ui, -apple-system, sans-serif">
+  <defs>
+    <marker id="aBlue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#4493f8"/>
+    </marker>
+    <marker id="aGray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#768390"/>
+    </marker>
+    <marker id="aGreen" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#2ea043"/>
+    </marker>
+    <marker id="aRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#f85149"/>
+    </marker>
+    <marker id="aPurple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#a371f7"/>
+    </marker>
+    <marker id="aPink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#db61a2"/>
+    </marker>
+    <marker id="aAmber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#d29922"/>
+    </marker>
+  </defs>
+
+  <text x="40" y="42" font-size="19" font-weight="600" fill="#768390">Three kinds of adapters — none of them touch your handler's logic</text>
+
+  <!-- ===== Left: framework raw shapes ===== -->
+  <g font-size="14.5" font-weight="600" fill="#4493f8">
+    <rect x="40" y="120" width="230" height="56" rx="9" fill="#4493f81f" stroke="#4493f8" stroke-width="1.5"/>
+    <text x="56" y="144">Express</text>
+    <text x="56" y="164" font-size="12.5" font-weight="400">(req, res)</text>
+    <rect x="40" y="210" width="230" height="56" rx="9" fill="#4493f81f" stroke="#4493f8" stroke-width="1.5"/>
+    <text x="56" y="234">tRPC</text>
+    <text x="56" y="254" font-size="12.5" font-weight="400">({ input, ctx })</text>
+    <rect x="40" y="300" width="230" height="56" rx="9" fill="#4493f81f" stroke="#4493f8" stroke-width="1.5"/>
+    <text x="56" y="324">Hono</text>
+    <text x="56" y="344" font-size="12.5" font-weight="400">(c)</text>
+    <rect x="40" y="390" width="230" height="56" rx="9" fill="#4493f81f" stroke="#4493f8" stroke-width="1.5"/>
+    <text x="56" y="414">Fastify · Next.js</text>
+    <text x="56" y="434" font-size="12.5" font-weight="400">(request, reply / NextRequest)</text>
+  </g>
+  <text x="155" y="102" font-size="13" fill="#768390" text-anchor="middle">every framework's raw shape differs…</text>
+
+  <!-- Arrows frameworks -> adapter-in -->
+  <g stroke="#4493f8" stroke-width="2" marker-end="url(#aBlue)">
+    <line x1="270" y1="148" x2="314" y2="185"/>
+    <line x1="270" y1="238" x2="314" y2="250"/>
+    <line x1="270" y1="328" x2="314" y2="315"/>
+    <line x1="270" y1="418" x2="314" y2="380"/>
+  </g>
+
+  <!-- ===== Adapter (in) band ===== -->
+  <rect x="314" y="150" width="146" height="280" rx="9" fill="#76839014" stroke="#768390" stroke-width="1.5"/>
+  <g font-size="12.5" fill="#768390" text-anchor="middle">
+    <text x="386" y="180" font-weight="600" font-size="13.5">endpoint adapter</text>
+    <text x="386" y="198" font-weight="600" font-size="13.5">(in)</text>
+    <text x="386" y="228" font-family="Consolas, monospace" font-size="11.5">toExpressHandler</text>
+    <text x="386" y="246" font-family="Consolas, monospace" font-size="11.5">toTrpcProcedure</text>
+    <text x="386" y="264" font-family="Consolas, monospace" font-size="11.5">toHonoHandler …</text>
+    <text x="386" y="300">canonicalizes to</text>
+    <text x="386" y="320" font-family="Consolas, monospace" font-size="11.5">{ params, query,</text>
+    <text x="386" y="338" font-family="Consolas, monospace" font-size="11.5">body, headers }</text>
+  </g>
+  <line x1="452" y1="250" x2="514" y2="222" stroke="#768390" stroke-width="2.5" marker-end="url(#aGray)"/>
+
+  <!-- ===== Center: the handler card ===== -->
+  <rect x="520" y="90" width="310" height="470" rx="12" fill="#2ea0430d" stroke="#2ea043" stroke-width="2"/>
+  <text x="675" y="122" font-size="16" font-weight="600" fill="#2ea043" text-anchor="middle">your handler</text>
+  <text x="675" y="142" font-size="12" fill="#768390" text-anchor="middle">plain object · framework-free · portable</text>
+
+  <g font-size="13.5" fill="#768390" text-anchor="middle">
+    <rect x="540" y="160" width="270" height="34" rx="8" fill="none" stroke="#768390" stroke-width="1.2" stroke-dasharray="3 3"/>
+    <text x="675" y="182" font-style="italic">extractAmbient</text>
+    <rect x="540" y="204" width="270" height="34" rx="8" fill="none" stroke="#768390" stroke-width="1.2" stroke-dasharray="3 3"/>
+    <text x="675" y="226" font-style="italic">extractInputs</text>
+    <rect x="540" y="248" width="270" height="34" rx="8" fill="#76839014" stroke="#768390" stroke-width="1.4"/>
+    <text x="675" y="270" font-weight="600">sanitizeInputs</text>
+    <rect x="540" y="292" width="270" height="34" rx="8" fill="#76839014" stroke="#768390" stroke-width="1.4"/>
+    <text x="675" y="314" font-weight="600">preAuthorize</text>
+    <rect x="540" y="336" width="270" height="34" rx="8" fill="none" stroke="#768390" stroke-width="1.2" stroke-dasharray="3 3"/>
+    <text x="675" y="358" font-style="italic">loadResources</text>
+    <rect x="540" y="380" width="270" height="34" rx="8" fill="#76839014" stroke="#768390" stroke-width="1.4"/>
+    <text x="675" y="402" font-weight="600">finalAuthorize</text>
+    <rect x="540" y="424" width="270" height="34" rx="8" fill="#76839014" stroke="#768390" stroke-width="1.4"/>
+    <text x="675" y="446" font-weight="600">execute</text>
+    <rect x="540" y="468" width="270" height="34" rx="8" fill="#76839014" stroke="#768390" stroke-width="1.4"/>
+    <text x="675" y="490" font-weight="600">redactResponse</text>
+  </g>
+  <text x="675" y="536" font-size="11.5" fill="#768390" text-anchor="middle">solid = required (missing one = compile error) · dashed = optional</text>
+
+  <!-- Outcomes out of the card -->
+  <line x1="600" y1="560" x2="600" y2="606" stroke="#2ea043" stroke-width="2.5" marker-end="url(#aGreen)"/>
+  <text x="592" y="590" font-size="12" fill="#2ea043" text-anchor="end">safe response</text>
+  <line x1="760" y1="560" x2="760" y2="606" stroke="#f85149" stroke-width="2.5" stroke-dasharray="6 5" marker-end="url(#aRed)"/>
+  <text x="770" y="590" font-size="12" fill="#f85149">HipError, from any stage</text>
+
+  <!-- ===== Adapter (out) band ===== -->
+  <rect x="450" y="612" width="450" height="76" rx="9" fill="#76839014" stroke="#768390" stroke-width="1.5"/>
+  <g font-size="12.5" fill="#768390" text-anchor="middle">
+    <text x="675" y="636" font-weight="600" font-size="13.5">endpoint adapter (out) — translates the outcome</text>
+    <text x="675" y="656" font-family="Consolas, monospace" font-size="11.5">res.status(403).json · TRPCError('FORBIDDEN')</text>
+    <text x="675" y="674" font-family="Consolas, monospace" font-size="11.5">c.json(body, 404) · reply.code(404) — never a stack trace</text>
+  </g>
+
+  <!-- ===== Right: stage-fragment factories ===== -->
+  <text x="1065" y="102" font-size="13" fill="#768390" text-anchor="middle">…and stage factories plug into single stages</text>
+
+  <g>
+    <rect x="890" y="170" width="350" height="72" rx="9" fill="#a371f71f" stroke="#a371f7" stroke-width="1.5"/>
+    <text x="906" y="194" font-size="14" font-weight="600" fill="#a371f7">hipthrusts/zod — schema validation</text>
+    <text x="906" y="214" font-size="11.5" font-family="Consolas, monospace" fill="#a371f7">SanitizeInputsSlicesWithZod({ body: Schema })</text>
+    <text x="906" y="232" font-size="11.5" fill="#768390">only validated slices survive the stage</text>
+    <line x1="888" y1="220" x2="816" y2="262" stroke="#a371f7" stroke-width="2" marker-end="url(#aPurple)"/>
+  </g>
+
+  <g>
+    <rect x="890" y="272" width="350" height="72" rx="9" fill="#db61a21f" stroke="#db61a2" stroke-width="1.5"/>
+    <text x="906" y="296" font-size="14" font-weight="600" fill="#db61a2">auth-check helpers</text>
+    <text x="906" y="316" font-size="11.5" font-family="Consolas, monospace" fill="#db61a2">roleCheckersOnRoleKey · assigneeCheckersOnIdKey</text>
+    <text x="906" y="334" font-size="11.5" fill="#768390">reusable authorize fragments</text>
+    <line x1="888" y1="300" x2="816" y2="309" stroke="#db61a2" stroke-width="2" marker-end="url(#aPink)"/>
+    <line x1="888" y1="330" x2="816" y2="393" stroke="#db61a2" stroke-width="2" marker-end="url(#aPink)"/>
+  </g>
+
+  <g>
+    <rect x="890" y="374" width="350" height="90" rx="9" fill="#d299221f" stroke="#d29922" stroke-width="1.5"/>
+    <text x="906" y="398" font-size="14" font-weight="600" fill="#d29922">hipthrusts/mongoose — data model</text>
+    <text x="906" y="418" font-size="11.5" font-family="Consolas, monospace" fill="#d29922">LoadByIdRequiredTo(Model) · FindScoped(...)</text>
+    <text x="906" y="436" font-size="11.5" font-family="Consolas, monospace" fill="#d29922">json-mask redaction helpers</text>
+    <text x="906" y="454" font-size="11.5" fill="#768390">loaders that 404 when required docs are missing</text>
+    <line x1="888" y1="400" x2="816" y2="356" stroke="#d29922" stroke-width="2" marker-end="url(#aAmber)"/>
+    <line x1="888" y1="440" x2="816" y2="483" stroke="#d29922" stroke-width="2" marker-end="url(#aAmber)"/>
+  </g>
+
+  <!-- ===== Bottom caption ===== -->
+  <text x="640" y="740" font-size="14" font-weight="600" fill="#768390" text-anchor="middle">Swap the edges without touching the middle: the same handler object runs under Express, tRPC, Hono, Fastify, or Next.js.</text>
+  <text x="640" y="762" font-size="13" fill="#768390" text-anchor="middle">A new framework is a ~100-line adapter; a new validator or ORM is a factory that emits fragments for one stage.</text>
+</svg>

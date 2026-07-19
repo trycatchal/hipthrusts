@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 880" font-family="'Segoe UI', system-ui, -apple-system, sans-serif">
+  <defs>
+    <marker id="arrGreen" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#2ea043"/>
+    </marker>
+    <marker id="arrGreenSoft" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#2ea043" opacity="0.45"/>
+    </marker>
+  </defs>
+
+  <!-- Title + legend -->
+  <text x="40" y="52" font-size="19" font-weight="600" fill="#768390">HTPipe(input 1, input 2, input 3) → one handler; each stage sweeps the whole pipe, then wraps back</text>
+  <g>
+    <line x1="900" y1="72" x2="950" y2="72" stroke="#2ea043" stroke-width="3.5"/>
+    <text x="958" y="76" font-size="13" fill="#768390">stage executing, left → right</text>
+    <line x1="900" y1="94" x2="950" y2="94" stroke="#2ea043" stroke-width="2.5" stroke-dasharray="7 6" opacity="0.45"/>
+    <text x="958" y="98" font-size="13" fill="#768390">context carried back to the pipe's start</text>
+  </g>
+
+  <!-- Outer composed-handler box -->
+  <rect x="20" y="110" width="1210" height="700" rx="12" fill="none" stroke="#768390" stroke-width="1.5"/>
+
+  <!-- Fragment column boxes -->
+  <g fill="none" stroke="#768390" stroke-width="1.2" stroke-dasharray="4 4">
+    <rect x="150" y="140" width="220" height="590" rx="10"/>
+    <rect x="470" y="140" width="220" height="590" rx="10"/>
+    <rect x="790" y="140" width="220" height="590" rx="10"/>
+  </g>
+  <g font-size="15" font-weight="600" fill="#768390" text-anchor="middle">
+    <text x="260" y="168">HTPipe input 1</text>
+    <text x="580" y="168">HTPipe input 2</text>
+    <text x="900" y="168">HTPipe input 3</text>
+  </g>
+
+  <!-- ===== Return sweeps (dashed, behind) ===== -->
+  <g fill="none" stroke="#2ea043" stroke-width="2.5" stroke-dasharray="7 6" opacity="0.45" marker-end="url(#arrGreenSoft)">
+    <path d="M 1140 210 A 23.5 23.5 0 0 1 1140 257 H 100 A 24 24 0 0 0 100 305"/>
+    <path d="M 1140 305 A 23.5 23.5 0 0 1 1140 352 H 100 A 24 24 0 0 0 100 400"/>
+    <path d="M 1140 400 A 23.5 23.5 0 0 1 1140 447 H 100 A 24 24 0 0 0 100 495"/>
+    <path d="M 1140 495 A 23.5 23.5 0 0 1 1140 542 H 100 A 24 24 0 0 0 100 590"/>
+    <path d="M 1140 590 A 23.5 23.5 0 0 1 1140 637 H 100 A 24 24 0 0 0 100 685"/>
+  </g>
+
+  <!-- ===== Execution segments (solid) ===== -->
+  <g stroke="#2ea043" stroke-width="3.5">
+    <!-- row 1: sanitizeInputs -->
+    <line x1="40"  y1="210" x2="181" y2="210" marker-end="url(#arrGreen)"/>
+    <line x1="335" y1="210" x2="1140" y2="210"/>
+    <!-- row 2: preAuthorize -->
+    <line x1="100" y1="305" x2="181" y2="305" marker-end="url(#arrGreen)"/>
+    <line x1="335" y1="305" x2="1140" y2="305"/>
+    <!-- row 3: loadResources (inputs 2 and 3 chain) -->
+    <line x1="100" y1="400" x2="501" y2="400" marker-end="url(#arrGreen)"/>
+    <line x1="655" y1="400" x2="821" y2="400" marker-end="url(#arrGreen)"/>
+    <line x1="975" y1="400" x2="1140" y2="400"/>
+    <!-- row 4: finalAuthorize -->
+    <line x1="100" y1="495" x2="501" y2="495" marker-end="url(#arrGreen)"/>
+    <line x1="655" y1="495" x2="1140" y2="495"/>
+    <!-- row 5: execute -->
+    <line x1="100" y1="590" x2="821" y2="590" marker-end="url(#arrGreen)"/>
+    <line x1="975" y1="590" x2="1140" y2="590"/>
+    <!-- row 6: redactResponse, exits -->
+    <line x1="100" y1="685" x2="181" y2="685" marker-end="url(#arrGreen)"/>
+    <line x1="335" y1="685" x2="1236" y2="685" marker-end="url(#arrGreen)"/>
+  </g>
+
+  <!-- Entry / exit labels -->
+  <text x="40" y="192" font-size="13" fill="#768390">raw / unsafe inputs</text>
+  <text x="1226" y="668" font-size="13" fill="#768390" text-anchor="end">safe response</text>
+
+  <!-- Faint stage names near left start for rows whose first pill is far right -->
+  <g font-size="12" fill="#768390" opacity="0.8">
+    <text x="108" y="392">loadResources</text>
+    <text x="108" y="487">finalAuthorize</text>
+    <text x="108" y="582">execute</text>
+  </g>
+
+  <!-- ===== Stage pills ===== -->
+  <g font-size="13.5" font-weight="600" text-anchor="middle">
+    <!-- input 1 -->
+    <rect x="185" y="193" width="150" height="34" rx="17" fill="#2ea04322" stroke="#2ea043" stroke-width="1.8"/>
+    <text x="260" y="215" fill="#2ea043">sanitizeInputs</text>
+    <rect x="185" y="288" width="150" height="34" rx="17" fill="#2ea04322" stroke="#2ea043" stroke-width="1.8"/>
+    <text x="260" y="310" fill="#2ea043">preAuthorize</text>
+    <rect x="185" y="668" width="150" height="34" rx="17" fill="#2ea04322" stroke="#2ea043" stroke-width="1.8"/>
+    <text x="260" y="690" fill="#2ea043">redactResponse</text>
+    <!-- input 2 -->
+    <rect x="505" y="383" width="150" height="34" rx="17" fill="#2ea04322" stroke="#2ea043" stroke-width="1.8"/>
+    <text x="580" y="405" fill="#2ea043">loadResources</text>
+    <rect x="505" y="478" width="150" height="34" rx="17" fill="#2ea04322" stroke="#2ea043" stroke-width="1.8"/>
+    <text x="580" y="500" fill="#2ea043">finalAuthorize</text>
+    <!-- input 3 -->
+    <rect x="825" y="383" width="150" height="34" rx="17" fill="#2ea04322" stroke="#2ea043" stroke-width="1.8"/>
+    <text x="900" y="405" fill="#2ea043">loadResources</text>
+    <rect x="825" y="573" width="150" height="34" rx="17" fill="#2ea04322" stroke="#2ea043" stroke-width="1.8"/>
+    <text x="900" y="595" fill="#2ea043">execute</text>
+  </g>
+
+  <!-- Footnotes -->
+  <g font-size="13" fill="#768390" text-anchor="middle">
+    <text x="625" y="762">a row passes straight through an input that doesn't declare that stage; when two inputs declare it (loadResources here), they chain left → right</text>
+    <text x="625" y="786">any authorize fragment returning false stops the sweep for good → HipForbidden (403)</text>
+  </g>
+
+  <!-- Bottom-of-canvas note -->
+  <text x="625" y="850" font-size="13.5" fill="#768390" text-anchor="middle">the whole pipe finishes each lifecycle stage before the request returns to the start of the pipe for the next one</text>
+</svg>
