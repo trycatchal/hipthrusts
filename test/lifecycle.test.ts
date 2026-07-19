@@ -8,6 +8,7 @@ import {
   HipInternal,
   HipNotFound,
   HipRedirect,
+  HipUnauthorized,
   isHipError,
 } from '../src/errors';
 
@@ -192,15 +193,47 @@ describe('unknown-error routing (Finding P0-4)', () => {
     expect(caught).toBeInstanceOf(HipNotFound);
   });
 
-  it('unknown throws during input stages stay HipBadInputs and chain the cause', async () => {
-    const zodish = new Error('invalid');
+  it('unknown throws during the input stages (extractInputs/sanitizeInputs) stay HipBadInputs and chain the cause', async () => {
+    for (const stage of ['extractInputs', 'sanitizeInputs']) {
+      const zodish = new Error('invalid');
+      const caught = await run({
+        [stage]: () => {
+          throw zodish;
+        },
+      });
+      expect(caught).toBeInstanceOf(HipBadInputs);
+      expect((caught as HipBadInputs).cause).toBe(zodish);
+    }
+  });
+
+  // extractAmbient is the first stage and never sees validated input, so an
+  // unknown throw there is an app/infra bug, not a client-attributable input
+  // problem: it becomes a 500, NOT a 422 (and never a default 401 — a bug in
+  // ambient extraction must not present as an auth failure).
+  it('an unknown throw in extractAmbient becomes HipInternal with the original as cause', async () => {
+    const boom = new Error('ambient lookup exploded');
     const caught = await run({
-      sanitizeInputs: () => {
-        throw zodish;
+      extractAmbient: () => {
+        throw boom;
       },
     });
-    expect(caught).toBeInstanceOf(HipBadInputs);
-    expect((caught as HipBadInputs).cause).toBe(zodish);
+    expect(caught).toBeInstanceOf(HipInternal);
+    expect((caught as HipInternal).message).toBe('Internal server error');
+    expect((caught as HipInternal).cause).toBe(boom);
+  });
+
+  // A deliberate 401 stays expressible: HipUnauthorized (like any HipError)
+  // thrown from extractAmbient passes through unwrapped, preserving its
+  // message — this is what powers the "reject a caller before validating
+  // their inputs" gate documented in the README.
+  it('a deliberate HipUnauthorized from extractAmbient surfaces as-is', async () => {
+    const caught = await run({
+      extractAmbient: () => {
+        throw new HipUnauthorized('Please sign in');
+      },
+    });
+    expect(caught).toBeInstanceOf(HipUnauthorized);
+    expect((caught as HipUnauthorized).message).toBe('Please sign in');
   });
 
   it('an unknown throw in execute uses the standard scrub message and chains the cause', async () => {
