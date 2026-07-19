@@ -108,6 +108,10 @@ subpath type declarations.
 
 ## The lifecycle, in detail
 
+Prefer pictures? [docs/architecture.md](./docs/architecture.md) has
+diagrams of the lifecycle, failure routing, context accumulation,
+`HTPipe` composition, and the adapter surface.
+
 Every handler config is a plain object. Five methods are required; three
 are optional. Each method receives a `context` that accumulates as the
 request progresses, so a later stage sees everything earlier stages

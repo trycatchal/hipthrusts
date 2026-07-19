@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 540" font-family="'Segoe UI', system-ui, -apple-system, sans-serif">
+  <defs>
+    <marker id="dGreen" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#2ea043"/>
+    </marker>
+  </defs>
+
+  <text x="40" y="42" font-size="19" font-weight="600" fill="#768390">Every stage declares the context it needs — a composition that can't supply it will not compile</text>
+
+  <!-- ===== Left panel: compiles ===== -->
+  <rect x="40" y="80" width="570" height="360" rx="12" fill="#2ea04308" stroke="#2ea043" stroke-width="1.8"/>
+  <text x="70" y="112" font-size="15" font-weight="600" fill="#2ea043">✓ compiles</text>
+
+  <rect x="90" y="136" width="470" height="78" rx="9" fill="#76839010" stroke="#768390" stroke-width="1.4"/>
+  <text x="110" y="162" font-size="13" font-weight="600" fill="#768390">loadResources</text>
+  <text x="110" y="182" font-size="12" font-family="Consolas, monospace" fill="#768390">async (ctx) => ({ thing: await Thing.findById(…) })</text>
+  <rect x="110" y="192" width="150" height="0" fill="none"/>
+  <rect x="386" y="188" width="158" height="22" rx="11" fill="#a371f726" stroke="#a371f7" stroke-width="1.5"/>
+  <text x="465" y="203" font-size="11.5" font-weight="600" fill="#a371f7" text-anchor="middle">provides ctx.thing</text>
+
+  <line x1="465" y1="214" x2="465" y2="252" stroke="#2ea043" stroke-width="2.5" marker-end="url(#dGreen)"/>
+
+  <rect x="90" y="256" width="470" height="78" rx="9" fill="#76839010" stroke="#768390" stroke-width="1.4"/>
+  <text x="110" y="282" font-size="13" font-weight="600" fill="#768390">finalAuthorize</text>
+  <text x="110" y="302" font-size="12" font-family="Consolas, monospace" fill="#768390">(ctx) => ctx.thing.ownerId === ctx.ambient.user.id</text>
+  <rect x="396" y="308" width="148" height="22" rx="11" fill="none" stroke="#a371f7" stroke-width="1.5" stroke-dasharray="4 3"/>
+  <text x="470" y="323" font-size="11.5" font-weight="600" fill="#a371f7" text-anchor="middle">needs ctx.thing</text>
+
+  <text x="90" y="376" font-size="13" fill="#2ea043" font-weight="600">✓ satisfied by the stage above —</text>
+  <text x="90" y="396" font-size="13" fill="#768390">and finalAuthorize's ctx parameter is fully typed: it knows thing's shape</text>
+
+  <!-- ===== Right panel: type error ===== -->
+  <rect x="670" y="80" width="570" height="360" rx="12" fill="#f8514908" stroke="#f85149" stroke-width="1.8"/>
+  <text x="700" y="112" font-size="15" font-weight="600" fill="#f85149">✗ type error — never ships</text>
+
+  <rect x="720" y="136" width="470" height="78" rx="9" fill="none" stroke="#768390" stroke-width="1.4" stroke-dasharray="5 4"/>
+  <text x="955" y="172" font-size="13" font-style="italic" fill="#768390" text-anchor="middle">no loadResources anywhere in the pipe</text>
+  <text x="955" y="192" font-size="12" font-style="italic" fill="#768390" text-anchor="middle">nothing upstream produces thing</text>
+
+  <rect x="720" y="256" width="470" height="78" rx="9" fill="#76839010" stroke="#768390" stroke-width="1.4"/>
+  <text x="740" y="282" font-size="13" font-weight="600" fill="#768390">finalAuthorize</text>
+  <text x="740" y="302" font-size="12" font-family="Consolas, monospace" fill="#768390">(ctx) => <tspan fill="#f85149" font-weight="600">ctx.thing</tspan>.ownerId === ctx.ambient.user.id</text>
+  <path d="M 792 308 q 4 5 8 0 q 4 -5 8 0 q 4 5 8 0 q 4 -5 8 0 q 4 5 8 0 q 4 -5 8 0 q 4 5 8 0" fill="none" stroke="#f85149" stroke-width="1.6"/>
+  <rect x="1026" y="308" width="148" height="22" rx="11" fill="none" stroke="#f85149" stroke-width="1.5" stroke-dasharray="4 3"/>
+  <text x="1100" y="323" font-size="11.5" font-weight="600" fill="#f85149" text-anchor="middle">needs ctx.thing</text>
+
+  <text x="720" y="376" font-size="12.5" font-family="Consolas, monospace" fill="#f85149">HipDepNotMet&lt;'finalAuthorize', 'thing'&gt;</text>
+  <text x="720" y="398" font-size="13" fill="#768390">the composition's type is rejected — the adapter won't accept the handler,</text>
+  <text x="720" y="418" font-size="13" fill="#768390">so the endpoint cannot be wired up until the dependency is met</text>
+
+  <!-- ===== Footnote ===== -->
+  <text x="40" y="482" font-size="13.5" fill="#768390">The same dependency typing powers inference: every stage's ctx parameter knows exactly which keys — and which types — earlier stages produced.</text>
+  <text x="40" y="506" font-size="13.5" fill="#768390">It applies across HTPipe fragments too: a fragment consuming a key no earlier fragment provides poisons the composed type the same way.</text>
+</svg>
