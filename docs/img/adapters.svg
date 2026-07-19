@@ -107,11 +107,13 @@
   <text x="1065" y="102" font-size="13" fill="#768390" text-anchor="middle">…and stage factories plug into single stages</text>
 
   <g>
-    <rect x="890" y="170" width="350" height="72" rx="9" fill="#a371f71f" stroke="#a371f7" stroke-width="1.5"/>
-    <text x="906" y="194" font-size="14" font-weight="600" fill="#a371f7">hipthrusts/zod — schema validation</text>
+    <rect x="890" y="170" width="350" height="90" rx="9" fill="#a371f71f" stroke="#a371f7" stroke-width="1.5"/>
+    <text x="906" y="194" font-size="14" font-weight="600" fill="#a371f7">hipthrusts/zod — schema in, schema out</text>
     <text x="906" y="214" font-size="11.5" font-family="Consolas, monospace" fill="#a371f7">SanitizeInputsSlicesWithZod({ body: Schema })</text>
-    <text x="906" y="232" font-size="11.5" fill="#768390">only validated slices survive the stage</text>
-    <line x1="888" y1="220" x2="816" y2="262" stroke="#a371f7" stroke-width="2" marker-end="url(#aPurple)"/>
+    <text x="906" y="232" font-size="11.5" font-family="Consolas, monospace" fill="#a371f7">RedactResponseWithZod(ResponseSchema)</text>
+    <text x="906" y="250" font-size="11.5" fill="#768390">only declared fields survive — inbound or outbound</text>
+    <line x1="888" y1="212" x2="816" y2="262" stroke="#a371f7" stroke-width="2" marker-end="url(#aPurple)"/>
+    <path d="M 893 258 C 838 330, 856 432, 822 478" fill="none" stroke="#a371f7" stroke-width="2" marker-end="url(#aPurple)"/>
   </g>
 
   <g>
@@ -124,13 +126,11 @@
   </g>
 
   <g>
-    <rect x="890" y="374" width="350" height="90" rx="9" fill="#d299221f" stroke="#d29922" stroke-width="1.5"/>
-    <text x="906" y="398" font-size="14" font-weight="600" fill="#d29922">hipthrusts/mongoose — data model</text>
-    <text x="906" y="418" font-size="11.5" font-family="Consolas, monospace" fill="#d29922">LoadByIdRequiredTo(Model) · FindScoped(...)</text>
-    <text x="906" y="436" font-size="11.5" font-family="Consolas, monospace" fill="#d29922">json-mask redaction helpers</text>
-    <text x="906" y="454" font-size="11.5" fill="#768390">loaders that 404 when required docs are missing</text>
-    <line x1="888" y1="400" x2="816" y2="356" stroke="#d29922" stroke-width="2" marker-end="url(#aAmber)"/>
-    <line x1="888" y1="440" x2="816" y2="483" stroke="#d29922" stroke-width="2" marker-end="url(#aAmber)"/>
+    <rect x="890" y="380" width="350" height="72" rx="9" fill="#d299221f" stroke="#d29922" stroke-width="1.5"/>
+    <text x="906" y="404" font-size="14" font-weight="600" fill="#d29922">hipthrusts/mongoose — data model</text>
+    <text x="906" y="424" font-size="11.5" font-family="Consolas, monospace" fill="#d29922">LoadByIdRequiredTo(Model) · FindScoped(...)</text>
+    <text x="906" y="442" font-size="11.5" fill="#768390">loaders that 404 when required docs are missing</text>
+    <line x1="888" y1="404" x2="816" y2="356" stroke="#d29922" stroke-width="2" marker-end="url(#aAmber)"/>
   </g>
 
   <!-- ===== Bottom caption ===== -->

@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 880" font-family="'Segoe UI', system-ui, -apple-system, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1560 880" font-family="'Segoe UI', system-ui, -apple-system, sans-serif">
   <defs>
     <marker id="arrGreen" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
       <path d="M0 0 L10 5 L0 10 z" fill="#2ea043"/>
@@ -61,12 +61,30 @@
     <line x1="975" y1="590" x2="1140" y2="590"/>
     <!-- row 6: redactResponse, exits -->
     <line x1="100" y1="685" x2="181" y2="685" marker-end="url(#arrGreen)"/>
-    <line x1="335" y1="685" x2="1236" y2="685" marker-end="url(#arrGreen)"/>
+    <line x1="335" y1="685" x2="1290" y2="685" marker-end="url(#arrGreen)"/>
   </g>
 
-  <!-- Entry / exit labels -->
+  <!-- ===== Per-stage typed context outputs (the composition is a fragment too) ===== -->
+  <g stroke="#2ea043" stroke-width="3" marker-end="url(#arrGreen)">
+    <line x1="1140" y1="210" x2="1290" y2="210"/>
+    <line x1="1140" y1="305" x2="1290" y2="305"/>
+    <line x1="1140" y1="400" x2="1290" y2="400"/>
+    <line x1="1140" y1="495" x2="1290" y2="495"/>
+    <line x1="1140" y1="590" x2="1290" y2="590"/>
+  </g>
+  <g font-size="12.5" fill="#768390">
+    <text x="1300" y="166" font-style="italic">each merged stage's typed</text>
+    <text x="1300" y="184" font-style="italic">context output is exposed:</text>
+    <text x="1300" y="214">safe inputs — typed</text>
+    <text x="1300" y="309">ctx + preAuthorize's objects</text>
+    <text x="1300" y="404">ctx + everything loaded</text>
+    <text x="1300" y="499">ctx + finalAuthorize's objects</text>
+    <text x="1300" y="594">unsafe response</text>
+    <text x="1300" y="689">safe response</text>
+  </g>
+
+  <!-- Entry label -->
   <text x="40" y="192" font-size="13" fill="#768390">raw / unsafe inputs</text>
-  <text x="1226" y="668" font-size="13" fill="#768390" text-anchor="end">safe response</text>
 
   <!-- Faint stage names near left start for rows whose first pill is far right -->
   <g font-size="12" fill="#768390" opacity="0.8">
@@ -103,5 +121,6 @@
   </g>
 
   <!-- Bottom-of-canvas note -->
-  <text x="625" y="850" font-size="13.5" fill="#768390" text-anchor="middle">the whole pipe finishes each lifecycle stage before the request returns to the start of the pipe for the next one</text>
+  <text x="780" y="846" font-size="13.5" fill="#768390" text-anchor="middle">each stage's output — in types and at runtime — is shaped by the previous stage's context plus this stage's merged contributions,</text>
+  <text x="780" y="870" font-size="13.5" fill="#768390" text-anchor="middle">so the composed handler is itself a fragment: an HTPipe result can be an input to another HTPipe</text>
 </svg>

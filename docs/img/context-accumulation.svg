@@ -62,7 +62,9 @@
     <text x="1015" y="428" font-size="13.5" fill="#d29922" text-anchor="middle">isEditor: true</text>
     <rect x="920" y="368" width="190" height="34" rx="6" fill="#a371f726" stroke="#a371f7" stroke-width="2.5"/>
     <text x="1015" y="390" font-size="13.5" fill="#a371f7" text-anchor="middle">thing (loaded doc)</text>
-    <text x="1015" y="354" font-size="12.5" font-weight="600" fill="#a371f7" text-anchor="middle">+ what loadResources fetched</text>
+    <rect x="920" y="330" width="190" height="34" rx="6" fill="#a371f726" stroke="#a371f7" stroke-width="2.5"/>
+    <text x="1015" y="352" font-size="13.5" fill="#a371f7" text-anchor="middle">org (thing's owner org)</text>
+    <text x="1015" y="316" font-size="12.5" font-weight="600" fill="#a371f7" text-anchor="middle">+ every key loadResources returned</text>
     <text x="1015" y="556" font-size="13.5" fill="#768390" text-anchor="middle">…after loadResources</text>
   </g>
 
@@ -76,9 +78,11 @@
     <text x="1455" y="428" font-size="13.5" fill="#d29922" text-anchor="middle">isEditor: true</text>
     <rect x="1360" y="368" width="190" height="34" rx="6" fill="#a371f726" stroke="#a371f7" stroke-width="1.5"/>
     <text x="1455" y="390" font-size="13.5" fill="#a371f7" text-anchor="middle">thing (loaded doc)</text>
-    <rect x="1360" y="330" width="190" height="34" rx="6" fill="#db61a226" stroke="#db61a2" stroke-width="2.5"/>
-    <text x="1455" y="352" font-size="13.5" fill="#db61a2" text-anchor="middle">isOwner: true</text>
-    <text x="1455" y="316" font-size="12.5" font-weight="600" fill="#db61a2" text-anchor="middle">+ finalAuthorize's object</text>
+    <rect x="1360" y="330" width="190" height="34" rx="6" fill="#a371f726" stroke="#a371f7" stroke-width="1.5"/>
+    <text x="1455" y="352" font-size="13.5" fill="#a371f7" text-anchor="middle">org (thing's owner org)</text>
+    <rect x="1360" y="292" width="190" height="34" rx="6" fill="#db61a226" stroke="#db61a2" stroke-width="2.5"/>
+    <text x="1455" y="314" font-size="13.5" fill="#db61a2" text-anchor="middle">isOwner: true</text>
+    <text x="1455" y="278" font-size="12.5" font-weight="600" fill="#db61a2" text-anchor="middle">+ finalAuthorize's object</text>
     <text x="1455" y="556" font-size="13.5" fill="#768390" text-anchor="middle">final context</text>
   </g>
 

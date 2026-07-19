@@ -1,6 +1,6 @@
 # HipThrusTS, visually
 
-Six views that explain how HipThrusTS works and why it exists:
+Seven views that explain how HipThrusTS works and why it exists:
 
 1. [The lifecycle](#1-the-lifecycle) — the eight stages and how flow
    control moves through them
@@ -12,8 +12,11 @@ Six views that explain how HipThrusTS works and why it exists:
 4. [The context only grows](#4-the-context-only-grows) — how every stage
    layers its contribution onto what came before
 5. [Composition with `HTPipe`](#5-composition-with-htpipe) — one request
-   sweeping the whole pipe stage by stage
-6. [Adapters](#6-adapters) — thin edges around a framework-free middle
+   sweeping the whole pipe stage by stage, with each merged stage's typed
+   output exposed for further composition
+6. [Stage dependencies are type-checked](#6-stage-dependencies-are-type-checked)
+   — a stage whose input can't be satisfied upstream is a compile error
+7. [Adapters](#7-adapters) — thin edges around a framework-free middle
 
 Simple flows are Mermaid (GitHub renders it natively, and it's reviewed in
 the same diff as the code it describes). The spatial ones — the growing
@@ -157,7 +160,13 @@ lifecycle stage sweeps left-to-right across every input that declares it,
 threading the accumulating context through; only then does the request
 wrap back to the start of the pipe for the next stage.
 
-![A single request sweeps the whole pipe once per lifecycle stage, wrapping back to the start of the pipe between stages](./img/htpipe-composition.svg)
+![A single request sweeps the whole pipe once per lifecycle stage, wrapping back to the start of the pipe between stages; each merged stage's typed context output is exposed on the right](./img/htpipe-composition.svg)
+
+Note the arrows coming *out* on the right: the merge produces a real
+stage per row, whose output — in types and at runtime — is the previous
+stage's context plus this stage's combined contributions. That makes the
+composed handler a fragment like any other: an `HTPipe` result can be an
+input to another `HTPipe`.
 
 Per-stage chaining rules, for the curious: `sanitizeInputs` and
 `redactResponse` chain output→input (so redactors stack); loaders and
@@ -168,13 +177,25 @@ shared pipe plus one endpoint-specific trailing handler — with the
 trailing handler's context types inferred from the pipe, so its callbacks
 need zero annotations.
 
-## 6. Adapters
+## 6. Stage dependencies are type-checked
+
+The accumulation and composition above aren't just runtime behavior —
+they're carried in the types. Every stage's context parameter declares
+what it needs, and a handler (or pipe) whose upstream stages can't supply
+a declared key is rejected at compile time with a named
+`HipDepNotMet<'stage', 'key'>` marker, so the endpoint can't be wired up
+at all.
+
+![Side by side: a pipe whose loadResources provides ctx.thing compiles; the same finalAuthorize without any loadResources is a type error](./img/stage-dep-typing.svg)
+
+## 7. Adapters
 
 The middle is framework-free; only the edges know what framework you're
 on. **Endpoint adapters** (~100 lines each) canonicalize the raw request
 on the way in and translate the outcome on the way out. **Stage
-factories** — Zod for validation, Mongoose for loading and redaction,
-role/assignee helpers for authorization — emit fragments for one specific
-stage. The same handler object runs unchanged under any of them.
+factories** — Zod for validating inputs and redacting responses against
+schemas, Mongoose for loading, role/assignee helpers for authorization —
+emit fragments for one specific stage. The same handler object runs
+unchanged under any of them.
 
 ![Endpoint adapters wrap the handler's edges; stage factories plug fragments into single stages](./img/adapters.svg)
