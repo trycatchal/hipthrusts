@@ -20,6 +20,48 @@ need a major release:
       the old TODO: `ModelWithFindById` instance-member typing and
       `fromWrappedInstanceMethod` in/out inference guarantees.
 
+## 2.0 candidates
+
+Parking lot surfaced by production use. None is required for 1.x; each is
+recorded here so it isn't lost. The first two are additive and could land
+in a 1.x minor if a concrete use case arrives; the rest are genuinely 2.0
+(behavioral or vocabulary changes).
+
+- [ ] **Lazy request-body parsing in the HTTP adapters** (additive,
+      possibly 1.x). Adapters currently `await req.text()` + `JSON.parse`
+      *before* the lifecycle starts, so a malformed body yields a `422`
+      ahead of everything — including the auth gate (see the README "auth
+      gate" section), which can reject an anonymous caller before their
+      inputs are validated but not before their body is read. Deferring the
+      read/parse until the first stage that actually consumes `raw.body`
+      (baseline `extractInputs`) would let the gate reject a caller before
+      any byte of their body is processed. A per-adapter change (lazy getter
+      / thunk on `raw.body`). Complications: adapters that must read the body
+      regardless (e.g. HMAC-signed webhooks) and preserving
+      `allowMalformedBody` semantics.
+- [x] **Backend-neutral `ctxRef` primitives** — done (additive; see CHANGELOG
+      Unreleased). The `ctxRef` marker family now has its own subpath,
+      `hipthrusts/ctx-ref` (exporting `ctxRef`, `isCtxRef`, `CtxRef`,
+      `CtxRefReq`, `SpecReq`), so alternative-backend loader flavors can reuse
+      the shared marker registry and derive the same deps-met requirement
+      without importing the mongoose entrypoint or restating private
+      machinery. `hipthrusts/mongoose` re-exports the previously-shipped names
+      for backward compatibility.
+- [ ] **Optional `gateAmbient` stage / alias** (2.0, cosmetic). The auth-gate
+      pattern bends the "extract" vocabulary (an extraction that throws).
+      A first-class `gateAmbient` alias would name the intent explicitly while
+      `extractAmbient` keeps its lift-only contract. Zero functional value —
+      naming only; the documented pattern already works. Alternative: never
+      bother.
+- [ ] **Re-typing nested ctx paths via contributions** (2.0, speculative,
+      type-machinery-heavy). Auth pipelines lift `ambient.principal` to a
+      top-level `ctx.principal` because that lift is the narrowing event
+      (`Principal | null` → `Principal`): contributions merge at the ctx top
+      level and cannot re-type an existing nested key. If a contribution could
+      declare "after this stage `ambient.principal` is non-null", the lift
+      convention would become purely stylistic. Park until a concrete use case
+      justifies the type machinery.
+
 ## Exploratory
 
 - More adapters: Koa, others by request.

@@ -5,6 +5,13 @@
 // mongoose stays an optional peer — but consumers of 'hipthrusts/mongoose'
 // need mongoose installed to typecheck (they always did in practice).
 import type { HydratedDocument, Model, SortOrder, Types } from 'mongoose';
+import {
+  ctxRef as ctxRefBase,
+  isCtxRef,
+  type CtxRef as CtxRefBase,
+  type CtxRefReq as CtxRefReqBase,
+  type SpecReq,
+} from './ctx-ref.js';
 import { HipBadInputs, HipNotFound } from './errors.js';
 import { SanitizeInputsSlices } from './index.js';
 import {
@@ -14,7 +21,37 @@ import {
   SanitizeInputs,
 } from './lifecycle-functions.js';
 import { JsonMaskFn, loadJsonMask } from './load-json-mask.js';
-import { Constructor, NestedPathReq } from './types.js';
+import { Constructor } from './types.js';
+
+// Backward-compatible, DEPRECATED re-exports. These three names shipped from
+// 'hipthrusts/mongoose' in 1.0.0, so they keep resolving here — but their
+// canonical home is now the backend-neutral 'hipthrusts/ctx-ref' subpath.
+// The `@deprecated` tags make editors flag imports of these from
+// 'hipthrusts/mongoose' (strikethrough + "import from hipthrusts/ctx-ref"),
+// while the identical, non-deprecated names on 'hipthrusts/ctx-ref' stay
+// clean. (`isCtxRef` and `SpecReq` are new in this release and were never
+// exported from 'hipthrusts/mongoose', so they live ONLY on the new subpath.)
+
+/**
+ * @deprecated Import `ctxRef` from `hipthrusts/ctx-ref` instead. Re-exported
+ * from `hipthrusts/mongoose` for backward compatibility; will be removed in a
+ * future major.
+ */
+export const ctxRef = ctxRefBase;
+
+/**
+ * @deprecated Import `CtxRef` from `hipthrusts/ctx-ref` instead. Re-exported
+ * from `hipthrusts/mongoose` for backward compatibility; will be removed in a
+ * future major.
+ */
+export type CtxRef<TPath extends string = string> = CtxRefBase<TPath>;
+
+/**
+ * @deprecated Import `CtxRefReq` from `hipthrusts/ctx-ref` instead.
+ * Re-exported from `hipthrusts/mongoose` for backward compatibility; will be
+ * removed in a future major.
+ */
+export type CtxRefReq<TPath extends string> = CtxRefReqBase<TPath>;
 
 let jsonMaskFn: JsonMaskFn | undefined;
 
@@ -39,65 +76,17 @@ export interface HasQueryScope {
 }
 
 // ---------------------------------------------------------------------------
-// ctxRef: declarative context-path references for loader filter/id specs.
+// ctxRef resolution: the marker primitives (ctxRef/isCtxRef/CtxRef/CtxRefReq/
+// SpecReq) live in the backend-neutral './ctx-ref.js' module and are imported
+// above; the mongoose loaders below resolve those markers against the runtime
+// context via `readCtxPath`.
 // ---------------------------------------------------------------------------
-
-// Symbol.for() so the marker survives dual-package (ESM+CJS) loading; the
-// unique-symbol assertion lets it be used as a literal key in types.
-const CTX_REF: unique symbol = Symbol.for('hipthrusts.ctxRef') as never;
-
-export interface CtxRef<TPath extends string = string> {
-  [CTX_REF]: true;
-  path: TPath;
-}
-
-// Declares "read this value from the lifecycle context at request time" in a
-// loader spec: `LoadOneTo(User, 'user', { _id: ctxRef('inputs.body.user') })`.
-// The context REQUIREMENT is derived from the path string, so deps-met still
-// enforces that an earlier stage provides `inputs.body.user` — with zero
-// hand-written context annotations at the call site.
-export function ctxRef<TPath extends string>(path: TPath): CtxRef<TPath> {
-  return { [CTX_REF]: true, path } as CtxRef<TPath>;
-}
-
-function isCtxRef(value: unknown): value is CtxRef {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    (value as Record<PropertyKey, unknown>)[CTX_REF] === true
-  );
-}
 
 function readCtxPath(context: any, path: string) {
   return path
     .split('.')
     .reduce((acc, segment) => (acc == null ? acc : acc[segment]), context);
 }
-
-// The nested context requirement derived from a ctxRef dot path:
-// "inputs.body.user" -> { inputs: { body: { user: unknown } } }.
-export type CtxRefReq<TPath extends string> = NestedPathReq<TPath>;
-
-type UnionToIntersection<U> = (
-  U extends any ? (arg: U) => void : never
-) extends (arg: infer I) => void
-  ? I
-  : never;
-
-// The combined context requirement of every ctxRef in a filter spec; literal
-// (non-ref) values contribute nothing.
-type SpecReq<TSpec> =
-  UnionToIntersection<
-    {
-      [K in keyof TSpec]: TSpec[K] extends CtxRef<infer TPath>
-        ? CtxRefReq<TPath>
-        : never;
-    }[keyof TSpec]
-  > extends infer TReq
-    ? [TReq] extends [never]
-      ? {}
-      : TReq
-    : never;
 
 // A loader filter spec: field -> ctxRef (resolved per request, $eq-wrapped) or
 // a literal value (developer-authored, passed through verbatim — literals are
@@ -131,7 +120,7 @@ function resolveFilterSpec(
 }
 
 function resolveIdSpec(
-  idSpec: CtxRef | ((context: any) => unknown),
+  idSpec: CtxRefBase | ((context: any) => unknown),
   context: any
 ) {
   const id = isCtxRef(idSpec)
@@ -243,11 +232,11 @@ export function LoadByIdRequiredTo<
 >(
   Model: Model<TRaw>,
   key: TKey,
-  idRef: CtxRef<TPath>,
+  idRef: CtxRefBase<TPath>,
   notFoundMessage?: string
 ): {
   loadResources: (
-    context: CtxRefReq<TPath>
+    context: CtxRefReqBase<TPath>
   ) => Promise<Record<TKey, LeanDocOf<TRaw>>>;
 };
 export function LoadByIdRequiredTo<
@@ -265,7 +254,7 @@ export function LoadByIdRequiredTo<
 export function LoadByIdRequiredTo(
   Model: any,
   key: string,
-  idSpec: CtxRef | ((context: any) => unknown),
+  idSpec: CtxRefBase | ((context: any) => unknown),
   notFoundMessage?: string
 ) {
   return LoadResources(async (context: object) => {
@@ -290,11 +279,11 @@ export function LoadDocByIdRequiredTo<
 >(
   Model: Model<TRaw>,
   key: TKey,
-  idRef: CtxRef<TPath>,
+  idRef: CtxRefBase<TPath>,
   notFoundMessage?: string
 ): {
   loadResources: (
-    context: CtxRefReq<TPath>
+    context: CtxRefReqBase<TPath>
   ) => Promise<Record<TKey, HydratedDocument<TRaw>>>;
 };
 export function LoadDocByIdRequiredTo<
@@ -314,7 +303,7 @@ export function LoadDocByIdRequiredTo<
 export function LoadDocByIdRequiredTo(
   Model: any,
   key: string,
-  idSpec: CtxRef | ((context: any) => unknown),
+  idSpec: CtxRefBase | ((context: any) => unknown),
   notFoundMessage?: string
 ) {
   return LoadResources(async (context: object) => {
@@ -664,7 +653,9 @@ export function htMongooseFactory(mongoose: any) {
     findOneByRequired,
     // Everyday loader fragments (also exported at module level — none of them
     // need the mongoose instance; they're on the factory for discoverability).
-    ctxRef,
+    // `ctxRef` here is the canonical (non-deprecated) marker constructor from
+    // 'hipthrusts/ctx-ref'; the module-level `ctxRef` re-export is deprecated.
+    ctxRef: ctxRefBase,
     LoadManyTo,
     LoadOneTo,
     LoadByIdRequiredTo,

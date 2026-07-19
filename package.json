@@ -39,6 +39,7 @@
     "exports": {
       ".": "./src/index.ts",
       "./core": "./src/core.ts",
+      "./ctx-ref": "./src/ctx-ref.ts",
       "./errors": "./src/errors.ts",
       "./http-adapter": "./src/http-adapter.ts",
       "./lifecycle-functions": "./src/lifecycle-functions.ts",
@@ -159,6 +160,16 @@
       "require": {
         "types": "./dist/commonjs/core.d.ts",
         "default": "./dist/commonjs/core.js"
+      }
+    },
+    "./ctx-ref": {
+      "import": {
+        "types": "./dist/esm/ctx-ref.d.ts",
+        "default": "./dist/esm/ctx-ref.js"
+      },
+      "require": {
+        "types": "./dist/commonjs/ctx-ref.d.ts",
+        "default": "./dist/commonjs/ctx-ref.js"
       }
     },
     "./errors": {

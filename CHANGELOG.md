@@ -8,12 +8,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- New backend-neutral subpath `hipthrusts/ctx-ref`: the canonical home for
+  the `ctxRef` marker primitives — `ctxRef`, `isCtxRef` (runtime guard),
+  `CtxRef` / `CtxRefReq`, and `SpecReq` (derives a filter spec's combined
+  deps-met context requirement). Alternative-backend loader flavors (a
+  non-mongoose ODM, a hand-rolled loader) can now emit and recognize the
+  *same* markers the built-in mongoose loaders use — the marker is keyed by
+  the shared `Symbol.for('hipthrusts.ctxRef')` registry — without importing
+  the mongoose entrypoint or restating any private machinery. `isCtxRef` and
+  `SpecReq` are newly exported here; `ctxRef` / `CtxRef` / `CtxRefReq`
+  (previously reachable only via `hipthrusts/mongoose`) now live here too.
+
+### Changed
+
+- `hipthrusts/mongoose` re-exports `ctxRef` / `CtxRef` / `CtxRefReq` from the
+  new `hipthrusts/ctx-ref` subpath, so imports of those names from
+  `hipthrusts/mongoose` continue to work unchanged (backward compatible).
+
+### Deprecated
+
+- Importing `ctxRef` / `CtxRef` / `CtxRefReq` from `hipthrusts/mongoose` is
+  deprecated (the re-exports carry `@deprecated` JSDoc, so editors flag them
+  with a "import from `hipthrusts/ctx-ref`" hint). Import them from the
+  backend-neutral `hipthrusts/ctx-ref` subpath instead. The re-exports remain
+  functional and will be removed only in a future major.
+
 ### Fixed
 
+- `extractAmbient` now routes an unknown (non-`HipError`) throw to `500`
+  (`HipInternal`) instead of `422` (`HipBadInputs`). As the first lifecycle
+  stage, `extractAmbient` never sees validated input and only lifts trusted
+  ambient off the raw request, so a crash there is an app/infra bug, not a
+  client-attributable input problem — this aligns it with `preAuthorize` /
+  `loadResources` (the same misclassification family as the 0.12.0 "unknown
+  load errors → 404" correction). Deliberate statuses are unaffected: a
+  `HipError` (e.g. `HipUnauthorized`) thrown from `extractAmbient` still
+  passes through unwrapped, which is what powers the auth-before-validation
+  gate now documented in the README.
 - mongoose sanitizers and redactor: every shape-affecting `toObject` option
   is now explicitly pinned to mongoose's defaults, so ambient config
   (`mongoose.set('toObject', ...)` or schema-level options) can no longer
   alter the shape of sanitized inputs or redacted responses ([#110](https://github.com/trycatchal/hipthrusts/issues/110)).
+
+### Documentation
+
+- New README section, "Rejecting a caller before validating their inputs
+  (the auth gate)": documents that composing an `extractAmbient` fragment
+  which throws `HipUnauthorized` yields per-endpoint auth-before-validation
+  (401 precedes 422) with no lifecycle reorder or framework flag — the
+  default validate-first order plus this opt-in gate cover both sides of the
+  422-vs-401 debate. Also states what the gate does not preempt (the
+  adapters' body parse and `gatherContext` run before any stage).
 
 ### Tests
 
@@ -21,6 +68,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (left-returned context preserved through `HTPipe`'d `preAuthorize`/
   `finalAuthorize`, short-circuiting, arity edges, and an end-to-end adapter
   pass) ([#111](https://github.com/trycatchal/hipthrusts/issues/111), originally #37).
+- Lifecycle unknown-error routing: `extractAmbient` unknown throw → 500
+  (chaining the original as `cause`), `HipUnauthorized` from `extractAmbient`
+  passes through as-is, and `extractInputs`/`sanitizeInputs` unknown throws
+  stay 422.
 
 ## [1.0.0] - 2026-07-17
 

@@ -183,8 +183,15 @@ export async function executeHipthrustable<
   const badDataThrow = (cause: unknown) =>
     new HipBadInputs('User input sanitization failure', undefined, { cause });
 
+  // `extractAmbient` is the FIRST stage and never sees validated input — it
+  // lifts trusted ambient (auth principal, request id, locale) off the raw
+  // request. An UNKNOWN throw here is therefore an app bug or infra failure,
+  // NOT a client-attributable input problem: route it to 500, exactly like
+  // `preAuthorize`/`loadResources` below, so outages don't masquerade as a
+  // caller's bad input. A deliberate 401 stays expressible by throwing
+  // `HipUnauthorized` (or any HipError), which passes through unwrapped.
   const safeAmbient = transformThrowSync(
-    badDataThrow,
+    internalFrom,
     requestHandler.extractAmbient,
     raw
   );
