@@ -5,8 +5,13 @@
 // mongoose stays an optional peer — but consumers of 'hipthrusts/mongoose'
 // need mongoose installed to typecheck (they always did in practice).
 import type { HydratedDocument, Model, SortOrder, Types } from 'mongoose';
-import { ctxRef, isCtxRef } from './ctx-ref.js';
-import type { CtxRef, CtxRefReq, SpecReq } from './ctx-ref.js';
+import {
+  ctxRef as ctxRefBase,
+  isCtxRef,
+  type CtxRef as CtxRefBase,
+  type CtxRefReq as CtxRefReqBase,
+  type SpecReq,
+} from './ctx-ref.js';
 import { HipBadInputs, HipNotFound } from './errors.js';
 import { SanitizeInputsSlices } from './index.js';
 import {
@@ -18,13 +23,35 @@ import {
 import { JsonMaskFn, loadJsonMask } from './load-json-mask.js';
 import { Constructor } from './types.js';
 
-// Backward-compatible re-exports: these names shipped from
-// 'hipthrusts/mongoose' in 1.0.0, so they keep resolving here. Their
+// Backward-compatible, DEPRECATED re-exports. These three names shipped from
+// 'hipthrusts/mongoose' in 1.0.0, so they keep resolving here — but their
 // canonical home is now the backend-neutral 'hipthrusts/ctx-ref' subpath.
-// (`isCtxRef` and `SpecReq` are new in this release and live ONLY there —
-// they were never exported from 'hipthrusts/mongoose', so nothing to keep.)
-export { ctxRef };
-export type { CtxRef, CtxRefReq };
+// The `@deprecated` tags make editors flag imports of these from
+// 'hipthrusts/mongoose' (strikethrough + "import from hipthrusts/ctx-ref"),
+// while the identical, non-deprecated names on 'hipthrusts/ctx-ref' stay
+// clean. (`isCtxRef` and `SpecReq` are new in this release and were never
+// exported from 'hipthrusts/mongoose', so they live ONLY on the new subpath.)
+
+/**
+ * @deprecated Import `ctxRef` from `hipthrusts/ctx-ref` instead. Re-exported
+ * from `hipthrusts/mongoose` for backward compatibility; will be removed in a
+ * future major.
+ */
+export const ctxRef = ctxRefBase;
+
+/**
+ * @deprecated Import `CtxRef` from `hipthrusts/ctx-ref` instead. Re-exported
+ * from `hipthrusts/mongoose` for backward compatibility; will be removed in a
+ * future major.
+ */
+export type CtxRef<TPath extends string = string> = CtxRefBase<TPath>;
+
+/**
+ * @deprecated Import `CtxRefReq` from `hipthrusts/ctx-ref` instead.
+ * Re-exported from `hipthrusts/mongoose` for backward compatibility; will be
+ * removed in a future major.
+ */
+export type CtxRefReq<TPath extends string> = CtxRefReqBase<TPath>;
 
 let jsonMaskFn: JsonMaskFn | undefined;
 
@@ -93,7 +120,7 @@ function resolveFilterSpec(
 }
 
 function resolveIdSpec(
-  idSpec: CtxRef | ((context: any) => unknown),
+  idSpec: CtxRefBase | ((context: any) => unknown),
   context: any
 ) {
   const id = isCtxRef(idSpec)
@@ -205,11 +232,11 @@ export function LoadByIdRequiredTo<
 >(
   Model: Model<TRaw>,
   key: TKey,
-  idRef: CtxRef<TPath>,
+  idRef: CtxRefBase<TPath>,
   notFoundMessage?: string
 ): {
   loadResources: (
-    context: CtxRefReq<TPath>
+    context: CtxRefReqBase<TPath>
   ) => Promise<Record<TKey, LeanDocOf<TRaw>>>;
 };
 export function LoadByIdRequiredTo<
@@ -227,7 +254,7 @@ export function LoadByIdRequiredTo<
 export function LoadByIdRequiredTo(
   Model: any,
   key: string,
-  idSpec: CtxRef | ((context: any) => unknown),
+  idSpec: CtxRefBase | ((context: any) => unknown),
   notFoundMessage?: string
 ) {
   return LoadResources(async (context: object) => {
@@ -252,11 +279,11 @@ export function LoadDocByIdRequiredTo<
 >(
   Model: Model<TRaw>,
   key: TKey,
-  idRef: CtxRef<TPath>,
+  idRef: CtxRefBase<TPath>,
   notFoundMessage?: string
 ): {
   loadResources: (
-    context: CtxRefReq<TPath>
+    context: CtxRefReqBase<TPath>
   ) => Promise<Record<TKey, HydratedDocument<TRaw>>>;
 };
 export function LoadDocByIdRequiredTo<
@@ -276,7 +303,7 @@ export function LoadDocByIdRequiredTo<
 export function LoadDocByIdRequiredTo(
   Model: any,
   key: string,
-  idSpec: CtxRef | ((context: any) => unknown),
+  idSpec: CtxRefBase | ((context: any) => unknown),
   notFoundMessage?: string
 ) {
   return LoadResources(async (context: object) => {
@@ -626,7 +653,9 @@ export function htMongooseFactory(mongoose: any) {
     findOneByRequired,
     // Everyday loader fragments (also exported at module level — none of them
     // need the mongoose instance; they're on the factory for discoverability).
-    ctxRef,
+    // `ctxRef` here is the canonical (non-deprecated) marker constructor from
+    // 'hipthrusts/ctx-ref'; the module-level `ctxRef` re-export is deprecated.
+    ctxRef: ctxRefBase,
     LoadManyTo,
     LoadOneTo,
     LoadByIdRequiredTo,

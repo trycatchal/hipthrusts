@@ -27,6 +27,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   new `hipthrusts/ctx-ref` subpath, so imports of those names from
   `hipthrusts/mongoose` continue to work unchanged (backward compatible).
 
+### Deprecated
+
+- Importing `ctxRef` / `CtxRef` / `CtxRefReq` from `hipthrusts/mongoose` is
+  deprecated (the re-exports carry `@deprecated` JSDoc, so editors flag them
+  with a "import from `hipthrusts/ctx-ref`" hint). Import them from the
+  backend-neutral `hipthrusts/ctx-ref` subpath instead. The re-exports remain
+  functional and will be removed only in a future major.
+
 ### Fixed
 
 - `extractAmbient` now routes an unknown (non-`HipError`) throw to `500`
