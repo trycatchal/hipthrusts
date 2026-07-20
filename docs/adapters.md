@@ -109,6 +109,11 @@ The lifecycle, the type-checking, the failure routing — all identical
 to the Express path. Anything reusable you build (auth fragments,
 ownership checks, response shapers) works across both.
 
+Note the input shape: tRPC procedures have a single `input` value rather
+than the HTTP `{ params, body, query, headers }` shape, so
+`sanitizeInputs` just parses that single value. Other transports work
+the same way — the adapter decides what `sanitizeInputs` receives.
+
 ## Hono adapter
 
 ```ts

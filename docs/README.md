@@ -16,6 +16,17 @@ topic:
 The generated **API reference** (every export, from source) lives at
 [trycatchal.github.io/hipthrusts](https://trycatchal.github.io/hipthrusts/).
 
+The [`examples/`](../examples) directory has a hello-world per adapter.
+Run them straight from the repo (they import from `../src`; in your own
+project you'd import from `hipthrusts/<adapter>`):
+
+```sh
+pnpm exec tsx examples/express-hello.ts
+pnpm exec tsx examples/hono-hello.ts
+pnpm exec tsx examples/fastify-hello.ts
+# examples/next-hello.ts is a reference route file for a Next.js app
+```
+
 Diagrams are hand-drawn SVGs in [`img/`](./img) plus Mermaid blocks in
 the pages themselves — plain text either way, reviewed in the same diff
 as the code they describe, drawn theme-neutral so they read correctly in
