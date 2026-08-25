@@ -37,15 +37,37 @@ flowchart LR
 The lifecycle has a small, semantic error vocabulary. Throw one of these
 from any stage and the adapter takes care of the HTTP details:
 
-| Throw                | HTTP                  | Meaning                                          |
-|----------------------|-----------------------|--------------------------------------------------|
-| `HipBadInputs(msg)`  | 422                   | Input validation failed.                         |
-| `HipUnauthorized()`  | 401                   | No authenticated principal.                      |
-| `HipForbidden()`     | 403                   | Authenticated, but not permitted.                |
-| `HipNotFound()`      | 404                   | A required resource is missing.                  |
-| `HipConflict()`      | 409                   | The request conflicts with current state.        |
-| `HipInternal()`      | 500                   | Unexpected failure (default for anything else).  |
-| `new HipRedirect(u)` | 302 (or what you set) | Control-flow signal; HTTP-style adapters honor.  |
+| Throw                | HTTP                  | Default message         | Meaning                                          |
+|----------------------|-----------------------|-------------------------|--------------------------------------------------|
+| `HipBadInputs()`     | 422                   | `Inputs not valid`      | Input validation failed.                         |
+| `HipUnauthorized()`  | 401                   | `Unauthorized`          | No authenticated principal.                      |
+| `HipForbidden()`     | 403                   | `Forbidden`             | Authenticated, but not permitted.                |
+| `HipNotFound()`      | 404                   | `Resource not found`    | A required resource is missing.                  |
+| `HipConflict()`      | 409                   | `Conflict`              | The request conflicts with current state.        |
+| `HipInternal()`      | 500                   | `Internal server error` | Unexpected failure (default for anything else).  |
+| `new HipRedirect(u)` | 302 (or what you set) | —                       | Control-flow signal; HTTP-style adapters honor.  |
+
+The message is optional: constructed without one, each subclass uses its own
+default (above), so the HTTP status and the message a client sees stay bound to
+a single symbol. That means you can hand the **class** to something that decides
+*whether* to deny — a reusable authorization gate, say — and let it do
+`new DenialError()` at each denial, instead of sharing one prebuilt instance
+across every request or wrapping the constructor in a factory:
+
+```ts
+function requireOwner(DenialError: new () => HipError = HipForbidden) {
+  return {
+    finalAuthorize: (ctx) => {
+      if (ctx.principal.isOwner) return true;
+      throw new DenialError(); // fresh error, own stack, every time
+    },
+  };
+}
+
+// 403 "Forbidden" by default; pass HipNotFound to answer a denial exactly as a
+// missing row does (404 "Resource not found"), hiding whether the id exists.
+requireOwner(HipNotFound);
+```
 
 Every HTTP adapter (**Express / Hono / Fastify / Next.js**) responds
 directly with the mapped status and a JSON body. If you'd rather have

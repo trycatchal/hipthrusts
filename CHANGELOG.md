@@ -8,6 +8,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Every concrete `HipError` subclass now carries a default message, used when
+  it is constructed without one: `HipBadInputs` → `Inputs not valid`,
+  `HipUnauthorized` → `Unauthorized`, `HipForbidden` → `Forbidden`,
+  `HipNotFound` → `Resource not found`, `HipConflict` → `Conflict`,
+  `HipInternal` → `Internal server error`. Each string is one the library
+  already put on the wire (the mongoose loaders' 404, the zod helpers' 422,
+  the lifecycle's scrub message), so responses are unchanged. What this buys
+  callers: the HTTP status and the client-visible message are now bound to a
+  single symbol, so an authorization gate can accept an error **class** and do
+  `new DenialError()` per denial — a fresh error with its own stack at every
+  throw site — instead of sharing one prebuilt instance or wrapping the
+  constructor in a factory thunk. An explicitly-passed message still wins,
+  including an empty one, and a subclass that declares no default behaves
+  exactly as before.
+- `INTERNAL_ERROR_MESSAGE` is now defined in `hipthrusts/errors` (it is
+  `HipInternal`'s default message) and re-exported from its previous home, so
+  existing imports are unaffected.
+
 ### Documentation
 
 - README rewritten as a visual-first overview (~230 lines, down from

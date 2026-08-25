@@ -24,6 +24,13 @@ export interface HipErrorOptions {
 
 export abstract class HipError extends Error {
   public abstract readonly kind: HipErrorKind;
+  // Message used when constructed without one. Every concrete subclass below
+  // sets its own, so a caller can pass the CLASS itself where an error is
+  // wanted and build a fresh, fully-formed instance at each throw site --
+  // status and wire message stay coupled to one symbol, and each throw keeps
+  // its own stack. Left undefined here so a subclass that declares none
+  // behaves as before (empty message).
+  public static readonly defaultMessage: string | undefined = undefined;
   public readonly exposeDetail: boolean;
   constructor(
     message?: string,
@@ -31,7 +38,8 @@ export abstract class HipError extends Error {
     options?: HipErrorOptions
   ) {
     super(
-      message,
+      // `??`, not `||`: an explicitly-passed empty message stays empty.
+      message ?? new.target.defaultMessage,
       options?.cause !== undefined ? { cause: options.cause } : undefined
     );
     this.exposeDetail = options?.expose === true;
@@ -45,31 +53,42 @@ export abstract class HipError extends Error {
 // Input sanitization / validation failed (untrusted input rejected).
 export class HipBadInputs extends HipError {
   public readonly kind = 'badInputs';
+  public static readonly defaultMessage = 'Inputs not valid';
 }
 
 // No authenticated principal where one is required.
 export class HipUnauthorized extends HipError {
   public readonly kind = 'unauthorized';
+  public static readonly defaultMessage = 'Unauthorized';
 }
 
 // Authenticated, but not permitted (pre- or final-authorization failed).
 export class HipForbidden extends HipError {
   public readonly kind = 'forbidden';
+  public static readonly defaultMessage = 'Forbidden';
 }
 
 // A required resource could not be found.
 export class HipNotFound extends HipError {
   public readonly kind = 'notFound';
+  public static readonly defaultMessage = 'Resource not found';
 }
 
 // The request conflicts with current state.
 export class HipConflict extends HipError {
   public readonly kind = 'conflict';
+  public static readonly defaultMessage = 'Conflict';
 }
+
+// One scrub message for every unexpected (non-HipError) failure, shared with
+// the lifecycle and the adapters' outer catch so clients see a single
+// vocabulary. Re-exported from `./core.js` for backward compatibility.
+export const INTERNAL_ERROR_MESSAGE = 'Internal server error';
 
 // Unexpected failure; details should not leak to the caller.
 export class HipInternal extends HipError {
   public readonly kind = 'internal';
+  public static readonly defaultMessage = INTERNAL_ERROR_MESSAGE;
 }
 
 export function isHipError(thing: unknown): thing is HipError {

@@ -4,6 +4,7 @@ import {
   HipForbidden,
   HipInternal,
   HipRedirect,
+  INTERNAL_ERROR_MESSAGE,
   isHipError,
 } from './errors.js';
 import {
@@ -157,9 +158,9 @@ async function transformThrowPossiblyAsync<
   }
 }
 
-// One scrub message for every unexpected (non-HipError) failure, shared with
-// the adapters' outer catch so clients see a single vocabulary.
-export const INTERNAL_ERROR_MESSAGE = 'Internal server error';
+// Defined next to `HipInternal`, whose default message it is; re-exported here
+// because this is where it has always been imported from.
+export { INTERNAL_ERROR_MESSAGE };
 
 const internalFrom = (cause: unknown) =>
   new HipInternal(INTERNAL_ERROR_MESSAGE, undefined, { cause });

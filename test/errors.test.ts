@@ -33,6 +33,27 @@ describe('HipError hierarchy', () => {
     expect(err.name).toBe('HipBadInputs');
   });
 
+  it('falls back to a per-subclass default message', () => {
+    expect(new HipBadInputs().message).toBe('Inputs not valid');
+    expect(new HipUnauthorized().message).toBe('Unauthorized');
+    expect(new HipForbidden().message).toBe('Forbidden');
+    expect(new HipNotFound().message).toBe('Resource not found');
+    expect(new HipConflict().message).toBe('Conflict');
+    expect(new HipInternal().message).toBe('Internal server error');
+  });
+
+  it('lets an explicit message win, including an empty one', () => {
+    expect(new HipForbidden('nope').message).toBe('nope');
+    expect(new HipForbidden('').message).toBe('');
+  });
+
+  it('yields a distinct instance with its own stack per construction', () => {
+    const first = new HipForbidden();
+    const second = new HipForbidden();
+    expect(first).not.toBe(second);
+    expect(first.stack).not.toBe(second.stack);
+  });
+
   it('isHipError guards correctly', () => {
     expect(isHipError(new HipForbidden())).toBe(true);
     expect(isHipError(new Error('x'))).toBe(false);
@@ -63,6 +84,10 @@ describe('HipRedirect', () => {
 });
 
 describe('hipErrorToBody (Finding P0-3)', () => {
+  it('puts the subclass default message on the wire when none was given', () => {
+    expect(hipErrorToBody(new HipNotFound()).error).toBe('Resource not found');
+  });
+
   it('projects a ZodError detail to issues with paths+messages and no input values', () => {
     const schema = z.object({ name: z.string(), age: z.number() });
     const parsed = schema.safeParse({ name: 42, age: 'secret-value' });
