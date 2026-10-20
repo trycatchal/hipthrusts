@@ -1,8 +1,15 @@
 import {
   assertHipthrustable,
   executeHipthrustable,
+  LifecycleResult,
   withDefaultImplementations,
 } from './core.js';
+import { HipRedirect } from './errors.js';
+import {
+  FinallyInfo,
+  HttpAdapterOptions,
+  makeAfterResponseRunner,
+} from './http-adapter.js';
 import {
   ExecuteDepsMet,
   FinalAuthorizeDepsMet,
@@ -10,8 +17,10 @@ import {
   LoadResourcesDepsMet,
   OptionalStagesShape,
   PreAuthorizeDepsMet,
+  HasDefer,
   PromiseOrSync,
   RedactResponseDepsMet,
+  ReservedKeysUnshadowed,
 } from './types.js';
 
 // The raw envelope a tRPC procedure resolver receives: a context and a parsed input.
@@ -48,36 +57,31 @@ type TrpcHandlerConfig<
   extractInputs?: (canonical: TInput) => TInputs;
   sanitizeInputs: (unsafe: TInputs) => TSafeInputs;
   preAuthorize: (
-    context: { inputs: Awaited<TSafeInputs> } & ([TAmbient] extends [never]
-      ? {}
-      : { ambient: TAmbient })
+    context: { inputs: Awaited<TSafeInputs> } & HasDefer &
+      ([TAmbient] extends [never] ? {} : { ambient: TAmbient })
   ) => TPreAuthOut;
   loadResources?: (
-    context: { inputs: Awaited<TSafeInputs> } & ([TAmbient] extends [never]
-      ? {}
-      : { ambient: TAmbient }) &
+    context: { inputs: Awaited<TSafeInputs> } & HasDefer &
+      ([TAmbient] extends [never] ? {} : { ambient: TAmbient }) &
       Awaited<TPreAuthOut>
   ) => PromiseOrSync<TLoadResourcesOut>;
   finalAuthorize: (
-    context: { inputs: Awaited<TSafeInputs> } & ([TAmbient] extends [never]
-      ? {}
-      : { ambient: TAmbient }) &
+    context: { inputs: Awaited<TSafeInputs> } & HasDefer &
+      ([TAmbient] extends [never] ? {} : { ambient: TAmbient }) &
       Awaited<TPreAuthOut> &
       Awaited<TLoadResourcesOut>
   ) => PromiseOrSync<TFinalAuthOut>;
   execute: (
-    context: { inputs: Awaited<TSafeInputs> } & ([TAmbient] extends [never]
-      ? {}
-      : { ambient: TAmbient }) &
+    context: { inputs: Awaited<TSafeInputs> } & HasDefer &
+      ([TAmbient] extends [never] ? {} : { ambient: TAmbient }) &
       Awaited<TPreAuthOut> &
       Awaited<TLoadResourcesOut> &
       Awaited<TFinalAuthOut>
   ) => PromiseOrSync<TUnsafeResponse>;
   redactResponse: (
     unsafe: Awaited<TUnsafeResponse>,
-    context: { inputs: Awaited<TSafeInputs> } & ([TAmbient] extends [never]
-      ? {}
-      : { ambient: TAmbient }) &
+    context: { inputs: Awaited<TSafeInputs> } & HasDefer &
+      ([TAmbient] extends [never] ? {} : { ambient: TAmbient }) &
       Awaited<TPreAuthOut> &
       Awaited<TLoadResourcesOut> &
       Awaited<TFinalAuthOut>
@@ -114,6 +118,19 @@ export const defineTrpcProcedure = <
   >
 ): InferredTrpcConfig => config as unknown as InferredTrpcConfig;
 
+// tRPC has no HTTP response lifecycle, so of the HTTP adapters' options only
+// the post-response ones apply. ctx.defer tasks run after the procedure
+// resolves successfully (fire-and-forget, on a later task by default), then
+// finally runs for every outcome. onError here sees ONLY post-response
+// failures (phase 'defer' / 'finally'): lifecycle errors propagate to tRPC
+// itself (handle those in your tRPC errorFormatter / onError). There is no
+// etag stage (no HTTP caching) and no responseMeta.
+export interface TrpcProcedureOptions {
+  onError?: HttpAdapterOptions['onError'];
+  finally?: HttpAdapterOptions['finally'];
+  scheduleAfterResponse?: HttpAdapterOptions['scheduleAfterResponse'];
+}
+
 export function toTrpcProcedure<
   TConf extends OptionalStagesShape &
     HasRequiredStages &
@@ -121,8 +138,9 @@ export function toTrpcProcedure<
     LoadResourcesDepsMet<TConf> &
     FinalAuthorizeDepsMet<TConf> &
     ExecuteDepsMet<TConf> &
-    RedactResponseDepsMet<TConf>,
->(handlingStrategy: TConf) {
+    RedactResponseDepsMet<TConf> &
+    ReservedKeysUnshadowed<TConf>,
+>(handlingStrategy: TConf, options: TrpcProcedureOptions = {}) {
   assertHipthrustable(handlingStrategy);
 
   const handlerExtract = (handlingStrategy as any).extractInputs;
@@ -152,14 +170,41 @@ export function toTrpcProcedure<
     strategyWithBaseline as any
   );
 
+  const schedule = (run: (() => Promise<void>) | undefined) => {
+    if (!run) {
+      return;
+    }
+    if (options.scheduleAfterResponse) {
+      options.scheduleAfterResponse(run);
+    } else {
+      setTimeout(run, 0);
+    }
+  };
+
   return async <TCtx, TInput>({ ctx, input }: { ctx: TCtx; input: TInput }) => {
-    const { response } = await executeHipthrustable(fullHipthrustable as any, {
-      ctx,
-      input,
-    });
+    const raw = { ctx, input };
+    let lifecycle: LifecycleResult;
+    try {
+      // No lifecycle options: the etag stage is never run for tRPC.
+      lifecycle = await executeHipthrustable(fullHipthrustable as any, raw);
+    } catch (exception) {
+      const info: FinallyInfo =
+        exception instanceof HipRedirect
+          ? { raw, outcome: 'redirect' }
+          : { raw, outcome: 'error', error: exception };
+      schedule(makeAfterResponseRunner(options, { raw, info: () => info }));
+      throw exception;
+    }
+    schedule(
+      makeAfterResponseRunner(options, {
+        raw,
+        lifecycle,
+        info: () => ({ raw, outcome: 'success' }),
+      })
+    );
     // tRPC procedures return the value directly. A thrown HipError propagates
     // with its `.kind`; map it in your tRPC `errorFormatter` if you want
     // specific TRPCError codes. There is no HTTP response metadata here.
-    return response;
+    return lifecycle.response;
   };
 }

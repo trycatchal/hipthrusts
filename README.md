@@ -119,7 +119,8 @@ pnpm add mongoose json-mask   # Mongoose helpers
 ```
 
 Ships ESM + CommonJS, root and every subpath (`hipthrusts/express`,
-`hipthrusts/zod`, …). Node.js >= 20. Subpath types resolve through the
+`hipthrusts/zod`, …). Node.js >= 20; TypeScript >= 5.4 for the type
+declarations (they use `NoInfer`). Subpath types resolve through the
 package `exports` map, so use `"moduleResolution": "node16"`,
 `"nodenext"`, or `"bundler"` in your `tsconfig.json` — the legacy
 `"node"` (node10) resolution cannot see the subpath type declarations.
@@ -128,10 +129,10 @@ package `exports` map, so use `"moduleResolution": "node16"`,
 
 | Guide | What's in it |
 |-------|--------------|
-| [The lifecycle, in detail](./docs/lifecycle.md) | All eight stages, the context each receives, input slices & the strictness guarantee |
+| [The lifecycle, in detail](./docs/lifecycle.md) | All eight stages (plus the optional `etag` stage), the context each receives, `ctx.defer`, input slices & the strictness guarantee |
 | [Composition](./docs/composition.md) | `HTPipe`, shared fragments, partial pipelines, `finishPipe`, type troubleshooting |
 | [Errors & failure routing](./docs/errors.md) | The `HipError` vocabulary, error bodies, unexpected-error routing, the auth-before-validation gate |
-| [Adapters](./docs/adapters.md) | Express, tRPC, Hono, Fastify, Next.js; `responseMeta`, `onError` / `afterResponse` options |
+| [Adapters](./docs/adapters.md) | Express, tRPC, Hono, Fastify, Next.js; `responseMeta`, `onError` / `afterResponse` / `finally` options, post-response work, conditional GET (304) |
 | [Zod validation helpers](./docs/validation.md) | Schema-backed sanitization & redaction, codec-style wire schemas, switches |
 | [Mongoose helpers & data loading](./docs/mongoose.md) | Everyday loaders, `ctxRef`, tenant scoping for list endpoints |
 

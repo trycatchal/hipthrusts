@@ -185,11 +185,43 @@ surface as `HipDepNotMet` at the adapter boundary. Runtime is literally
 `HTPipe(pipe, handler)`.
 
 Limitations, by design: the trailing handler may only declare
-`preAuthorize` / `loadResources` / `finalAuthorize` / `execute` /
+`preAuthorize` / `loadResources` / `finalAuthorize` / `etag` / `execute` /
 `redactResponse` / `responseMeta`. Extraction and sanitization stages
 describe the pipeline's input surface — author them in the pipe. The
 exported `PipeContext<typeof SomePipe>` utility computes a pipe's
 accumulated context type if you need it by hand.
+
+Every trailing key is contextually typed, `responseMeta` included: a
+functional `responseMeta` receives the **final context** — everything
+`execute` saw, `execute`'s output keys, and `response` (the redacted
+response). With an [`etag` stage](./lifecycle.md#conditional-get-the-etag-stage)
+in play a `304` is possible, and that branch has no `response`, so the
+type makes it optional — narrow with `if (ctx.response)`:
+
+```ts
+finishPipe(Pipe, {
+  loadResources: (ctx) => loadRollupHeader(ctx.inputs.params.id),
+  etag:          (ctx) => ctx.header.computedAt ? `rollup-${ctx.header.computedAt.getTime()}` : null,
+  execute:       (ctx) => assembleRollup(ctx),          // skipped on a 304
+  ...RedactResponseWithZod(RollupResponse),
+  responseMeta:  { headers: { 'Cache-Control': 'private, no-cache' } },
+});
+```
+
+Declare the trailing stages **in lifecycle order, `responseMeta` last**:
+each stage's context is computed from the returns of the stages before it.
+
+**Pre-built stages spread into the trailing handler are fine.** A
+redactor or authorizer built elsewhere — `...RedactResponseWithZod(Out)`,
+a `RedactResponseSwitch`, a shared `FinalAuthorize((ctx: { doc: Doc }) =>
+…)` — neither erases the other stages' contexts nor escapes checking:
+the context it *declares* is checked against the context it will really
+get once every stage's return is known. When nothing provides a key it
+needs, `finishPipe` returns a branded `HipTrailingDepNotMet<stage, keys>`
+instead of a pipe, and handing that to an adapter is the compile error.
+(Before 1.3.0, a spread redactor whose context parameter was `any` —
+every `RedactResponseWithZod` — silently turned every trailing stage's
+`ctx` into `any`.)
 
 Division of labor with the per-adapter `defineXHandler` helpers: those
 give contextual typing to a single *whole* config object (and are the
@@ -218,6 +250,17 @@ That means: `finalAuthorize` declares `ctx.doc`, and no earlier stage
 (`preAuthorize` / `loadResources`) returns an object with a compatible
 `doc`. Fix the provider (or the declared type), don't `as any` the
 handler.
+
+The `finishPipe` flavor of the same message names a pre-built stage
+spread into the trailing handler:
+
+```
+Argument of type 'HipTrailingDepNotMet<"redactResponse", "isAdmin">' is not assignable to ...
+```
+
+A stage returning an object with a key the lifecycle reserves (`defer`)
+is rejected the same way, as `HipReservedContextKey<"loadResources",
+"defer">`.
 
 A few patterns to know:
 

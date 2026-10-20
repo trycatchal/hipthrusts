@@ -2,6 +2,7 @@ import { NextFunction, Request, Response } from 'express';
 import {
   assertHipthrustable,
   executeHipthrustable,
+  LifecycleResult,
   withDefaultImplementations,
 } from './core.js';
 import {
@@ -11,10 +12,14 @@ import {
   isHipError,
 } from './errors.js';
 import {
+  FinallyInfo,
   HasResponseMeta,
+  httpLifecycleOptions,
   HttpAdapterOptions,
+  makeAfterResponseRunner,
+  makeSentStatusAwareRunner,
   ResponseMeta,
-  safeInvokeAfterResponse,
+  responseHeaders,
   safeInvokeOnError,
 } from './http-adapter.js';
 import {
@@ -24,9 +29,12 @@ import {
   LoadResourcesDepsMet,
   OptionalStagesShape,
   PreAuthorizeDepsMet,
+  ETagResult,
+  HasDefer,
   PromiseOrSync,
   PromiseResolveOrSync,
   RedactResponseDepsMet,
+  ReservedKeysUnshadowed,
 } from './types.js';
 
 // Canonical input shape produced by the express adapter baseline extractInputs.
@@ -68,50 +76,42 @@ type ExpressHandlerConfig<
   extractInputs?: (canonical: ExpressRawInputs) => TInputs;
   sanitizeInputs: (unsafe: TInputs) => TSafeInputs;
   preAuthorize: (
-    context: { inputs: PromiseResolveOrSync<TSafeInputs> } & ([
-      TAmbient,
-    ] extends [never]
-      ? {}
-      : { ambient: TAmbient })
+    context: { inputs: PromiseResolveOrSync<TSafeInputs> } & HasDefer &
+      ([TAmbient] extends [never] ? {} : { ambient: TAmbient })
   ) => TPreAuthOut;
   loadResources?: (
-    context: { inputs: PromiseResolveOrSync<TSafeInputs> } & ([
-      TAmbient,
-    ] extends [never]
-      ? {}
-      : { ambient: TAmbient }) &
+    context: { inputs: PromiseResolveOrSync<TSafeInputs> } & HasDefer &
+      ([TAmbient] extends [never] ? {} : { ambient: TAmbient }) &
       PromiseResolveOrSync<TPreAuthOut>
   ) => PromiseOrSync<TLoadResourcesOut>;
   finalAuthorize: (
-    context: { inputs: PromiseResolveOrSync<TSafeInputs> } & ([
-      TAmbient,
-    ] extends [never]
-      ? {}
-      : { ambient: TAmbient }) &
+    context: { inputs: PromiseResolveOrSync<TSafeInputs> } & HasDefer &
+      ([TAmbient] extends [never] ? {} : { ambient: TAmbient }) &
       PromiseResolveOrSync<TPreAuthOut> &
       PromiseResolveOrSync<TLoadResourcesOut>
   ) => PromiseOrSync<TFinalAuthOut>;
   execute: (
-    context: { inputs: PromiseResolveOrSync<TSafeInputs> } & ([
-      TAmbient,
-    ] extends [never]
-      ? {}
-      : { ambient: TAmbient }) &
+    context: { inputs: PromiseResolveOrSync<TSafeInputs> } & HasDefer &
+      ([TAmbient] extends [never] ? {} : { ambient: TAmbient }) &
       PromiseResolveOrSync<TPreAuthOut> &
       PromiseResolveOrSync<TLoadResourcesOut> &
       PromiseResolveOrSync<TFinalAuthOut>
   ) => PromiseOrSync<TUnsafeResponse>;
   redactResponse: (
     unsafe: PromiseResolveOrSync<TUnsafeResponse>,
-    context: { inputs: PromiseResolveOrSync<TSafeInputs> } & ([
-      TAmbient,
-    ] extends [never]
-      ? {}
-      : { ambient: TAmbient }) &
+    context: { inputs: PromiseResolveOrSync<TSafeInputs> } & HasDefer &
+      ([TAmbient] extends [never] ? {} : { ambient: TAmbient }) &
       PromiseResolveOrSync<TPreAuthOut> &
       PromiseResolveOrSync<TLoadResourcesOut> &
       PromiseResolveOrSync<TFinalAuthOut>
   ) => TResponse;
+  etag?: (
+    context: { inputs: PromiseResolveOrSync<TSafeInputs> } & HasDefer &
+      ([TAmbient] extends [never] ? {} : { ambient: TAmbient }) &
+      PromiseResolveOrSync<TPreAuthOut> &
+      PromiseResolveOrSync<TLoadResourcesOut> &
+      PromiseResolveOrSync<TFinalAuthOut>
+  ) => PromiseOrSync<ETagResult>;
   responseMeta?: ResponseMeta | ((ctx: any) => ResponseMeta);
 };
 
@@ -160,6 +160,7 @@ export function toExpressHandler<
     FinalAuthorizeDepsMet<TConf> &
     ExecuteDepsMet<TConf> &
     RedactResponseDepsMet<TConf> &
+    ReservedKeysUnshadowed<TConf> &
     HasResponseMeta,
 >(handlingStrategy: TConf, options: HipExpressHandlerOptions = {}) {
   assertHipthrustable(handlingStrategy);
@@ -186,38 +187,90 @@ export function toExpressHandler<
   const responseMeta = (handlingStrategy as HasResponseMeta).responseMeta;
 
   return async (req: Request, res: Response, next: NextFunction) => {
+    const raw: ExpressRaw = { req, res };
+    let lifecycle: LifecycleResult | undefined;
+    let info: FinallyInfo;
+    // Always called AFTER the response was handed to express, so a write
+    // that throws (an unserializable body) lands in the error path and only
+    // that path's work runs. The status is read when the response actually
+    // finishes (it may be written by your own error middleware under
+    // delegateErrors).
+    const schedule = (run: (() => Promise<void>) | undefined) => {
+      if (!run) {
+        return;
+      }
+      if (options.scheduleAfterResponse) {
+        options.scheduleAfterResponse(run);
+        return;
+      }
+      // 'close' also fires for an aborted response, where 'finish' never
+      // does; the guard keeps it to one run.
+      let started = false;
+      const once = () => {
+        if (!started) {
+          started = true;
+          void run();
+        }
+      };
+      if (res.writableFinished) {
+        once();
+        return;
+      }
+      res.on('finish', once);
+      res.on('close', once);
+    };
+    const sentStatus = () => (res.headersSent ? res.statusCode : undefined);
+    const finallyInfo = (): FinallyInfo =>
+      info.status !== undefined
+        ? info
+        : { ...info, status: res.headersSent ? res.statusCode : undefined };
     try {
-      const { response, context } = await executeHipthrustable(
+      lifecycle = await executeHipthrustable(
         fullHipthrustable as any,
-        { req, res }
+        raw,
+        httpLifecycleOptions(req.method, req.headers)
       );
       const meta: ResponseMeta =
         typeof responseMeta === 'function'
-          ? responseMeta(context)
+          ? responseMeta(lifecycle.context)
           : responseMeta || {};
-      if (meta.headers) {
-        for (const headerName of Object.keys(meta.headers)) {
-          res.setHeader(headerName, meta.headers[headerName]);
-        }
+      const headers = responseHeaders(meta.headers, lifecycle.etag);
+      for (const headerName of Object.keys(headers)) {
+        res.setHeader(headerName, headers[headerName]);
       }
-      if (options.afterResponse) {
-        res.on('finish', () =>
-          safeInvokeAfterResponse(
-            options.afterResponse,
-            context,
-            options.onError,
-            {
-              req,
-              res,
-            }
-          )
-        );
+      info = lifecycle.notModified
+        ? { raw, outcome: 'not-modified', status: 304 }
+        : { raw, outcome: 'success', status: meta.status || 200 };
+      if (lifecycle.notModified) {
+        res.status(304).end();
+      } else {
+        res.status(meta.status || 200).json(lifecycle.response);
       }
-      res.status(meta.status || 200).json(response);
+      schedule(
+        makeSentStatusAwareRunner(options, {
+          raw,
+          lifecycle,
+          info,
+          sentStatus,
+        })
+      );
     } catch (exception) {
       if (!(exception instanceof HipRedirect)) {
-        safeInvokeOnError(options.onError, exception, { raw: { req, res } });
+        safeInvokeOnError(options.onError, exception, { raw });
       }
+      info =
+        exception instanceof HipRedirect
+          ? { raw, outcome: 'redirect', status: exception.redirectCode }
+          : options.delegateErrors
+            ? { raw, outcome: 'error', error: exception }
+            : {
+                raw,
+                outcome: 'error',
+                status: isHipError(exception)
+                  ? hipErrorToStatus(exception)
+                  : 500,
+                error: exception,
+              };
       if (exception instanceof HipRedirect) {
         res.redirect(exception.redirectCode, exception.redirectUrl);
       } else if (options.delegateErrors) {
@@ -227,6 +280,8 @@ export function toExpressHandler<
       } else {
         res.status(500).json({ error: 'Internal server error' });
       }
+      // Only finally runs for a failed request; deferred tasks are dropped.
+      schedule(makeAfterResponseRunner(options, { raw, info: finallyInfo }));
     }
   };
 }
@@ -243,6 +298,7 @@ export function makeExpressHandlerFactory(defaults: HipExpressHandlerOptions) {
       FinalAuthorizeDepsMet<TConf> &
       ExecuteDepsMet<TConf> &
       RedactResponseDepsMet<TConf> &
+      ReservedKeysUnshadowed<TConf> &
       HasResponseMeta,
   >(handlingStrategy: TConf, options: HipExpressHandlerOptions = {}) {
     return toExpressHandler(handlingStrategy, { ...defaults, ...options });

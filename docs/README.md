@@ -6,10 +6,10 @@ topic:
 
 | Page | What's in it |
 |------|--------------|
-| [The lifecycle, in detail](./lifecycle.md) | All eight stages, the context each receives, input slices & the strictness guarantee |
+| [The lifecycle, in detail](./lifecycle.md) | All eight stages (plus the optional `etag` stage), the context each receives, `ctx.defer`, input slices & the strictness guarantee |
 | [Composition](./composition.md) | `HTPipe`, shared fragments, partial pipelines, `finishPipe`, type troubleshooting |
 | [Errors & failure routing](./errors.md) | The `HipError` vocabulary, error bodies, unexpected-error routing, the auth-before-validation gate |
-| [Adapters](./adapters.md) | Express, tRPC, Hono, Fastify, Next.js; `responseMeta`, `onError` / `afterResponse` options |
+| [Adapters](./adapters.md) | Express, tRPC, Hono, Fastify, Next.js; `responseMeta`, `onError` / `afterResponse` / `finally` options, post-response work, conditional GET (304) |
 | [Zod validation helpers](./validation.md) | Schema-backed sanitization & redaction, codec-style wire schemas, switches |
 | [Mongoose helpers & data loading](./mongoose.md) | Everyday loaders, `ctxRef`, tenant scoping for list endpoints |
 

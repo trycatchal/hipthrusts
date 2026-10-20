@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server.js';
-import { executeHipthrustable } from './core.js';
+import { executeHipthrustable, LifecycleResult } from './core.js';
 import {
   hipErrorToBody,
   hipErrorToStatus,
@@ -9,12 +9,15 @@ import {
 import { HipBadInputs } from './errors.js';
 import {
   composeHttpHipthrustable,
+  FinallyInfo,
   HasResponseMeta,
+  httpLifecycleOptions,
   HttpAdapterOptions,
   HttpHandlerConfig,
   HttpRawInputs,
+  makeAfterResponseRunner,
   resolveResponseMeta,
-  safeInvokeAfterResponse,
+  responseHeaders,
   safeInvokeOnError,
 } from './http-adapter.js';
 import {
@@ -25,6 +28,7 @@ import {
   OptionalStagesShape,
   PreAuthorizeDepsMet,
   RedactResponseDepsMet,
+  ReservedKeysUnshadowed,
 } from './types.js';
 
 // App Router route context: params arrive as a Promise.
@@ -100,6 +104,7 @@ export function toNextHandler<
     FinalAuthorizeDepsMet<TConf> &
     ExecuteDepsMet<TConf> &
     RedactResponseDepsMet<TConf> &
+    ReservedKeysUnshadowed<TConf> &
     HasResponseMeta,
 >(handlingStrategy: TConf, options: HipNextHandlerOptions = {}) {
   const fullHipthrustable = composeHttpHipthrustable<NextRaw>(
@@ -113,6 +118,9 @@ export function toNextHandler<
     routeContext?: NextRouteContext
   ): Promise<NextResponse> => {
     let raw: NextRaw | undefined;
+    let lifecycle: LifecycleResult | undefined;
+    let info: FinallyInfo;
+    let response: NextResponse;
     try {
       let body: any = {};
       if (!BODYLESS_METHODS.includes(req.method)) {
@@ -146,35 +154,30 @@ export function toNextHandler<
         ...extra,
       };
 
-      const { response, context } = await executeHipthrustable(
+      lifecycle = await executeHipthrustable(
         fullHipthrustable as any,
-        raw
+        raw,
+        httpLifecycleOptions(req.method, headers)
       );
-      if (options.afterResponse) {
-        // Scheduled AFTER the lifecycle resolves so the callback receives the
-        // final context, via Next's `after()` (runs once the response is
-        // sent). Failed requests never fire it.
-        const runAfterResponse = () =>
-          safeInvokeAfterResponse(
-            options.afterResponse,
-            context,
-            options.onError,
-            raw
-          );
-        try {
-          const { after } = await import('next/server.js');
-          after(runAfterResponse);
-        } catch {
-          // `after` unavailable (older Next.js); run fire-and-forget instead.
-          runAfterResponse();
-        }
+      const meta = resolveResponseMeta(responseMeta, lifecycle.context);
+      const responseHeadersOut = responseHeaders(meta.headers, lifecycle.etag);
+      if (lifecycle.notModified) {
+        // 304 carries no body (a Response with one is rejected outright).
+        response = new NextResponse(null, {
+          status: 304,
+          headers: responseHeadersOut,
+        });
+        info = { raw, outcome: 'not-modified', status: 304 };
+      } else {
+        const status = meta.status || 200;
+        response = NextResponse.json(lifecycle.response, {
+          status,
+          headers: responseHeadersOut,
+        });
+        info = { raw, outcome: 'success', status };
       }
-      const meta = resolveResponseMeta(responseMeta, context);
-      return NextResponse.json(response, {
-        status: meta.status || 200,
-        headers: meta.headers,
-      });
     } catch (exception) {
+      lifecycle = undefined;
       if (!(exception instanceof HipRedirect)) {
         safeInvokeOnError(options.onError, exception, { raw });
       }
@@ -182,21 +185,54 @@ export function toNextHandler<
         const code = REDIRECT_CODES.includes(exception.redirectCode)
           ? exception.redirectCode
           : 302;
-        return NextResponse.redirect(
+        response = NextResponse.redirect(
           exception.redirectUrl,
           code as 301 | 302 | 303 | 307 | 308
         );
+        info = { raw, outcome: 'redirect', status: code };
       } else if (isHipError(exception)) {
-        return NextResponse.json(hipErrorToBody(exception), {
-          status: hipErrorToStatus(exception),
-        });
+        const status = hipErrorToStatus(exception);
+        response = NextResponse.json(hipErrorToBody(exception), { status });
+        info = { raw, outcome: 'error', status, error: exception };
+      } else {
+        response = NextResponse.json(
+          { error: 'Internal server error' },
+          { status: 500 }
+        );
+        info = { raw, outcome: 'error', status: 500, error: exception };
       }
-      return NextResponse.json(
-        { error: 'Internal server error' },
-        { status: 500 }
-      );
     }
+    // Scheduled once the response is built, so deferred tasks and
+    // afterResponse see the final context and finally knows the outcome.
+    const run = makeAfterResponseRunner(options, {
+      raw,
+      lifecycle,
+      info: () => info,
+    });
+    if (run) {
+      await scheduleAfterResponse(options, run);
+    }
+    return response;
   };
+}
+
+// Next's after() runs the callback once the response has been sent (and keeps
+// a serverless function alive until it settles). Outside a request scope or
+// on a Next.js without after(), fall back to fire-and-forget.
+async function scheduleAfterResponse(
+  options: HipNextHandlerOptions,
+  run: () => Promise<void>
+) {
+  if (options.scheduleAfterResponse) {
+    options.scheduleAfterResponse(run);
+    return;
+  }
+  try {
+    const { after } = await import('next/server.js');
+    after(run);
+  } catch {
+    void run();
+  }
 }
 
 // Adapter preset factory: bakes shared options (gatherContext, onError,
@@ -213,6 +249,7 @@ export function makeNextHandlerFactory(defaults: HipNextHandlerOptions) {
       FinalAuthorizeDepsMet<TConf> &
       ExecuteDepsMet<TConf> &
       RedactResponseDepsMet<TConf> &
+      ReservedKeysUnshadowed<TConf> &
       HasResponseMeta,
   >(handlingStrategy: TConf, options: HipNextHandlerOptions = {}) {
     return toNextHandler(handlingStrategy, { ...defaults, ...options });

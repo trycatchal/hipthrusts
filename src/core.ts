@@ -34,6 +34,10 @@ import {
   PromiseOrSync,
   PromiseResolveOrSync,
   RedactResponseDepsMet,
+  ReservedKeysUnshadowed,
+  DeferredTask,
+  ETagResult,
+  ReservedContextKey,
   UNSAFE_SLICES,
 } from './types.js';
 
@@ -44,7 +48,8 @@ export function withDefaultImplementations<
     LoadResourcesDepsMet<TStrategy> &
     FinalAuthorizeDepsMet<TStrategy> &
     ExecuteDepsMet<TStrategy> &
-    RedactResponseDepsMet<TStrategy>,
+    RedactResponseDepsMet<TStrategy> &
+    ReservedKeysUnshadowed<TStrategy>,
 >(strategy: TStrategy): HasAllStagesDefined {
   return {
     ...(strategy as any),
@@ -165,6 +170,89 @@ export { INTERNAL_ERROR_MESSAGE };
 const internalFrom = (cause: unknown) =>
   new HipInternal(INTERNAL_ERROR_MESSAGE, undefined, { cause });
 
+const RESERVED_CONTEXT_KEYS: ReservedContextKey[] = ['defer'];
+
+// Runtime half of ReservedKeysUnshadowed: a stage contribution may never
+// replace a key the lifecycle provides (an `any`-typed stage slips past the
+// type check, so this is not redundant).
+function assertNoReservedKeys(stage: string, contribution: unknown) {
+  if (contribution === null || typeof contribution !== 'object') {
+    return;
+  }
+  for (const key of RESERVED_CONTEXT_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(contribution, key)) {
+      throw new HipInternal(INTERNAL_ERROR_MESSAGE, {
+        reason: `${stage} returned the reserved context key "${key}"`,
+      });
+    }
+  }
+}
+
+// The per-request queue behind `ctx.defer`. Adapters drain it once, after the
+// response is sent; draining seals it, so a late `defer` call (e.g. from
+// afterResponse, or a floating promise) throws instead of silently dropping
+// the task.
+export interface DeferQueue {
+  readonly size: number;
+  drain(): DeferredTask[];
+}
+
+function createDeferQueue() {
+  const tasks: DeferredTask[] = [];
+  let sealed = false;
+  const defer = (task: DeferredTask) => {
+    if (typeof task !== 'function') {
+      throw new TypeError('ctx.defer() expects a function');
+    }
+    if (sealed) {
+      throw new Error(
+        'ctx.defer() was called after the response was sent; deferred tasks must be registered during the lifecycle'
+      );
+    }
+    tasks.push(task);
+  };
+  const queue: DeferQueue = {
+    get size() {
+      return tasks.length;
+    },
+    drain() {
+      sealed = true;
+      return tasks.splice(0);
+    },
+  };
+  return { defer, queue };
+}
+
+// Transport-specific hooks a caller (an adapter) may hand the lifecycle.
+export interface LifecycleOptions {
+  // Turns the handler's `etag` stage output into the formatted header value
+  // and decides whether the request's validators match it. When absent (tRPC,
+  // non-GET/HEAD requests) the `etag` stage is not run at all.
+  resolveETag?: (tag: Exclude<ETagResult, null | undefined>) => {
+    etag: string;
+    notModified: boolean;
+  };
+}
+
+// The successful outcome of a lifecycle run. `notModified: true` means the
+// `etag` stage matched: execute and redactResponse were skipped, there is no
+// response body, and `context` is the context execute would have received.
+export type LifecycleResult =
+  | {
+      notModified: false;
+      response: unknown;
+      context: Record<string, any>;
+      etag: string | undefined;
+      deferred: DeferQueue;
+    }
+  | {
+      notModified: true;
+      response: undefined;
+      context: Record<string, any>;
+      etag: string;
+      deferred: DeferQueue;
+    };
+
 // Runs the full lifecycle and returns the safe response plus the final context
 // (inputs/ambient/loaded resources/auth output/execute output/response). The
 // context is transport-agnostic; adapters use it to derive their own response
@@ -175,9 +263,16 @@ export async function executeHipthrustable<
     LoadResourcesDepsMet<TConf> &
     FinalAuthorizeDepsMet<TConf> &
     ExecuteDepsMet<TConf> &
-    RedactResponseDepsMet<TConf>,
+    RedactResponseDepsMet<TConf> &
+    ReservedKeysUnshadowed<TConf>,
   TRaw,
->(requestHandler: TConf, raw: TRaw) {
+>(
+  requestHandler: TConf,
+  raw: TRaw,
+  options: LifecycleOptions = {}
+): Promise<LifecycleResult> {
+  const { defer, queue: deferred } = createDeferQueue();
+
   // Unknown throws during input handling stay 422: these stages exist to
   // reject untrusted input, and validators (zod .parse etc.) throw their own
   // library errors. The original error is chained as `cause` for logging.
@@ -227,6 +322,7 @@ export async function executeHipthrustable<
   const inputsContext = {
     ambient: safeAmbient,
     inputs: safeInputs,
+    defer,
   };
 
   const forbiddenPreAuthThrow = new HipForbidden(
@@ -250,6 +346,7 @@ export async function executeHipthrustable<
 
   const preAuthorizeContextOut =
     preAuthorizeResult === true ? {} : preAuthorizeResult;
+  assertNoReservedKeys('preAuthorize', preAuthorizeContextOut);
 
   const preAuthContext = {
     ...inputsContext,
@@ -266,6 +363,7 @@ export async function executeHipthrustable<
       requestHandler.loadResources,
       preAuthContext
     )) || {};
+  assertNoReservedKeys('loadResources', attachedDataContextOnly);
   const attachedDataContext = { ...preAuthContext, ...attachedDataContextOnly };
 
   const forbiddenFinalAuthThrow = new HipForbidden(
@@ -288,11 +386,38 @@ export async function executeHipthrustable<
 
   const finalAuthorizeContextOut =
     finalAuthorizeResult === true ? {} : (finalAuthorizeResult as object);
+  assertNoReservedKeys('finalAuthorize', finalAuthorizeContextOut);
 
   const finalAuthContext = {
     ...attachedDataContext,
     ...finalAuthorizeContextOut,
   };
+
+  // Conditional GET. Placement is the security property: this runs only
+  // after BOTH authorization stages passed, so a 304 can never tell an
+  // unauthorized caller "this exists and is unchanged".
+  let etag: string | undefined;
+  const etagStage = (requestHandler as { etag?: unknown }).etag;
+  if (options.resolveETag && typeof etagStage === 'function') {
+    const tag = (await transformThrowPossiblyAsync(
+      internalFrom,
+      etagStage as (context: any) => unknown,
+      finalAuthContext
+    )) as ETagResult;
+    if (tag !== null && tag !== undefined) {
+      const resolved = options.resolveETag(tag);
+      etag = resolved.etag;
+      if (resolved.notModified) {
+        return {
+          notModified: true,
+          response: undefined,
+          context: finalAuthContext,
+          etag: resolved.etag,
+          deferred,
+        };
+      }
+    }
+  }
 
   try {
     const unsafeResponse = await Promise.resolve(
@@ -304,16 +429,26 @@ export async function executeHipthrustable<
       finalAuthContext
     );
 
+    // `defer` is re-applied last: execute's output keys are response data
+    // and may legitimately be named anything, but they must not replace the
+    // lifecycle's own `defer` on the final context.
     const context =
       unsafeResponse !== null && typeof unsafeResponse === 'object'
         ? {
             ...finalAuthContext,
             ...(unsafeResponse as object),
             response: safeResponse,
+            defer,
           }
         : { ...finalAuthContext, response: safeResponse };
 
-    return { response: safeResponse, context };
+    return {
+      notModified: false,
+      response: safeResponse,
+      context,
+      etag,
+      deferred,
+    };
   } catch (exception) {
     if (exception instanceof HipRedirect || isHipError(exception)) {
       throw exception;

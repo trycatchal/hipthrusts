@@ -37,6 +37,38 @@ export type NestedPathReq<TPath extends string> =
 export type PromiseOrSync<T> = Promise<T> | T;
 export type PromiseResolveOrSync<T> = T extends Promise<infer U> ? U : T;
 
+// Post-response work a stage schedules with `ctx.defer(task)`. Tasks run only
+// after a successful response (including a 304), in registration order, one
+// after another; a throwing/rejecting task is routed to the adapter's onError
+// with phase 'defer' and never affects the response.
+export type DeferredTask = () => PromiseOrSync<void>;
+export type Defer = (task: DeferredTask) => void;
+
+// `defer` is provided by the lifecycle itself on every stage context from
+// preAuthorize onward (and on the final context responseMeta receives). It is
+// RESERVED: a stage contribution named `defer` is a compile error
+// (ReservedKeysUnshadowed) and a runtime HipInternal.
+export interface HasDefer {
+  defer: Defer;
+}
+
+export type ReservedContextKey = 'defer';
+
+// What an `etag` stage may return: the opaque tag (unquoted — the library adds
+// the quotes and the W/ prefix), optionally marked weak, or null/undefined for
+// "no validator for this response".
+export type ETagValue = string | { value: string; weak?: boolean };
+export type ETagResult = ETagValue | null | undefined;
+
+// The optional conditional-GET stage. It runs after finalAuthorize and before
+// execute, for GET/HEAD requests on the HTTP adapters only. A match with the
+// request's If-None-Match skips execute + redactResponse and answers 304.
+// Single-valued: composing two fragments that both declare `etag` keeps the
+// right one (like responseMeta), it does not chain.
+export interface OptionallyHasETag<TContextIn> {
+  etag?: (context: TContextIn) => PromiseOrSync<ETagResult>;
+}
+
 export type AllAsyncStageKeys = 'loadResources' | 'finalAuthorize' | 'execute';
 export type AllSyncStageKeys =
   | 'extractAmbient'
@@ -227,7 +259,10 @@ type ReturnedSomewhereUpToLoadResources<
       ? {}
       : HipDepNotMet<'loadResources', TKey>;
 
-type AllInitKeys = 'ambient' | 'inputs';
+// Keys the lifecycle itself provides (not a stage contribution): `ambient`
+// and `inputs` are checked against extractAmbient/sanitizeInputs, `defer`
+// is always present.
+type AllInitKeys = 'ambient' | 'inputs' | ReservedContextKey;
 
 export type LoadResourcesDepsMet<T> = IntersectProperties<{
   [P in keyof OptionalLoadResourcesParams<T>]: [P] extends [AllInitKeys]
@@ -346,3 +381,31 @@ export type RedactResponseDepsMet<T extends HasRedactResponse<any, any>> =
             'redactResponse'
           >;
     }>;
+
+// Resolved marker for a stage whose object contribution would shadow a key the
+// lifecycle reserves (`defer`): the compiler error names the stage and key.
+export interface HipReservedContextKey<TStage extends string, TKey> {
+  __hipReservedContextKey: [TStage, TKey];
+}
+
+// Distributes over the union of a stage's returns (boolean members drop out).
+type ShadowedReservedKeys<TReturn> =
+  IsAny<TReturn> extends true
+    ? never
+    : TReturn extends object
+      ? keyof TReturn & ReservedContextKey
+      : never;
+
+type StageUnshadowed<T, K extends AllStageKeys> = [
+  ShadowedReservedKeys<StageReturnOf<T, K>>,
+] extends [never]
+  ? {}
+  : Record<
+      K,
+      HipReservedContextKey<K, ShadowedReservedKeys<StageReturnOf<T, K>>>
+    >;
+
+// No context-contributing stage may return a reserved key.
+export type ReservedKeysUnshadowed<T> = StageUnshadowed<T, 'preAuthorize'> &
+  StageUnshadowed<T, 'loadResources'> &
+  StageUnshadowed<T, 'finalAuthorize'>;
