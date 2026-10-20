@@ -97,16 +97,26 @@ refresh, a notification. Any stage from `preAuthorize` through `execute`
 (and `redactResponse`) can schedule it:
 
 ```ts
-loadResources: async (ctx) => {
-  const lease = await rollups.lease(ctx.inputs.params.id);
-  if (lease.isStale) ctx.defer(() => rollups.refresh(lease));  // after the response
-  return { lease };
+loadResources: async (ctx) => ({ header: await rollups.header(ctx.inputs.params.id) }),
+finalAuthorize: (ctx) => {
+  if (!canReadRollup(ctx.principal, ctx.header)) return false;
+  ctx.defer(() => audit.write({ who: ctx.principal.id, what: 'read rollup' }));  // after the response
+  return true;
 },
-execute: (ctx) => {
-  ctx.defer(() => audit.write({ who: ctx.principal.id, what: 'read rollup' }));
+execute: async (ctx) => {
+  const lease = await rollups.lease(ctx.header);
+  if (lease.isStale) ctx.defer(() => rollups.refresh(lease));  // after the response
   return assembleRollup(ctx);
 },
 ```
+
+Deferring is safe from any of those stages — a task runs only after a
+successful response, so a denied caller's tasks are dropped. The *inline*
+work around the `defer` call is a different matter: `loadResources` runs
+**before** `finalAuthorize`, so anything it does synchronously (taking a
+lease, writing a header) happens for callers who are about to be denied.
+Keep the stages before `finalAuthorize` read-only, and put side effects in
+`finalAuthorize` after its check or in `execute`, as above.
 
 The contract:
 
