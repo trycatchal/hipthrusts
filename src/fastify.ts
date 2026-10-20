@@ -15,6 +15,7 @@ import {
   HttpHandlerConfig,
   HttpRawInputs,
   makeAfterResponseRunner,
+  makeSentStatusAwareRunner,
   resolveResponseMeta,
   responseHeaders,
   safeInvokeOnError,
@@ -96,7 +97,8 @@ export function toFastifyHandler<
     const raw: FastifyRaw = { req, reply };
     let info: FinallyInfo;
     // Fastify's per-request "onResponse": the raw response's finish (or
-    // close, for an aborted response) — once.
+    // close, for an aborted response) — once. Called after the reply was
+    // handed to fastify.
     const schedule = (run: (() => Promise<void>) | undefined) => {
       if (!run) {
         return;
@@ -119,6 +121,10 @@ export function toFastifyHandler<
           void run();
         }
       };
+      if (rawResponse.writableFinished) {
+        once();
+        return;
+      }
       rawResponse.on('finish', once);
       rawResponse.on('close', once);
     };
@@ -139,33 +145,42 @@ export function toFastifyHandler<
         outcome: lifecycle.notModified ? 'not-modified' : 'success',
         status,
       };
+      const sent = lifecycle.notModified
+        ? reply.status(304).send()
+        : reply.status(status).send(lifecycle.response);
+      // Fastify turns a failed serialization into its own 500 rather than
+      // throwing here, so the chain checks the status actually sent.
+      const rawResponse = reply.raw as FastifyReply['raw'] | undefined;
       schedule(
-        makeAfterResponseRunner(options, {
+        makeSentStatusAwareRunner(options, {
           raw,
           lifecycle,
-          info: () => info,
+          info,
+          sentStatus: () =>
+            rawResponse?.headersSent ? rawResponse.statusCode : undefined,
         })
       );
-      if (lifecycle.notModified) {
-        return reply.status(304).send();
-      }
-      return reply.status(status).send(lifecycle.response);
+      return sent;
     } catch (exception) {
       if (!(exception instanceof HipRedirect)) {
         safeInvokeOnError(options.onError, exception, { raw });
       }
       if (exception instanceof HipRedirect) {
         info = { raw, outcome: 'redirect', status: exception.redirectCode };
+        const sent = reply.redirect(
+          exception.redirectUrl,
+          exception.redirectCode
+        );
         schedule(makeAfterResponseRunner(options, { raw, info: () => info }));
-        return reply.redirect(exception.redirectUrl, exception.redirectCode);
+        return sent;
       }
       const status = isHipError(exception) ? hipErrorToStatus(exception) : 500;
       info = { raw, outcome: 'error', status, error: exception };
+      const sent = isHipError(exception)
+        ? reply.status(status).send(hipErrorToBody(exception))
+        : reply.status(500).send({ error: 'Internal server error' });
       schedule(makeAfterResponseRunner(options, { raw, info: () => info }));
-      if (isHipError(exception)) {
-        return reply.status(status).send(hipErrorToBody(exception));
-      }
-      return reply.status(500).send({ error: 'Internal server error' });
+      return sent;
     }
   };
 }

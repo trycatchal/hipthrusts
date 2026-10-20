@@ -438,6 +438,48 @@ describe.each(adapters)('%s adapter: post-response work', (_name, call) => {
     expect(phases).toEqual(['finally']);
   });
 
+  // A body that can't be serialized only fails when the response is
+  // written: success-path work must not run, and finally runs exactly once.
+  it.each([
+    ['the default scheduler', false],
+    ['scheduleAfterResponse', true],
+  ])(
+    'an unserializable body: finally once with the 500, no deferred work (%s)',
+    async (_label, useSeam) => {
+      const task = vi.fn();
+      const afterResponse = vi.fn();
+      const infos: FinallyInfo[] = [];
+      const s = seam();
+      const status = await call(
+        {
+          ...baseStages,
+          execute: (ctx: any) => {
+            ctx.defer(task);
+            return { n: 1n };
+          },
+        },
+        {
+          afterResponse,
+          finally: (info) => void infos.push(info),
+          ...(useSeam
+            ? { scheduleAfterResponse: s.scheduleAfterResponse }
+            : {}),
+        }
+      );
+      expect(status).toBe(500);
+      if (useSeam) {
+        await s.flush();
+      } else {
+        await vi.waitFor(() => expect(infos).toHaveLength(1));
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      expect(infos).toHaveLength(1);
+      expect(infos[0]).toMatchObject({ outcome: 'error', status: 500 });
+      expect(task).not.toHaveBeenCalled();
+      expect(afterResponse).not.toHaveBeenCalled();
+    }
+  );
+
   it('schedules nothing when there is nothing to run', async () => {
     const { scheduleAfterResponse, runs } = seam();
     await call(baseStages, { scheduleAfterResponse });

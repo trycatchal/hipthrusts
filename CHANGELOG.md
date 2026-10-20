@@ -8,8 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.3.0] - 2026-10-20
 
-Four changes requested by the largest dogfooding app. All additive; the
-required-lifecycle-stage guarantee is unchanged.
+Four changes requested by the largest dogfooding app. The
+required-lifecycle-stage guarantee is unchanged. Nearly everything is
+additive; read **Changed** for the three edges (a newly reserved context key,
+a TypeScript minimum, and `afterResponse` timing).
 
 ### Fixed
 
@@ -86,6 +88,22 @@ required-lifecycle-stage guarantee is unchanged.
 
 ### Changed
 
+- **TypeScript >= 5.4 is now required** to consume the type declarations
+  (the `finishPipe` fix uses the built-in `NoInfer`). The zod helpers already
+  needed TypeScript >= 5.5 through zod 4.
+- **`defer` is now a reserved context key.** A `preAuthorize` /
+  `loadResources` / `finalAuthorize` that already returns an object with a
+  `defer` key no longer compiles (`HipReservedContextKey`) and, if it slips
+  past the types (an `any`-typed stage), fails at runtime with a
+  `HipInternal` (500). Rename the key. `execute`'s output may still contain
+  `defer` (it is response data); it just doesn't replace `ctx.defer` on the
+  final context.
+- **On a `304`, the final context has no `response`** (and no execute output
+  keys): `execute` and `redactResponse` never ran. This only happens for
+  handlers that declare the new `etag` stage, but it reaches `afterResponse`
+  and a functional `responseMeta` alike. `finishPipe` types it (`response`
+  becomes optional); hand-written `toXHandler` configs, whose `responseMeta`
+  ctx is untyped, should guard `ctx.response` themselves.
 - `afterResponse` now also fires after a `304`, and is awaited as part of the
   post-response chain (after the deferred tasks, before `finally`) rather
   than started fire-and-forget on its own. On Express and Fastify it is
@@ -93,6 +111,12 @@ required-lifecycle-stage guarantee is unchanged.
   first), so it also runs when the client aborts a successful response.
 - `OnErrorInfo['phase']` widens from `'afterResponse'` to
   `'defer' | 'afterResponse' | 'finally'`.
+- Express and Fastify schedule post-response work only after the response is
+  handed to the framework, and pick the chain from the status actually sent:
+  when a write fails (an unserializable body — Fastify answers it with its own
+  500), deferred tasks and `afterResponse` don't run and `finally` runs once,
+  with outcome `'error'`. `makeSentStatusAwareRunner` is exported from
+  `hipthrusts/http-adapter` for custom adapters.
 
 ## [1.2.0] - 2026-08-25
 

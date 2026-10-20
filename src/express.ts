@@ -17,6 +17,7 @@ import {
   httpLifecycleOptions,
   HttpAdapterOptions,
   makeAfterResponseRunner,
+  makeSentStatusAwareRunner,
   ResponseMeta,
   responseHeaders,
   safeInvokeOnError,
@@ -189,9 +190,11 @@ export function toExpressHandler<
     const raw: ExpressRaw = { req, res };
     let lifecycle: LifecycleResult | undefined;
     let info: FinallyInfo;
-    // Registered before anything is written; the status is read when the
-    // response actually finishes (it may be written by your own error
-    // middleware under delegateErrors).
+    // Always called AFTER the response was handed to express, so a write
+    // that throws (an unserializable body) lands in the error path and only
+    // that path's work runs. The status is read when the response actually
+    // finishes (it may be written by your own error middleware under
+    // delegateErrors).
     const schedule = (run: (() => Promise<void>) | undefined) => {
       if (!run) {
         return;
@@ -209,9 +212,14 @@ export function toExpressHandler<
           void run();
         }
       };
+      if (res.writableFinished) {
+        once();
+        return;
+      }
       res.on('finish', once);
       res.on('close', once);
     };
+    const sentStatus = () => (res.headersSent ? res.statusCode : undefined);
     const finallyInfo = (): FinallyInfo =>
       info.status !== undefined
         ? info
@@ -233,18 +241,19 @@ export function toExpressHandler<
       info = lifecycle.notModified
         ? { raw, outcome: 'not-modified', status: 304 }
         : { raw, outcome: 'success', status: meta.status || 200 };
-      schedule(
-        makeAfterResponseRunner(options, {
-          raw,
-          lifecycle,
-          info: finallyInfo,
-        })
-      );
       if (lifecycle.notModified) {
         res.status(304).end();
       } else {
         res.status(meta.status || 200).json(lifecycle.response);
       }
+      schedule(
+        makeSentStatusAwareRunner(options, {
+          raw,
+          lifecycle,
+          info,
+          sentStatus,
+        })
+      );
     } catch (exception) {
       if (!(exception instanceof HipRedirect)) {
         safeInvokeOnError(options.onError, exception, { raw });
@@ -262,8 +271,6 @@ export function toExpressHandler<
                   : 500,
                 error: exception,
               };
-      // Only finally runs for a failed request; deferred tasks are dropped.
-      schedule(makeAfterResponseRunner(options, { raw, info: finallyInfo }));
       if (exception instanceof HipRedirect) {
         res.redirect(exception.redirectCode, exception.redirectUrl);
       } else if (options.delegateErrors) {
@@ -273,6 +280,8 @@ export function toExpressHandler<
       } else {
         res.status(500).json({ error: 'Internal server error' });
       }
+      // Only finally runs for a failed request; deferred tasks are dropped.
+      schedule(makeAfterResponseRunner(options, { raw, info: finallyInfo }));
     }
   };
 }

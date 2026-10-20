@@ -119,7 +119,8 @@ pnpm add mongoose json-mask   # Mongoose helpers
 ```
 
 Ships ESM + CommonJS, root and every subpath (`hipthrusts/express`,
-`hipthrusts/zod`, …). Node.js >= 20. Subpath types resolve through the
+`hipthrusts/zod`, …). Node.js >= 20; TypeScript >= 5.4 for the type
+declarations (they use `NoInfer`). Subpath types resolve through the
 package `exports` map, so use `"moduleResolution": "node16"`,
 `"nodenext"`, or `"bundler"` in your `tsconfig.json` — the legacy
 `"node"` (node10) resolution cannot see the subpath type declarations.

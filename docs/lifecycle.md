@@ -122,6 +122,9 @@ The contract:
   still runs.
 - `defer` must be called during the lifecycle. Calling it after the
   response was sent (from `afterResponse`, or a floating promise) throws.
+- If writing the response itself fails (e.g. a body `JSON.stringify` can't
+  serialize), the request counts as failed: deferred tasks are dropped and
+  `finally` reports the error response.
 
 How "after the response" is scheduled is the adapter's business (Next's
 `after()`, Hono's `waitUntil`, the Node response's `finish` event, …) —

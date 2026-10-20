@@ -241,6 +241,50 @@ export function makeAfterResponseRunner(
   };
 }
 
+// For adapters that hand the body to the framework to write (Express,
+// Fastify): the framework can still turn that write into an error response of
+// its own (Fastify answers an unserializable body with a 500 itself), so the
+// chain is chosen when it RUNS, from the status actually sent. Success-path
+// work (deferred tasks, afterResponse) never runs after an error response;
+// finally then reports outcome 'error' with the sent status. Schedule the
+// result only AFTER handing the response to the framework.
+export function makeSentStatusAwareRunner(
+  options: HttpAdapterOptions,
+  outcome: {
+    raw?: unknown;
+    lifecycle: LifecycleResult;
+    info: FinallyInfo;
+    // The status on the wire, or undefined while/where it can't be read.
+    sentStatus: () => number | undefined;
+  }
+): (() => Promise<void>) | undefined {
+  const { raw, lifecycle, info, sentStatus } = outcome;
+  const success = makeAfterResponseRunner(options, {
+    raw,
+    lifecycle,
+    info: () => {
+      const status = sentStatus();
+      return status === undefined ? info : { ...info, status };
+    },
+  });
+  if (!success) {
+    return undefined;
+  }
+  const failure = makeAfterResponseRunner(options, {
+    raw,
+    info: () => ({ raw, outcome: 'error', status: sentStatus() }),
+  });
+  return async () => {
+    const status = sentStatus();
+    if (status !== undefined && status >= 400 && (info.status ?? 0) < 400) {
+      lifecycle.deferred.drain();
+      await failure?.();
+      return;
+    }
+    await success();
+  };
+}
+
 async function settle(
   fn: () => PromiseOrSync<void>,
   onFailure: (error: unknown) => void

@@ -95,7 +95,8 @@ Three things can run after the response, always in this order: the
 stages registered (one at a time, in registration order), then
 `afterResponse`, then `finally`. The first two run only after a
 successful response (including a `304`); `finally` runs for every
-outcome. Nothing in this chain can affect the response, and a failure in
+outcome. A response whose write fails (a body that can't be serialized)
+counts as failed. Nothing in this chain can affect the response, and a failure in
 one step never skips the next — each is routed to `onError` with its
 phase. When there is nothing to run, nothing is scheduled.
 
@@ -137,7 +138,10 @@ every HTTP adapter handles revalidation the same way, for `GET` and
 
 - **Match** (`If-None-Match` lists the tag, weakly compared, or is `*`):
   `304` with **no body**, carrying the `ETag` header and `responseMeta`'s
-  headers (`Cache-Control`, …). `execute` and `redactResponse` don't run.
+  headers (`Cache-Control`, …). `execute` and `redactResponse` don't run,
+  so the context `afterResponse` and a functional `responseMeta` receive
+  has **no `response`** (nor execute output keys). `finishPipe` types that;
+  in a hand-written `toXHandler` config, guard `ctx.response`.
 - **Miss / no `If-None-Match`:** the usual response, plus the `ETag`
   header.
 - **The stage returned `null`:** the usual response, no `ETag`.
