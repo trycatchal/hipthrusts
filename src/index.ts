@@ -1409,7 +1409,20 @@ export function HTPipe(...objs: any[]) {
 }
 
 export { UNSAFE_SLICES } from './types.js';
-export type { HasUnsafeSlices, NestedPathReq, SanitizedOnly } from './types.js';
+export type {
+  Defer,
+  DeferredTask,
+  ETagResult,
+  ETagValue,
+  HasDefer,
+  HasUnsafeSlices,
+  HipReservedContextKey,
+  NestedPathReq,
+  OptionallyHasETag,
+  ReservedContextKey,
+  ReservedKeysUnshadowed,
+  SanitizedOnly,
+} from './types.js';
 export * from './core.js';
 export * from './errors.js';
 export * from './http-adapter.js';

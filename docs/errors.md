@@ -117,6 +117,12 @@ adapters' `onError` hook (see
 [Adapter options](./adapters.md#adapter-options)) can log the real
 failure.
 
+Errors that happen **after the response was sent** can't change it, but
+they still reach `onError`, tagged with `info.phase`: `'defer'` (a
+[`ctx.defer`](./lifecycle.md#post-response-work-ctxdefer) task threw or
+rejected), `'afterResponse'`, or `'finally'`. Request-lifecycle errors —
+the ones that become an error response — carry no phase.
+
 A *deliberate* status from `extractAmbient` stays fully expressible: throw
 a `HipError` (e.g. `HipUnauthorized`) and it passes through unwrapped —
 this is what powers the auth-before-validation gate below.

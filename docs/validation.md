@@ -30,6 +30,12 @@ app.put('/things/:id', toExpressHandler(HTPipe(
 )));
 ```
 
+`RedactResponseWithZod` can equally be spread into a
+[`finishPipe`](./composition.md#finishpipe-an-inferred-trailing-handler) trailing
+handler (`...RedactResponseWithZod(Resp)`): since 1.3.0 that keeps every
+other trailing stage's `ctx` fully typed (earlier versions silently
+widened them to `any`).
+
 A Zod parse failure throws `HipBadInputs` carrying the `ZodError` as
 `.detail`; the adapter turns that into a
 `422 { error, issues: [{ path, message }] }` response (see

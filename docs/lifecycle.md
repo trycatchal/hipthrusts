@@ -3,7 +3,9 @@
 *Part of the [HipThrusTS docs](./README.md) · [← back to the overview](../README.md)*
 
 Every handler is the same eight stages (five required, three optional),
-run in a fixed order by the adapter. Authorization stages return `true`
+run in a fixed order by the adapter — plus one optional HTTP-only stage,
+[`etag`](#conditional-get-the-etag-stage), between `finalAuthorize` and
+`execute`. Authorization stages return `true`
 to pass, `false` to deny, or an **object** to pass *and* contribute that
 object's keys to the shared context.
 
@@ -53,12 +55,15 @@ returned.
 | `preAuthorize`    | yes  | sync   | `{ inputs, ambient }`          | cheap check before touching the database                   |
 | `loadResources`   | no   | async  | everything so far              | fetch the resource the request is about                    |
 | `finalAuthorize`  | yes  | async  | everything so far              | ownership/permission check with the resource in hand       |
+| `etag`            | no   | async  | everything so far              | HTTP GET/HEAD only: a version tag → `304` on a match       |
 | `execute`         | yes  | async  | everything so far              | the actual work (mutate, compute, save)                    |
 | `redactResponse`  | yes  | sync   | unsafe response, final context | strip secrets/internal fields before sending               |
 
 `extractAmbient`'s output lives at `ctx.ambient`. `sanitizeInputs`'s output
 lives at `ctx.inputs`. Outputs from `preAuthorize` / `loadResources` /
-`finalAuthorize` are spread at the top level of `ctx`.
+`finalAuthorize` are spread at the top level of `ctx`. From `preAuthorize`
+on, `ctx.defer` is there too ([post-response work](#post-response-work-ctxdefer));
+the name is reserved, so a stage may not return a `defer` key.
 
 Authorization stages return `true` to pass, `false` to deny, or an
 **object** to pass *and* contribute that object to the context. So
@@ -84,6 +89,98 @@ execute:        (ctx) => ({ rows: ctx.rows }),
 redactResponse: (unsafe, ctx: { canSeeEmails: boolean }) =>
   ctx.canSeeEmails ? unsafe.rows : unsafe.rows.map(({ email, ...rest }) => rest),
 ```
+
+### Post-response work: `ctx.defer`
+
+Some work belongs *after* the response: an audit-log write, a cache
+refresh, a notification. Any stage from `preAuthorize` through `execute`
+(and `redactResponse`) can schedule it:
+
+```ts
+loadResources: async (ctx) => {
+  const lease = await rollups.lease(ctx.inputs.params.id);
+  if (lease.isStale) ctx.defer(() => rollups.refresh(lease));  // after the response
+  return { lease };
+},
+execute: (ctx) => {
+  ctx.defer(() => audit.write({ who: ctx.principal.id, what: 'read rollup' }));
+  return assembleRollup(ctx);
+},
+```
+
+The contract:
+
+- Tasks run **after the response is sent**, in **registration order**,
+  **one at a time** (each task's promise settles before the next starts),
+  then the adapter's `afterResponse`, then its `finally` hook.
+- They run only after a **successful** response — a 2xx, or a `304` from
+  the `etag` stage. A request that fails (any error response, a redirect)
+  drops its deferred tasks; use the adapter's `finally` option for work
+  that must always happen.
+- A task that throws or rejects never affects the response: it is routed
+  to the adapter's `onError` with `{ phase: 'defer' }`, and the next task
+  still runs.
+- `defer` must be called during the lifecycle. Calling it after the
+  response was sent (from `afterResponse`, or a floating promise) throws.
+
+How "after the response" is scheduled is the adapter's business (Next's
+`after()`, Hono's `waitUntil`, the Node response's `finish` event, …) —
+see [Adapters → Post-response work](./adapters.md#post-response-work).
+Tests can take over the scheduling with the `scheduleAfterResponse`
+option.
+
+### Conditional GET: the `etag` stage
+
+An endpoint whose response is expensive to build but cheap to *version*
+can answer a revalidation with a bodiless `304 Not Modified` without
+building it. Declare an `etag` stage:
+
+```ts
+finishPipe(
+  HTPipe(RequireAuthenticated, SanitizeInputsSlicesWithZod({ params }), AuthorizeAnalyticsReader),
+  {
+    loadResources: async (ctx) => ({ header: await rollups.header(ctx.inputs.params.id) }),
+    etag:    (ctx) => ctx.header.computedAt
+      ? `analytics-${ctx.header.schemaVersion}-${ctx.header.computedAt.getTime()}`
+      : null,
+    execute: (ctx) => assembleRollup(ctx),   // the expensive part — skipped on a match
+    ...RedactResponseWithZod(RollupResponse),
+    responseMeta: { headers: { 'Cache-Control': 'private, no-cache' } },
+  },
+);
+```
+
+- **Signature:** `etag?: (ctx) => ETagResult | Promise<ETagResult>`, where
+  `ETagResult` is the bare opaque value (`'v1'` — a strong tag), an object
+  `{ value: 'v1', weak: true }`, or `null` / `undefined`. Return the value
+  **unquoted**: the library formats the header (`"v1"`, `W/"v1"`). A value
+  with quotes, whitespace or control characters is a server bug → `500`.
+- **`null`** means "no validator for this response": the request runs
+  normally and no `ETag` is sent.
+- **Placement is the security property.** The stage runs only after
+  `preAuthorize` *and* `finalAuthorize` passed, and it sees
+  `finalAuthorize`'s contributions. A denied or not-found caller gets
+  their `403` / `404` — never a `304` that would confirm "this exists and
+  is unchanged".
+- **Only `GET` and `HEAD`.** For any other method the stage is not run (a
+  tag computed before `execute` would describe the pre-mutation state).
+  tRPC never runs it.
+- **On a match** with the request's `If-None-Match` (RFC 9110 §13.1.2: a
+  comma-separated list or `*`, compared *weakly* — `W/` is ignored on both
+  sides), `execute` and `redactResponse` are skipped and the adapter sends
+  `304` with no body, the `ETag` header, and `responseMeta`'s headers.
+  `responseMeta`'s status is ignored; deferred tasks, `afterResponse` and
+  `finally` run as for any success. A functional `responseMeta` receives
+  the context *without* `response` — the `finishPipe` type makes
+  `response` optional whenever an `etag` stage exists.
+- **On a miss** the request proceeds as usual and the adapter adds the
+  `ETag` header to the response (the stage's tag wins over a hand-set
+  `ETag` in `responseMeta`).
+
+`etag` is single-valued, like `responseMeta`: it is a non-stage key that
+rides `HTPipe` composition with right-wins semantics (it doesn't chain),
+so declare it in a `finishPipe` trailing handler or on a fragment that
+also declares a stage.
 
 ### Input slices & the strictness guarantee
 

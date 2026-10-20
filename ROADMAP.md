@@ -76,7 +76,9 @@ in a 1.x minor if a concrete use case arrives; the rest are genuinely 2.0
   (`hipthrusts/user` stays as the ergonomic default).
 - Optional query-param and header sanitization slices.
 - Response-type support per handler (json, raw, redirect) via
-  `responseMeta` extensions.
+  `responseMeta` extensions. *Partly delivered in 1.3.0:* the optional
+  `etag` stage gives every HTTP adapter a bodiless `304 Not Modified`
+  response; raw bodies and other response types remain open.
 - A logo. ;)
 
 Done items that used to live in TODO.md — pipeable composition (`HTPipe`),

@@ -8,12 +8,15 @@ import {
 } from './errors.js';
 import {
   composeHttpHipthrustable,
+  FinallyInfo,
   HasResponseMeta,
+  httpLifecycleOptions,
   HttpAdapterOptions,
   HttpHandlerConfig,
   HttpRawInputs,
+  makeAfterResponseRunner,
   resolveResponseMeta,
-  safeInvokeAfterResponse,
+  responseHeaders,
   safeInvokeOnError,
 } from './http-adapter.js';
 import {
@@ -24,6 +27,7 @@ import {
   OptionalStagesShape,
   PreAuthorizeDepsMet,
   RedactResponseDepsMet,
+  ReservedKeysUnshadowed,
 } from './types.js';
 
 // The raw envelope a fastify handler receives. Fastify parses params/query/body
@@ -79,6 +83,7 @@ export function toFastifyHandler<
     FinalAuthorizeDepsMet<TConf> &
     ExecuteDepsMet<TConf> &
     RedactResponseDepsMet<TConf> &
+    ReservedKeysUnshadowed<TConf> &
     HasResponseMeta,
 >(handlingStrategy: TConf, options: HttpAdapterOptions = {}) {
   const fullHipthrustable = composeHttpHipthrustable<FastifyRaw>(
@@ -88,42 +93,77 @@ export function toFastifyHandler<
   const responseMeta = (handlingStrategy as HasResponseMeta).responseMeta;
 
   return async (req: FastifyRequest, reply: FastifyReply) => {
-    try {
-      const { response, context } = await executeHipthrustable(
-        fullHipthrustable as any,
-        { req, reply }
-      );
-      const meta = resolveResponseMeta(responseMeta, context);
-      if (meta.headers) {
-        for (const headerName of Object.keys(meta.headers)) {
-          reply.header(headerName, meta.headers[headerName]);
+    const raw: FastifyRaw = { req, reply };
+    let info: FinallyInfo;
+    // Fastify's per-request "onResponse": the raw response's finish (or
+    // close, for an aborted response) — once.
+    const schedule = (run: (() => Promise<void>) | undefined) => {
+      if (!run) {
+        return;
+      }
+      if (options.scheduleAfterResponse) {
+        options.scheduleAfterResponse(run);
+        return;
+      }
+      const rawResponse = reply.raw as FastifyReply['raw'] | undefined;
+      if (!rawResponse || typeof rawResponse.on !== 'function') {
+        // No Node response to observe (a stubbed reply): off the
+        // response path is the best available approximation.
+        setImmediate(run);
+        return;
+      }
+      let started = false;
+      const once = () => {
+        if (!started) {
+          started = true;
+          void run();
         }
+      };
+      rawResponse.on('finish', once);
+      rawResponse.on('close', once);
+    };
+    try {
+      const lifecycle = await executeHipthrustable(
+        fullHipthrustable as any,
+        raw,
+        httpLifecycleOptions(req.method, req.headers)
+      );
+      const meta = resolveResponseMeta(responseMeta, lifecycle.context);
+      const headers = responseHeaders(meta.headers, lifecycle.etag);
+      for (const headerName of Object.keys(headers)) {
+        reply.header(headerName, headers[headerName]);
       }
-      if (options.afterResponse) {
-        // Fastify is Node-only; schedule off the response path.
-        setImmediate(() =>
-          safeInvokeAfterResponse(
-            options.afterResponse,
-            context,
-            options.onError,
-            {
-              req,
-              reply,
-            }
-          )
-        );
+      const status = lifecycle.notModified ? 304 : meta.status || 200;
+      info = {
+        raw,
+        outcome: lifecycle.notModified ? 'not-modified' : 'success',
+        status,
+      };
+      schedule(
+        makeAfterResponseRunner(options, {
+          raw,
+          lifecycle,
+          info: () => info,
+        })
+      );
+      if (lifecycle.notModified) {
+        return reply.status(304).send();
       }
-      return reply.status(meta.status || 200).send(response);
+      return reply.status(status).send(lifecycle.response);
     } catch (exception) {
       if (!(exception instanceof HipRedirect)) {
-        safeInvokeOnError(options.onError, exception, { raw: { req, reply } });
+        safeInvokeOnError(options.onError, exception, { raw });
       }
       if (exception instanceof HipRedirect) {
+        info = { raw, outcome: 'redirect', status: exception.redirectCode };
+        schedule(makeAfterResponseRunner(options, { raw, info: () => info }));
         return reply.redirect(exception.redirectUrl, exception.redirectCode);
-      } else if (isHipError(exception)) {
-        return reply
-          .status(hipErrorToStatus(exception))
-          .send(hipErrorToBody(exception));
+      }
+      const status = isHipError(exception) ? hipErrorToStatus(exception) : 500;
+      info = { raw, outcome: 'error', status, error: exception };
+      schedule(makeAfterResponseRunner(options, { raw, info: () => info }));
+      if (isHipError(exception)) {
+        return reply.status(status).send(hipErrorToBody(exception));
       }
       return reply.status(500).send({ error: 'Internal server error' });
     }
@@ -142,6 +182,7 @@ export function makeFastifyHandlerFactory(defaults: HttpAdapterOptions) {
       FinalAuthorizeDepsMet<TConf> &
       ExecuteDepsMet<TConf> &
       RedactResponseDepsMet<TConf> &
+      ReservedKeysUnshadowed<TConf> &
       HasResponseMeta,
   >(handlingStrategy: TConf, options: HttpAdapterOptions = {}) {
     return toFastifyHandler(handlingStrategy, { ...defaults, ...options });

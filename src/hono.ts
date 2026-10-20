@@ -1,5 +1,5 @@
 import { Context } from 'hono';
-import { executeHipthrustable } from './core.js';
+import { executeHipthrustable, LifecycleResult } from './core.js';
 import {
   hipErrorToBody,
   hipErrorToStatus,
@@ -9,12 +9,15 @@ import {
 import { HipBadInputs } from './errors.js';
 import {
   composeHttpHipthrustable,
+  FinallyInfo,
   HasResponseMeta,
+  httpLifecycleOptions,
   HttpAdapterOptions,
   HttpHandlerConfig,
   HttpRawInputs,
+  makeAfterResponseRunner,
   resolveResponseMeta,
-  safeInvokeAfterResponse,
+  responseHeaders,
   safeInvokeOnError,
 } from './http-adapter.js';
 import {
@@ -25,6 +28,7 @@ import {
   OptionalStagesShape,
   PreAuthorizeDepsMet,
   RedactResponseDepsMet,
+  ReservedKeysUnshadowed,
 } from './types.js';
 
 // The raw envelope a hono handler receives: the hono Context plus the values
@@ -89,6 +93,7 @@ export function toHonoHandler<
     FinalAuthorizeDepsMet<TConf> &
     ExecuteDepsMet<TConf> &
     RedactResponseDepsMet<TConf> &
+    ReservedKeysUnshadowed<TConf> &
     HasResponseMeta,
 >(handlingStrategy: TConf, options: HipHonoHandlerOptions = {}) {
   const fullHipthrustable = composeHttpHipthrustable<HonoRaw>(
@@ -99,6 +104,9 @@ export function toHonoHandler<
 
   return async (c: Context) => {
     let raw: HonoRaw | undefined;
+    let lifecycle: LifecycleResult | undefined;
+    let info: FinallyInfo;
+    let response: Response;
     try {
       let body: any = {};
       if (!BODYLESS_METHODS.includes(c.req.method)) {
@@ -122,47 +130,64 @@ export function toHonoHandler<
         body,
         headers: c.req.header(),
       };
-      const { response, context } = await executeHipthrustable(
+      lifecycle = await executeHipthrustable(
         fullHipthrustable as any,
-        raw
+        raw,
+        httpLifecycleOptions(c.req.method, raw.headers)
       );
-      if (options.afterResponse) {
-        const runAfterResponse = () =>
-          safeInvokeAfterResponse(
-            options.afterResponse,
-            context,
-            options.onError,
-            raw
-          );
-        try {
-          // On edge runtimes waitUntil keeps the worker alive for the side
-          // effect; on Node hono has no executionCtx, so fall back to a task.
-          c.executionCtx.waitUntil(Promise.resolve().then(runAfterResponse));
-        } catch {
-          setTimeout(runAfterResponse, 0);
-        }
+      const meta = resolveResponseMeta(responseMeta, lifecycle.context);
+      const headers = responseHeaders(meta.headers, lifecycle.etag);
+      for (const headerName of Object.keys(headers)) {
+        c.header(headerName, headers[headerName]);
       }
-      const meta = resolveResponseMeta(responseMeta, context);
-      if (meta.headers) {
-        for (const headerName of Object.keys(meta.headers)) {
-          c.header(headerName, meta.headers[headerName]);
-        }
+      if (lifecycle.notModified) {
+        response = c.body(null, 304);
+        info = { raw, outcome: 'not-modified', status: 304 };
+      } else {
+        const status = meta.status || 200;
+        response = c.json(lifecycle.response, status as any);
+        info = { raw, outcome: 'success', status };
       }
-      return c.json(response, (meta.status || 200) as any);
     } catch (exception) {
+      lifecycle = undefined;
       if (!(exception instanceof HipRedirect)) {
         safeInvokeOnError(options.onError, exception, { raw });
       }
       if (exception instanceof HipRedirect) {
-        return c.redirect(exception.redirectUrl, exception.redirectCode as any);
-      } else if (isHipError(exception)) {
-        return c.json(
-          hipErrorToBody(exception) as any,
-          hipErrorToStatus(exception) as any
+        response = c.redirect(
+          exception.redirectUrl,
+          exception.redirectCode as any
         );
+        info = { raw, outcome: 'redirect', status: response.status };
+      } else if (isHipError(exception)) {
+        const status = hipErrorToStatus(exception);
+        response = c.json(hipErrorToBody(exception) as any, status as any);
+        info = { raw, outcome: 'error', status, error: exception };
+      } else {
+        response = c.json({ error: 'Internal server error' }, 500);
+        info = { raw, outcome: 'error', status: 500, error: exception };
       }
-      return c.json({ error: 'Internal server error' }, 500);
     }
+    const run = makeAfterResponseRunner(options, {
+      raw,
+      lifecycle,
+      info: () => info,
+    });
+    if (run) {
+      if (options.scheduleAfterResponse) {
+        options.scheduleAfterResponse(run);
+      } else {
+        try {
+          // On edge runtimes waitUntil keeps the worker alive for the
+          // post-response work; on Node hono has no executionCtx, so fall
+          // back to a task.
+          c.executionCtx.waitUntil(Promise.resolve().then(run));
+        } catch {
+          setTimeout(run, 0);
+        }
+      }
+    }
+    return response;
   };
 }
 
@@ -178,6 +203,7 @@ export function makeHonoHandlerFactory(defaults: HipHonoHandlerOptions) {
       FinalAuthorizeDepsMet<TConf> &
       ExecuteDepsMet<TConf> &
       RedactResponseDepsMet<TConf> &
+      ReservedKeysUnshadowed<TConf> &
       HasResponseMeta,
   >(handlingStrategy: TConf, options: HipHonoHandlerOptions = {}) {
     return toHonoHandler(handlingStrategy, { ...defaults, ...options });

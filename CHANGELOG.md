@@ -6,6 +6,94 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 (before 1.0, minor releases could contain breaking changes).
 
+## [1.3.0] - 2026-10-20
+
+Four changes requested by the largest dogfooding app. All additive; the
+required-lifecycle-stage guarantee is unchanged.
+
+### Fixed
+
+- **`finishPipe`: a spread-in redactor no longer erases the trailing
+  handler's context to `any`.** `finishPipe(pipe, { execute: (ctx) => …,
+  ...RedactResponseWithZod(Out) })` typed `ctx` as `any` in every trailing
+  stage, silently, with `tsc` green. The cause was not `RedactResponseWithZod`'s
+  generic order: any pre-built redactor whose `context` parameter is `any`
+  (which every `RedactResponse` built outside a contextual position has)
+  inferred `any` back into `finishPipe`'s `TPre` / `TLoad` / `TFinal`. The
+  trailing handler's context parameters are now `NoInfer`, so stage types come
+  from stage *returns* only. A pre-built stage's declared context requirement
+  (a spread `RedactResponseSwitch`, a shared `FinalAuthorize((ctx: { doc }) =>
+  …)`) is inferred into its own type parameter and checked against the real
+  context once inference is complete: when nothing provides a key it needs,
+  `finishPipe` returns the new branded `HipTrailingDepNotMet<stage, keys>`,
+  and handing that to an adapter is the compile error. `RedactResponseWithZod`'s
+  signature is unchanged.
+
+### Added
+
+- **Typed `responseMeta` context in `finishPipe`.** A functional
+  `responseMeta` in the trailing handler is contextually typed as the final
+  context the adapters pass it: the accumulated context, `execute`'s output
+  keys, and `response` (the redacted response). No more `(ctx: any)` or
+  hand-annotated `(ctx: { response: … })`. A static `responseMeta` keeps its
+  exact type on the result. Declare `responseMeta` last (lifecycle order).
+- **`ctx.defer(task)` — post-response work from inside the lifecycle.**
+  Available on every stage context from `preAuthorize` on (including
+  `loadResources`, so it works when an `etag` match skips `execute`), on the
+  `define*Handler` contexts, and in the `finishPipe` types. Tasks run after
+  the response is sent, in registration order, one at a time, and only after
+  a successful response (2xx or 304); a failed request drops them. A throwing
+  or rejecting task is routed to `onError` with the new
+  `phase: 'defer'` and never affects the response. `defer` is a reserved
+  context key: a stage contribution named `defer` is a compile error
+  (`HipReservedContextKey`, via the new `ReservedKeysUnshadowed` constraint on
+  every adapter) and a runtime `HipInternal`.
+- **`finally` adapter option.** Runs exactly once per request, after every
+  deferred task and `afterResponse` have settled, for every outcome — success,
+  304, redirect, `HipError`, unexpected 500 — with
+  `{ outcome, status, error, raw }`. Failures go to `onError` with
+  `phase: 'finally'`. Put `finally: flushLogs` in a preset factory and per-route
+  `after(flushLogs)` calls go away.
+- **`scheduleAfterResponse` adapter option** — the test seam. Overrides how
+  the post-response chain (deferred tasks → `afterResponse` → `finally`) is
+  scheduled; the runner never rejects, so tests collect and await it. Defaults:
+  Next `after()`, Hono `executionCtx.waitUntil` (a task on Node), Express and
+  Fastify the Node response's `finish` / `close` event.
+- **Conditional GET: an optional `etag` stage.** Runs after `finalAuthorize`
+  (so never for a denied or not-found caller) and before `execute`, for `GET`
+  and `HEAD` on the HTTP adapters only. Return the bare tag value, or
+  `{ value, weak }`, or `null` for "no validator"; the library formats the
+  header. When the request's `If-None-Match` matches (RFC 9110 §13.1.2: lists,
+  `*`, weak comparison), `execute` and `redactResponse` are skipped and every
+  HTTP adapter sends a bodiless `304` with the `ETag` and `responseMeta`
+  headers; deferred tasks, `afterResponse` and `finally` run as for a success.
+  On a miss the adapter adds the `ETag` header to the response. Allowed in
+  `finishPipe`'s trailing handler, where it is contextually typed and makes
+  `responseMeta`'s `response` optional (a 304 has none). tRPC never runs it.
+  The shared helpers `ifNoneMatchMatches`, `formatETag`,
+  `httpLifecycleOptions`, `responseHeaders` and `makeAfterResponseRunner` are
+  exported from `hipthrusts/http-adapter` for custom adapters.
+- `toTrpcProcedure(handler, options?)` accepts `finally`,
+  `scheduleAfterResponse`, and `onError` (post-response failures only).
+  Deferred tasks run after the procedure resolves (fire-and-forget by
+  default).
+- `executeHipthrustable` takes optional `LifecycleOptions` (`resolveETag`) and
+  its result now also carries `notModified`, `etag`, and the `deferred` queue
+  (`DeferQueue`). New exported types: `Defer`, `DeferredTask`, `HasDefer`,
+  `ETagValue`, `ETagResult`, `OptionallyHasETag`, `FinallyInfo`,
+  `LifecycleOptions`, `LifecycleResult`, `FinishedContext`,
+  `FinishPipeResponseMeta`.
+
+### Changed
+
+- `afterResponse` now also fires after a `304`, and is awaited as part of the
+  post-response chain (after the deferred tasks, before `finally`) rather
+  than started fire-and-forget on its own. On Express and Fastify it is
+  scheduled on the response's `finish` **or** `close` event (whichever comes
+  first), so it also runs when the client aborts a successful response.
+- `OnErrorInfo['phase']` widens from `'afterResponse'` to
+  `'defer' | 'afterResponse' | 'finally'`.
+
 ## [1.2.0] - 2026-08-25
 
 ### Added
@@ -356,6 +444,7 @@ dogfooding-feedback fixes into the 0.12.0 release._
 - Initial public releases: Express + Mongoose oriented handler classes with
   the mandatory-stage lifecycle.
 
+[1.3.0]: https://github.com/trycatchal/hipthrusts/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/trycatchal/hipthrusts/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/trycatchal/hipthrusts/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/trycatchal/hipthrusts/compare/e7205a2...v1.0.0

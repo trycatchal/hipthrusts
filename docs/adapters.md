@@ -57,11 +57,25 @@ toNextHandler(handler, {
 
   // Post-response side effects with the FINAL lifecycle context —
   // inputs, ambient, loaded resources, and the response. Fires only
-  // after a successful lifecycle; never blocks or breaks the response
-  // (failures are routed to onError, above).
+  // after a successful lifecycle (a 304 counts); never blocks or breaks
+  // the response (failures are routed to onError, above).
   afterResponse: async (ctx) => auditLog.write({ input: ctx.inputs, out: ctx.response }),
+
+  // Runs once per request, after the response, after every ctx.defer task
+  // and afterResponse have settled — for EVERY outcome: success, 304,
+  // redirect, HipError, unexpected 500. info: { outcome, status, error, raw }.
+  // Failures are routed to onError with phase 'finally'.
+  finally: () => flushLogs(),
+
+  // Overrides how the post-response work is scheduled (see below). The
+  // test seam: collect the runner and await it.
+  scheduleAfterResponse: (run) => pending.push(run),
 });
 ```
+
+`onError`'s `info.phase` tells request errors (no phase) from the ones
+that happened after the response was sent: `'defer'` (a `ctx.defer`
+task), `'afterResponse'`, `'finally'`.
 
 Repeating the same options on every route? Each adapter exports a preset
 factory — `makeExpressHandlerFactory`, `makeHonoHandlerFactory`,
@@ -73,6 +87,65 @@ export const toAppHandler = makeNextHandlerFactory({ gatherContext, onError });
 // ...
 export const GET = toAppHandler(handler); // no repeated { gatherContext }
 ```
+
+## Post-response work
+
+Three things can run after the response, always in this order: the
+[`ctx.defer`](./lifecycle.md#post-response-work-ctxdefer) tasks the
+stages registered (one at a time, in registration order), then
+`afterResponse`, then `finally`. The first two run only after a
+successful response (including a `304`); `finally` runs for every
+outcome. Nothing in this chain can affect the response, and a failure in
+one step never skips the next — each is routed to `onError` with its
+phase. When there is nothing to run, nothing is scheduled.
+
+Each adapter schedules the chain with its framework's own
+after-the-response mechanism:
+
+| Adapter | Default scheduling |
+|---------|--------------------|
+| Next.js | `after()` from `next/server` (keeps the serverless function alive until it settles); fire-and-forget outside a request scope |
+| Hono    | `c.executionCtx.waitUntil()` on edge runtimes; a `setTimeout` task on Node |
+| Express | the Node response's `finish` (or `close`, for an aborted response) event |
+| Fastify | the raw Node response's `finish` / `close` event |
+| tRPC    | no response lifecycle: a `setTimeout` task after the procedure resolves (fire-and-forget) |
+
+`scheduleAfterResponse: (run) => void` replaces the default. `run`
+returns a promise that never rejects, so tests (and apps that call
+handlers directly) can collect it and await it deterministically:
+
+```ts
+const pending: Array<() => Promise<void>> = [];
+const GET = makeRollupHandler({ scheduleAfterResponse: (run) => pending.push(run) });
+
+const res = await GET(request, routeCtx);
+await Promise.all(pending.map((run) => run()));   // deferred work done
+```
+
+With `finally` in the preset factory, per-route boilerplate such as
+Next's `after(flushLogs)` disappears:
+
+```ts
+export const toAppHandler = makeNextHandlerFactory({ gatherContext, onError, finally: flushLogs });
+```
+
+## Conditional GET (304)
+
+When a handler declares an [`etag` stage](./lifecycle.md#conditional-get-the-etag-stage),
+every HTTP adapter handles revalidation the same way, for `GET` and
+`HEAD` only:
+
+- **Match** (`If-None-Match` lists the tag, weakly compared, or is `*`):
+  `304` with **no body**, carrying the `ETag` header and `responseMeta`'s
+  headers (`Cache-Control`, …). `execute` and `redactResponse` don't run.
+- **Miss / no `If-None-Match`:** the usual response, plus the `ETag`
+  header.
+- **The stage returned `null`:** the usual response, no `ETag`.
+
+The comparison and formatting live in one place,
+[`src/http-adapter.ts`](../src/http-adapter.ts) (`ifNoneMatchMatches`,
+`formatETag`), and are exported for custom adapters. tRPC has no HTTP
+caching and never runs the stage.
 
 The Next.js and Hono adapters (which parse JSON bodies themselves)
 additionally reject non-empty bodies that fail to parse with a
@@ -108,6 +181,13 @@ export const updateThing = t.procedure
 The lifecycle, the type-checking, the failure routing — all identical
 to the Express path. Anything reusable you build (auth fragments,
 ownership checks, response shapers) works across both.
+
+`toTrpcProcedure` takes an optional second argument with the
+post-response options that make sense without an HTTP response:
+`finally`, `scheduleAfterResponse`, and `onError` — which here sees only
+post-response failures (`phase: 'defer' | 'finally'`); lifecycle errors
+propagate to tRPC as before. `ctx.defer` tasks run after the procedure
+resolves successfully. There is no `etag` stage and no `responseMeta`.
 
 Note the input shape: tRPC procedures have a single `input` value rather
 than the HTTP `{ params, body, query, headers }` shape, so
@@ -195,8 +275,9 @@ export const GET = toNextHandler(
 `toNextHandler` returns a function with the App Router signature
 `(req, { params }) => NextResponse`. Use `gatherContext` for async work
 that needs to happen *before* the synchronous lifecycle (most often:
-read the session). `options.afterResponse` is a callback you can pass
-that the adapter schedules via Next's `after()`.
+read the session). All [post-response work](#post-response-work) —
+`ctx.defer` tasks, `options.afterResponse`, `options.finally` — is
+scheduled via Next's `after()`.
 
 ## Defining handlers away from the route
 
